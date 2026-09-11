@@ -1,0 +1,8 @@
+{
+  "name": "the-docket",
+  "version": "0.1.0",
+  "description": "A ledger of rulings that governs a codebase. Before an edit: what governs this region. At stop: a judge that reads the diff against the rulings. At a decision: a record where it will be found. At a new project: a spine before the first line. Across time: what changed in the law.",
+  "author": { "name": "AlastairZeved" },
+  "license": "MIT",
+  "keywords": ["decisions", "ledger", "rulings", "hooks", "judge", "architecture-decision-record"]
+}
