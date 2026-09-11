@@ -38,7 +38,7 @@ diff "reads well overall".
    answers `SKIP`.
    `JUDGE <hash> <files…>` → continue with those files; keep the hash for step 6.
 2. **Domains and packs.** From the files, determine the domains touched and read
-   the matching packs (D12; `docs/PACKS.md` gives each pack's domain globs). A
+   the matching packs (D12; each pack's own `Domain` line gives its globs). A
    change to the ledger always adds `packs/decisions.md`. A pack scores only the
    governed files in the diff.
 3. **Score every pack feature against the diff and the repository before
@@ -103,7 +103,9 @@ untracked governed files; `SKIP` when that diff is empty or its hash equals the
 last PASS's; `SURFACE` when this session has been blocked five times since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. The block counter is per session,
-reset only by a PASS, never by a changed hash.
+reset only by a PASS, never by a changed hash. `gate` itself records the session
+as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
+so its next answer for that session is `SKIP` until a PASS resets it.
 
 `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id>`
 writes `.docket/verdict.json` (ignored by git) and bumps the session's block

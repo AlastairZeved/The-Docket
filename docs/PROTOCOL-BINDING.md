@@ -17,8 +17,8 @@ agent that is about to edit:
 
 `tool_name` is `Edit` or `Write`; for `Write`, `tool_input` carries `file_path`
 and `content`. `near` prints the governed list (D2, D7) or nothing; it never
-denies (D1). Set `DOCKET_PROJECT_DIR` to the project root if the host knows it;
-else the core uses the git root.
+denies (D1). Set `DOCKET_PROJECT_DIR` to the project root if the host knows it
+(`CLAUDE_PROJECT_DIR` is read as the same value); else the core uses the git root.
 
 **2. At session start** — show `docket status` to the agent:
 

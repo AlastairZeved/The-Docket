@@ -10,13 +10,14 @@ The **ledger** of a file is the nearest `DECISIONS.md` or `docs/DECISIONS.md`
 found by walking up from the file's own directory to the project root. At each
 directory `dir`, `dir/DECISIONS.md` is tried first, then `dir/docs/DECISIONS.md`.
 The project root is the environment variable `DOCKET_PROJECT_DIR` when set,
+else `CLAUDE_PROJECT_DIR` when set (the first host's name for the same value),
 else the git root of the file's directory, else the filesystem root. A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
 The **spec documents** `UIUX.md` and `PRD.md` are looked for in the ledger's own
-directory and nowhere else. `PRD.md` §1 (a heading whose number is 1) is where a
-project's principles live; a ledger with no `PRD.md` beside it carries them in
-its preamble (10).
+directory and nowhere else. The first section of `PRD.md` (the spec heading
+numbered 1) is where a project's principles live; a ledger with no `PRD.md`
+beside it carries them in its preamble (10).
 
 Resolution is per file: `docket check` resolves every git-tracked text file to
 its own nearest ledger, so a repository may hold more than one ledger, and an
@@ -24,6 +25,10 @@ example `R6` in a file that resolves to a ledger whose prefixes are `{D}` is not
 a cite (8).
 
 A **text file** is a git-tracked file whose first 8 KiB contain no NUL byte.
+`check`, `governs` and `status` read tracked files; `near` reads the edited file
+from disk whether or not it is tracked; `gate` adds untracked governed content
+to the diff it hashes. Line endings are normalised on reading: a CRLF ledger
+parses, cites and compares line for line exactly as an LF one.
 
 ## 2. The entry
 
@@ -62,7 +67,8 @@ The title is the heading text after the id, in three steps and in this order:
 2. strip backticks and `**`;
 3. if what remains is longer than 72 characters, keep the first 72, cut back to
    the last space inside them, trim, and append `…`. A heading with no space in
-   its first 72 characters is cut at 71 characters and `…` appended.
+   its first 72 characters is cut at 71 characters and `…` appended. Characters
+   are Unicode code points: `±` and `…` each count as one.
 
 The order matters: a heading whose parenthetical begins before the 72nd
 character is cut at the parenthetical, never at 72. The result is never longer
@@ -121,7 +127,7 @@ a heading in `UIUX.md` or `PRD.md` of the form
 
 and is cited as `UIUX §<x>.<y>` or `PRD §<x>`. Both are indexed by
 `docket index` under `sections[]` and `specs[]`; `near` prints a spec cite with
-its title (`UIUX §4.5 The minimum`).
+its title (`UIUX §<x>.<y> <title>`).
 
 ## 8. Cites
 
@@ -154,10 +160,11 @@ counts.
 ## 10. Principles
 
 The **principles** are the list `docket principles` prints: the bulleted list
-under `PRD.md` §1 when a `PRD.md` sits beside the ledger, else the bulleted
-list in the ledger preamble that follows a line containing the word
-`Principles`. Each item begins with a bold phrase, which is the principle's
-name:
+under the first section of `PRD.md` when a `PRD.md` sits beside the ledger, else
+the bulleted list in the ledger preamble that follows a line containing the
+word `Principles`. When neither exists, `principles` prints that it found none
+and exits 1, and `append` refuses every entry until one exists. Each item
+begins with a bold phrase, which is the principle's name:
 
     - **One home per value.** Every value lives in exactly one file.
 
@@ -191,8 +198,9 @@ contract line, parse loosely (2) and are held to nothing more. The contract:
 
 The prefixes of a ledger are the distinct `<P>` of its entry headings. Within a
 prefix, numbers are contiguous from 1 in order of appearance (check 2); `docket
-append` writes `<P><max+1>` for the prefix it is given, or for the ledger's
-only prefix when it has one.
+append` writes `<P><max+1>` for the prefix given with `--prefix`, else for the
+prefix of the ledger's last entry; a ledger with no entry requires `--prefix`
+and `append` exits 2 without it.
 
 ## 13. What `docket check` verifies
 
@@ -208,7 +216,7 @@ cite, heading or edge, never only the file.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an existing entry's heading or body differs from the committed ledger (`git show HEAD:<ledger>`) other than by appended addendum lines; skipped for a ledger with no committed version |
+| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger (`git show HEAD:<ledger>`) other than by appended addendum lines; skipped for a ledger with no committed version |
 
 `docket check --json` prints the same findings as JSON.
 
@@ -237,3 +245,31 @@ one edge, `R4 supersedes R3`, with the clause `supersedes R3`; R7 has one edge,
 resolved by R7's edge into it. `near` on a window that cites R6, R4 and R2
 prints the edges touching them and the addendum's date; `governs R3` shows the
 in-edge from R4 with its clause; `check` 6 binds R6 and R7, not R3 or R4.
+
+## 15. The pre-edit window (`near`; D1, D2, D7)
+
+`near` reads one edit from stdin — `{"tool_name","tool_input":{"file_path",
+"old_string","replace_all"}}` for an edit, `{"tool_name":"Write","tool_input":
+{"file_path","content"}}` for a whole-file write — and prints what governs the
+region, or nothing. It never exits non-zero on an input it cannot use (D1).
+
+| `old_string` matches | `replace_all` | `near` does |
+|---|---|---|
+| one | any | the window: 20 lines either side of the match |
+| many | `true` | the union of the windows; cap 8 by citation count, then by nearness to the first match |
+| many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
+| zero, or `old_string` empty | any | silent |
+| `Write` of an existing governed file | | the whole file; cap 8 by citation count |
+| `Write` of a file that does not exist | | silent |
+
+A window lists at most eight rulings (D2), nearest first, each as
+`<id>  <title>` plus `  · issue #<n>` when the entry has one; then the edges
+touching any listed ruling (5), each rendered with its qualifier; then the
+listed rulings that carry addenda, with their dates; then the spec cites in the
+window with their titles (7); then one instruction line. A governed file whose
+window cites nothing gets a one-line notice that names the window and says so.
+A file that cites nothing anywhere, or has no ledger above it, gets silence.
+When the stdin object carries a `hook_event_name`, the same text is printed
+inside `{"hookSpecificOutput":{"hookEventName":<that>,"additionalContext":<text>}}`
+so a host that reads that shape can inject it; otherwise the text is printed
+bare.

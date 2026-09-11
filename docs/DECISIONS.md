@@ -84,7 +84,7 @@ The judge scores only when the diff since the last PASS touches a governed file 
 
 ### D11. Non-convergence surfaces (a judge that never passes, and one that always passes)
 Principle: Claim no more than you measured.
-Cap 5 blocks per session since the last PASS; if located failures do not decrease after the third, `gate` returns `SURFACE` and the judge blocks one final time with the residue and the instruction "report this to the user verbatim, then stop again"; `gate` records the session as surfaced and answers `SKIP` from then until a PASS or a new session; the host's re-entry flag (a stop already blocked once in this turn) is honoured. Reason: a judge that never passes and one that always passes are both broken, and the residue must reach the human through the maker's own reply, because an allowed stop carries no message.
+Cap 5 blocks per session since the last PASS; if located failures do not decrease after the third, `gate` returns `SURFACE` and the judge blocks one final time with the residue and the instruction "report this to the user verbatim, then stop again"; `gate` records the session as surfaced and answers `SKIP` from then until a PASS or a new session; `stop_hook_active` is honoured. Reason: a judge that never passes and one that always passes are both broken, and the residue must reach the human through the maker's own reply, because an allowed stop carries no message.
 
 ### D12. Packs are files (the judge is only as good as its feature set)
 Principle: One home per value.
@@ -92,7 +92,7 @@ A pack is a markdown file of numbered measurable features per domain; the judge 
 
 ### D13. The core is host-agnostic; the host binding is thin (the law should outlive the tool that first ran it)
 Principle: One home per value.
-`bin/docket.js`, `packs/`, `intake/`, `templates/`, `docs/FORMAT.md` and `judge/PROTOCOL.md` name no host, no model and no vendor; they speak stdin JSON, stdout text, exit codes and markdown. `hooks/hooks.json`, `agents/docket-judge.md` and `skills/` are the first host's binding, each a few lines that point at a core file. The judge runs on whatever model the host gives a subagent; no model is named anywhere. Reason: the law and its judge should outlive the tool that first ran them; a second host binds the same core with a second thin layer, and nothing else moves.
+`bin/docket.js`, `packs/`, `intake/`, `templates/`, `docs/FORMAT.md` and `judge/PROTOCOL.md` name no host, no model and no vendor; they speak stdin JSON, stdout text, exit codes and markdown. `hooks/hooks.json`, `agents/docket-judge.md` and `skills/` are the Claude Code binding, each a few lines that point at a core file. The judge runs on whatever model the host gives a subagent; no model is named anywhere. Reason: the law and its judge should outlive the tool that first ran them; a second host binds the same core with a second thin layer, and nothing else moves.
 
 ### D14. A number and the property it preserves are both rulings, and neither wins by default (a number that outlives its purpose)
 Principle: A rule carries its reason.
