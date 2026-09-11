@@ -1,5 +1,3 @@
-# the-docket
-the-docket is a Claude Code plugin that keeps a repo's decisions from being undone. A hook prints what governs the region before an edit; a read-only judge checks the diff against the ledger at stop; a witness keeps every citation honest in CI. Rulings live in your repo, never in the plugin.
 <!-- HEADER -->
 <br />
 <div align="center">
@@ -9,12 +7,12 @@ the-docket is a Claude Code plugin that keeps a repo's decisions from being undo
   <p align="center">
     A repo's decisions, kept where the code can find them.
     <br />
-    <a href="https://github.com/AlastairZeved/TheDocket"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/AlastairZeved/the-docket"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/AlastairZeved/TheDocket/issues/new?labels=bug">Report Bug</a>
+    <a href="https://github.com/AlastairZeved/the-docket/issues/new?labels=bug">Report Bug</a>
     ·
-    <a href="https://github.com/AlastairZeved/TheDocket/issues/new?labels=enhancement">Request Feature</a>
+    <a href="https://github.com/AlastairZeved/the-docket/issues/new?labels=enhancement">Request Feature</a>
   </p>
 </div>
 
@@ -214,15 +212,15 @@ Install as a Claude Code plugin:
 
 ```bash
 # In a Claude Code session
-/plugin marketplace add AlastairZeved/TheDocket
+/plugin marketplace add AlastairZeved/the-docket
 /plugin install the-docket@the-docket
 ```
 
 Or load it for one session, from a clone:
 
 ```bash
-git clone https://github.com/AlastairZeved/TheDocket.git
-cd TheDocket
+git clone https://github.com/AlastairZeved/the-docket.git
+cd the-docket
 claude --plugin-dir .
 ```
 
@@ -232,10 +230,10 @@ The repo governs itself, so the way to work in it is the way the plugin works:
 
 ```bash
 # Clone the project
-git clone https://github.com/AlastairZeved/TheDocket.git
+git clone https://github.com/AlastairZeved/the-docket.git
 
 # Go to the project directory
-cd TheDocket
+cd the-docket
 
 # Run the witness
 node test/docket.js
@@ -359,7 +357,7 @@ node bin/docket.js check && node bin/docket.js status
 * [ ] The substrate: the ~15% of a spatial tool that is reusable as a template
 * [ ] A second host binding: the same core, a second thin layer
 
-See the [open issues](https://github.com/AlastairZeved/TheDocket/issues) for the
+See the [open issues](https://github.com/AlastairZeved/the-docket/issues) for the
 full list of proposed features and known issues.
 
 ---
@@ -461,23 +459,23 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 Alastair Zeved — [@AlastairZeved](https://github.com/AlastairZeved)
 
-Project Link: [https://github.com/AlastairZeved/TheDocket](https://github.com/AlastairZeved/TheDocket)
+Project Link: [https://github.com/AlastairZeved/the-docket](https://github.com/AlastairZeved/the-docket)
 
 ---
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/AlastairZeved/TheDocket.svg?style=for-the-badge
-[contributors-url]: https://github.com/AlastairZeved/TheDocket/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/AlastairZeved/TheDocket.svg?style=for-the-badge
-[forks-url]: https://github.com/AlastairZeved/TheDocket/network/members
-[stars-shield]: https://img.shields.io/github/stars/AlastairZeved/TheDocket.svg?style=for-the-badge
-[stars-url]: https://github.com/AlastairZeved/TheDocket/stargazers
-[issues-shield]: https://img.shields.io/github/issues/AlastairZeved/TheDocket.svg?style=for-the-badge
-[issues-url]: https://github.com/AlastairZeved/TheDocket/issues
-[license-shield]: https://img.shields.io/github/license/AlastairZeved/TheDocket.svg?style=for-the-badge
-[license-url]: https://github.com/AlastairZeved/TheDocket/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/AlastairZeved/the-docket.svg?style=for-the-badge
+[contributors-url]: https://github.com/AlastairZeved/the-docket/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/AlastairZeved/the-docket.svg?style=for-the-badge
+[forks-url]: https://github.com/AlastairZeved/the-docket/network/members
+[stars-shield]: https://img.shields.io/github/stars/AlastairZeved/the-docket.svg?style=for-the-badge
+[stars-url]: https://github.com/AlastairZeved/the-docket/stargazers
+[issues-shield]: https://img.shields.io/github/issues/AlastairZeved/the-docket.svg?style=for-the-badge
+[issues-url]: https://github.com/AlastairZeved/the-docket/issues
+[license-shield]: https://img.shields.io/github/license/AlastairZeved/the-docket.svg?style=for-the-badge
+[license-url]: https://github.com/AlastairZeved/the-docket/blob/main/LICENSE
 [version-shield]: https://img.shields.io/badge/version-0.1.0-blue?style=for-the-badge
-[version-url]: https://github.com/AlastairZeved/TheDocket/releases
+[version-url]: https://github.com/AlastairZeved/the-docket/releases
 [node-shield]: https://img.shields.io/badge/node-20%2B-brightgreen?style=for-the-badge
 [node-url]: https://nodejs.org/
