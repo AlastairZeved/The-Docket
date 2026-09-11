@@ -9,10 +9,12 @@ text. No host, model or tool is named here (D13).
 The **ledger** of a file is the nearest `DECISIONS.md` or `docs/DECISIONS.md`
 found by walking up from the file's own directory to the project root. At each
 directory `dir`, `dir/DECISIONS.md` is tried first, then `dir/docs/DECISIONS.md`.
-The project root is the environment variable `DOCKET_PROJECT_DIR` when set,
-else `CLAUDE_PROJECT_DIR` when set (the first host's name for the same value),
-else the git root of the file's directory, else the filesystem root. A file
-with no ledger above it is **ungoverned** and is skipped by every subcommand.
+The project root is the environment variable `CLAUDE_PROJECT_DIR` when set
+(the host's project directory; a second host sets the same variable to its own
+before it calls the core), else the git root of the file's directory, else the
+filesystem root. A ledger file with no entries governs nothing, and still ends
+the walk: nothing above it is consulted. A file with no ledger above it is
+**ungoverned** and is skipped by every subcommand.
 
 The **spec documents** `UIUX.md` and `PRD.md` are looked for in the ledger's own
 directory and nowhere else. The first section of `PRD.md` (the spec heading
@@ -37,8 +39,10 @@ An entry begins at a heading line
     ### <P><n>. <heading>
 
 and ends at the line before the next line that begins `### ` or `## `, or at the
-end of the file. `<P>` is one or more letters (the **prefix**), `<n>` a positive
-integer, and the two together are the **id** (`D7`, `R12`, `A1`). Text before the
+end of the file. `<P>` is one or more ASCII letters, `A`–`Z` or `a`–`z` (the
+**prefix**), `<n>` a positive integer in ASCII digits, and the two together are
+the **id** (`D7`, `R12`, `A1`). A heading whose prefix uses any other letter is
+not an entry. Text before the
 first `## ` or `### ` heading is the **preamble**.
 
 An entry parses to
@@ -62,13 +66,15 @@ An entry parses to
 
 The title is the heading text after the id, in three steps and in this order:
 
-1. cut at the first ` (` (a space followed by an opening parenthesis), keeping
-   what precedes it;
+1. cut at the first ` (` (a space followed by an opening parenthesis) that lies
+   outside a backtick span, keeping what precedes it — a parenthesis inside
+   inline code is part of the code, not the meta;
 2. strip backticks and `**`;
 3. if what remains is longer than 72 characters, keep the first 72, cut back to
    the last space inside them, trim, and append `…`. A heading with no space in
    its first 72 characters is cut at 71 characters and `…` appended. Characters
-   are Unicode code points: `±` and `…` each count as one.
+   are Unicode code points: `±`, `…` and an emoji such as `🜲` each count as
+   one, whatever their length in a host language's string units.
 
 The order matters: a heading whose parenthetical begins before the 72nd
 character is cut at the parenthetical, never at 72. The result is never longer
@@ -76,8 +82,8 @@ than 72 characters.
 
 ## 4. Meta, grounding and issue
 
-The **meta** is the text of the first parenthetical on the heading line: from
-the first ` (` to its matching `)`. Its **clauses** are separated by `;`. The
+The **meta** is the text of the first parenthetical on the heading line that
+lies outside a backtick span: from that ` (` to its matching `)`. Its **clauses** are separated by `;`. The
 first clause that is not an edge (5) is the entry's **grounding**: `issue #12`,
 or a phrase naming the context the ruling answers. `issue` is the number in the
 first `issue #<n>` found in the meta.
@@ -100,8 +106,10 @@ boundaries (`.`, `;`, or a line break).
 An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 `R7 partially reverses R6 (relational plane only)` is one edge from R7 to R6.
 
-An edge's target must exist and must be defined earlier in the ledger than its
-source (a strictly smaller heading line). An edge from a ruling to itself is a
+Text inside backticks is quoted, not asserted: `supersedes R3` inside a code
+span describes an edge and creates none, which is how prose talks about an
+edge it does not make. An edge's target must exist and must be defined earlier
+in the ledger than its source (a strictly smaller heading line). An edge from a ruling to itself is a
 failure (13, check 5). No status is ever computed from edges (D3): `governs`
 shows them with their clauses and the reader judges.
 
@@ -153,7 +161,8 @@ The ledger preamble may carry one comment
 
 with paths relative to the ledger's directory. When the comment is present, a
 file's bare-cite count may not exceed its allowance, and a file not listed has
-an allowance of 0 (check 4). When the comment is absent, counts are reported and
+an allowance of 0 (check 4); the comment may list no file at all, and then every
+file's allowance is 0. When the comment is absent, counts are reported and
 nothing fails. `docket append --baseline` rewrites the comment from the current
 counts.
 
@@ -216,7 +225,7 @@ cite, heading or edge, never only the file.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger (`git show HEAD:<ledger>`) other than by appended addendum lines; skipped for a ledger with no committed version |
+| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger other than by appended addendum lines; the committed ledger is `HEAD`'s, or `HEAD`'s parent's when the working tree already equals `HEAD` (so a check run on a fresh commit, as in CI, judges the commit it was given); skipped for a ledger with no such version |
 
 `docket check --json` prints the same findings as JSON.
 
@@ -255,14 +264,22 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 
 | `old_string` matches | `replace_all` | `near` does |
 |---|---|---|
-| one | any | the window: 20 lines either side of the match |
+| one | any | the window: 20 lines either side of the match, clamped to the file |
 | many | `true` | the union of the windows; cap 8 by citation count, then by nearness to the first match |
 | many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
 | zero, or `old_string` empty | any | silent |
 | `Write` of an existing governed file | | the whole file; cap 8 by citation count |
+| `Write` of an existing file that cites nothing | | silent |
 | `Write` of a file that does not exist | | silent |
 
-A window lists at most eight rulings (D2), nearest first, each as
+The text opens with one line naming the ledger and the region —
+`Governed here (<ledger>, ±20 lines of <file>:<line>):` — the ledger's path
+relative to the project root, the file's relative to the ledger's home. A union
+names each matched line, `<file>:70, 140, 210`, the first eight and then
+`+<n> more`; a whole-file write says `whole file <file>`.
+
+Under it the window lists at most eight rulings (D2), nearest first — ties by
+line order, the earlier line first — each as
 `<id>  <title>` plus `  · issue #<n>` when the entry has one; then the edges
 touching any listed ruling (5), each rendered with its qualifier; then the
 listed rulings that carry addenda, with their dates; then the spec cites in the

@@ -19,7 +19,10 @@ the host gives it.
 | a shell | confined to `docket.js`, the repository's own test commands, and `git diff`, `git show`, `git status` |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
-witness is vendored. Below, `docket` means `node <that file>`.
+witness is vendored. Below, `docket` means `node <that file>`. The judge's
+answer is one of two things — the stop is allowed, or it is blocked with a
+reason — and the host's binding says in what shape each is expressed; this
+protocol says only which, and what the reason must contain.
 
 ## What the judge may not do
 
@@ -31,7 +34,8 @@ diff "reads well overall".
 
 ## The seven steps, in order, and the order is the point
 
-1. **`docket gate --session <id>`.**
+1. **`docket gate --session <id>`** — after one look at the host's re-entry flag:
+   a stop already blocked once in this turn is allowed before anything else.
    `SKIP` → allow the stop at once (D10).
    `SURFACE` → block the stop with the residue `gate` printed and the sentence
    "report this to the user verbatim, then stop again" (D11); the next `gate`
@@ -60,7 +64,9 @@ diff "reads well overall".
    feature fails, or a claim is unevidenced.
    **STALE**: a ruling is contradicted whose stated reason no longer holds (the
    code the reason describes is gone), or a cite no longer points at code that
-   implements the ruling.
+   implements the ruling. A diff that earns both is FAIL: FAIL names every
+   located failure, the stale ones with their addendum route among them, and
+   STALE is the verdict only when every failure is a stale one.
    Record it: `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id>`.
 7. **Return.**
    PASS → allow the stop.
@@ -98,14 +104,21 @@ never
     JUDGE <hash> <file> <file> …
 
 and decides mechanically (D10, D11): the hash is the SHA-256 of the diff since
-the committed head over every governed file and the ledger, plus the content of
-untracked governed files; `SKIP` when that diff is empty or its hash equals the
-last PASS's; `SURFACE` when this session has been blocked five times since the
+the committed head over every governed file and the ledger, followed by, for
+each untracked governed file in path order, a line `+++ <path>` and the file's
+content; `SKIP` when that diff is empty or its hash equals the
+last PASS's; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
-verdicts after the third block; else `JUDGE`. The block counter is per session,
+verdicts after the third block; else `JUDGE`. So a session that never
+converges is blocked five times by the judge and a sixth time by `SURFACE`,
+and its seventh stop is allowed. The block counter is per session,
 reset only by a PASS, never by a changed hash. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
-so its next answer for that session is `SKIP` until a PASS resets it.
+so its next answer for that session is `SKIP`. A surfaced session is released
+by a new session, or by a PASS recorded when the human has the judge run
+again; nothing the maker does alone releases it. The session identifier is
+whatever the host passes; the state file keeps one block count and one failure
+history per identifier.
 
 `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id>`
 writes `.docket/verdict.json` (ignored by git) and bumps the session's block

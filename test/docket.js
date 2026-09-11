@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // The witness: one linear scenario, `ok(name, cond)`, exit 1 on any failure.
-// Phase 0 ships the harness with no assertions; the core arrives with its tests.
+// The harness alone, with no assertions yet; the core arrives with its tests.
 let passed = 0, failed = 0;
 function ok(name, cond, detail) {
   if (cond) { passed++; return; }
