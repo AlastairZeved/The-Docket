@@ -109,16 +109,18 @@ each untracked governed file in path order, a line `+++ <path>` and the file's
 content; `SKIP` when that diff is empty or its hash equals the
 last PASS's; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
-verdicts after the third block; else `JUDGE`. So a session that never
-converges is blocked five times by the judge and a sixth time by `SURFACE`,
-and its seventh stop is allowed. The block counter is per session,
+verdicts after the third block; else `JUDGE`. So a session whose failures stop
+falling is surfaced at its fourth stop, after three judged blocks; one whose
+failures keep falling without reaching zero is blocked five times by the judge
+and a sixth time by `SURFACE`; either way the stop after `SURFACE` is allowed.
+The block counter — one block per judged cycle that failed — is per session,
 reset only by a PASS, never by a changed hash. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
 by a new session, or by a PASS recorded when the human has the judge run
 again; nothing the maker does alone releases it. The session identifier is
-whatever the host passes; the state file keeps one block count and one failure
-history per identifier.
+whatever the host passes; the state file keeps one block count, one failure
+history and the surfaced mark per identifier.
 
 `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id>`
 writes `.docket/verdict.json` (ignored by git) and bumps the session's block

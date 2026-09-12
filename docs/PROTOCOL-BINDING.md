@@ -47,7 +47,6 @@ core; move it back.
 ## The vendored witness
 
 `docket vendor <dir>` copies `bin/docket.js` to `<dir>/test/docket.js` and prints
-the CI step that runs it. Run with no subcommand, the copy is the witness: it
-runs `check`, and `spec-check` when a `UIUX.md` sits beside a ledger, and exits
-non-zero on any failure (D9). CI needs no host and no plugin: the law is
+the CI step that runs it. Run with no subcommand, the copy is the witness that
+`docs/FORMAT.md` (13) describes (D9). CI needs no host and no plugin: the law is
 checked where it lives.

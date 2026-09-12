@@ -1,12 +1,14 @@
 {
   "name": "the-docket",
   "description": "The Docket: a ledger of rulings that governs a codebase, with a hook that prints what governs a region before an edit and a judge that reads every stop against the rulings.",
-  "owner": { "name": "AlastairZeved" },
+  "owner": {
+    "name": "AlastairZeved"
+  },
   "plugins": [
     {
       "name": "the-docket",
       "source": "./",
-      "description": "What governs this region, before you edit it; a judge at stop; a record at decision; a spine at a new project; the docket at session start."
+      "description": "A ledger of rulings that governs a codebase. Before an edit: what governs this region. At stop: a judge that reads the diff against the rulings. At a decision: a record where it will be found. At a new project: a spine before the first line. Across time: what changed in the law."
     }
   ]
 }

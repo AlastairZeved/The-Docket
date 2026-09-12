@@ -127,7 +127,7 @@ docket (`docket status`) lists pending addenda. `docket append --addendum <id>
 
 ## 7. Sections and spec headings
 
-A **section** is a line `## <X>. <title>` where `<X>` is one or more letters;
+In a ledger, a **section** is a line `## <X>. <title>` where `<X>` is one or more letters;
 sections group entries and are indexed for their titles. A **spec heading** is
 a heading in `UIUX.md` or `PRD.md` of the form
 
@@ -225,9 +225,12 @@ cite, heading or edge, never only the file.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger other than by appended addendum lines; the committed ledger is `HEAD`'s, or `HEAD`'s parent's when the working tree already equals `HEAD` (so a check run on a fresh commit, as in CI, judges the commit it was given); skipped for a ledger with no such version |
+| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger other than by appended addendum lines; the committed ledger is `HEAD`'s, or `HEAD`'s parent's when the working tree already equals `HEAD` (so a check run on a fresh commit, as in CI, judges the commit it was given); skipped when no such version exists — a ledger not yet committed, or a clean tree whose `HEAD` has no parent |
 
-`docket check --json` prints the same findings as JSON.
+`docket check --json` prints the same findings as JSON. Run with no subcommand,
+`docket` is the witness: `check` over the tree and `spec-check` for the nearest
+ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
+`<dir>/test/docket.js`, so a repository runs that witness without the plugin.
 
 ## 14. A worked example
 
@@ -251,7 +254,7 @@ cite, heading or edge, never only the file.
 R4's title is `Fold similarity: shape held, size uniform` (cut at ` (`); R4 has
 one edge, `R4 supersedes R3`, with the clause `supersedes R3`; R7 has one edge,
 `R7 partially reverses R6 (relational plane only)`; R6 has one addendum,
-resolved by R7's edge into it. `near` on a window that cites R6, R4 and R2
+resolved by R7's edge into it. `near` on a window that cites R6, R4 and R3
 prints the edges touching them and the addendum's date; `governs R3` shows the
 in-edge from R4 with its clause; `check` 6 binds R6 and R7, not R3 or R4.
 
@@ -264,11 +267,11 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 
 | `old_string` matches | `replace_all` | `near` does |
 |---|---|---|
-| one | any | the window: 20 lines either side of the match, clamped to the file |
-| many | `true` | the union of the windows; cap 8 by citation count, then by nearness to the first match |
+| one | any | the window: 20 lines either side of the match, clamped to the file; at most eight rulings, nearest first |
+| many | `true` | the union of the windows; the eight most cited, nearest to the first match among equals, listed in that order |
 | many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
 | zero, or `old_string` empty | any | silent |
-| `Write` of an existing governed file | | the whole file; cap 8 by citation count |
+| `Write` of an existing governed file | | the whole file; the eight most cited, earliest first among equals |
 | `Write` of an existing file that cites nothing | | silent |
 | `Write` of a file that does not exist | | silent |
 
@@ -278,8 +281,9 @@ relative to the project root, the file's relative to the ledger's home. A union
 names each matched line, `<file>:70, 140, 210`, the first eight and then
 `+<n> more`; a whole-file write says `whole file <file>`.
 
-Under it the window lists at most eight rulings (D2), nearest first — ties by
-line order, the earlier line first — each as
+Under it the window lists at most eight rulings (D2) in the order its row gives
+— a single window nearest first, ties by line order, the earlier line first —
+each as
 `<id>  <title>` plus `  · issue #<n>` when the entry has one; then the edges
 touching any listed ruling (5), each rendered with its qualifier; then the
 listed rulings that carry addenda, with their dates; then the spec cites in the

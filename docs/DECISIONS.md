@@ -17,10 +17,11 @@ witness checks every cite.
 entry that names it with a verb; it is never edited away. A ruling whose stated
 reason no longer holds gets a dated addendum under it first, and a superseding
 ruling second. Existing headings and bodies are unchanged from one commit to
-the next except for appended addendum lines; `docket check` (7) enforces it.
+the next except for appended addendum lines; the seventh check of `docket check`
+enforces it.
 
 **Header contract.** Every entry from D1 on satisfies the header contract in
-`docs/FORMAT.md` (11): a heading `### D<n>. <Title> (<grounding>; <edges>)`,
+section 11 of `docs/FORMAT.md`: a heading `### D<n>. <Title> (<grounding>; <edges>)`,
 a `Principle:` line naming one of the principles below, and a `Reason:`
 sentence.
 <!-- docket: contract from D1 -->
