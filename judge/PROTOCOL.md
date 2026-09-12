@@ -39,7 +39,7 @@ diff "reads well overall".
    `SKIP` → allow the stop at once (D10).
    `SURFACE` → block the stop with the residue `gate` printed and the sentence
    "report this to the user verbatim, then stop again" (D11); the next `gate`
-   answers `SKIP`.
+   answers `SKIP`. Steps 2–6 do not run: the surfacing block scores nothing.
    `JUDGE <hash> <files…>` → continue with those files; keep the hash for step 6.
 2. **Domains and packs.** From the files, determine the domains touched and read
    the matching packs (D12; each pack's own `Domain` line gives its globs). A
@@ -117,8 +117,8 @@ The block counter — one block per judged cycle that failed — is per session,
 reset only by a PASS, never by a changed hash. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
-by a new session, or by a PASS recorded when the human has the judge run
-again; nothing the maker does alone releases it. The session identifier is
+by a new session, or by a PASS the human records with `docket verdict PASS`
+after judging the residue themselves; nothing the maker does alone releases it. The session identifier is
 whatever the host passes; the state file keeps one block count, one failure
 history and the surfaced mark per identifier.
 
