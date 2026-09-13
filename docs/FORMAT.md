@@ -4,6 +4,12 @@ What `bin/docket.js` reads, what `docket append` writes, and what
 `docket check` verifies. Everything is stated in terms of files, lines and
 text. No host, model or tool is named here (D13).
 
+**Reader.** Whoever implements or checks a docket core, in any language; they
+know git, Markdown and regular expressions, and they do not know this
+repository's rulings. **Purpose.** State the ledger grammar so that two
+implementations parse one ledger identically. **Source.** D1–D7 and D9 in
+`docs/DECISIONS.md`, and the code in `bin/docket.js` that follows them.
+
 ## 1. Discovery (D5)
 
 The **ledger** of a file is the nearest `DECISIONS.md` or `docs/DECISIONS.md`
@@ -12,9 +18,12 @@ directory `dir`, `dir/DECISIONS.md` is tried first, then `dir/docs/DECISIONS.md`
 The project root is the environment variable `CLAUDE_PROJECT_DIR` when set
 (the host's project directory; a second host sets the same variable to its own
 before it calls the core), else the git root of the file's directory, else the
-filesystem root. A ledger file with no entries governs nothing, and still ends
+filesystem root. The root bounds the walk and never redirects it: when the
+variable names a directory that is not an ancestor of the file, the walk ends at
+the filesystem root. A ledger file with no entries governs nothing, and still ends
 the walk: nothing above it is consulted, so an empty ledger placed in a subtree
-declares that subtree ungoverned, and `check` says so with an info line. A file
+declares that subtree ungoverned — none of the seven checks runs on its files —
+and `check` says so with an info line. A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
 The **spec documents** `UIUX.md` and `PRD.md` are looked for in the ledger's own
@@ -28,12 +37,15 @@ example `R6` in a file that resolves to a ledger whose prefixes are `{D}` is not
 a cite (8).
 
 A **text file** is a file whose first 8000 bytes contain no NUL byte — git's
-own sniff for a binary, so the two agree on what is text; a text file is then
-read in full. `check`, `governs` and `status` walk the git-tracked text files;
+own sniff for a binary, so the two agree on what is text, which is the property
+the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files;
 `near` reads the edited file from disk whether or not it is tracked; `gate` adds
 untracked text files that cite a ruling to the diff it hashes. Line endings are
-normalised on reading: CRLF and LF both end a line, a bare CR does not, and a
-CRLF ledger parses, cites and compares line for line exactly as an LF one.
+normalised on reading, the working tree's file and the committed version alike:
+CRLF and LF both end a line, a bare CR does not, and a CRLF ledger parses, cites
+and compares line for line exactly as an LF one, whatever a checkout's
+line-ending settings made of either side. A ledger saved with bare CR endings
+alone is one line, so it has no entries, and the info line above names it.
 
 ## 2. The entry
 
@@ -41,12 +53,15 @@ An entry begins at a heading line
 
     ### <P><n>. <heading>
 
-and ends at the line before the next line that begins `### ` or `## `, or at the
-end of the file. `<P>` is one or more ASCII letters, `A`–`Z` or `a`–`z` (the
+and ends at the line before the next entry heading or the next line that begins
+`## `, or at the end of the file. `<P>` is one or more ASCII letters, `A`–`Z` or `a`–`z` (the
 **prefix**), `<n>` a positive integer in ASCII digits with no leading zero (`D01` is not an entry), and the two together are
 the **id** (`D7`, `R12`, `A1`). A heading whose prefix uses any other letter is
-not an entry. Text before the
-first `## ` or `### ` heading is the **preamble**.
+not an entry. A line that begins `### ` and is not an entry heading — a leading
+zero, a digit in the prefix, no `. ` after the id — ends nothing: it is body text
+of the entry above it, or preamble when no entry precedes it, and every check
+reads it there. Text before the first entry heading or `## ` line is the
+**preamble**.
 
 An entry parses to
 
@@ -73,8 +88,10 @@ The title is the heading text after the id, in three steps and in this order:
    outside a backtick span, keeping what precedes it — a parenthesis inside
    inline code is part of the code, not the meta;
 2. strip backticks and `**`;
-3. if what remains is longer than 72 characters, keep the first 72, cut back to
-   the last space inside them, trim, and append `…`. A heading with no space in
+3. if what remains is longer than 72 characters (a title of exactly 72 is kept
+   whole), keep the first 72, cut back to the last space inside them (the ASCII
+   space; the heading text is trimmed, so it never begins with one), trim, and
+   append `…`. A heading with no space in
    its first 72 characters is cut at 71 characters and `…` appended. Characters
    are Unicode code points: `±`, `…` and an emoji such as `🜲` each count as
    one, whatever their length in a host language's string units. The cut falls
@@ -82,8 +99,10 @@ The title is the heading text after the id, in three steps and in this order:
    paid only by a heading with no space in its first 72 code points.
 
 The order matters: a heading whose parenthetical begins before the 72nd
-character is cut at the parenthetical, never at 72. The result is never longer
-than 72 characters.
+character is cut at the parenthetical, never at 72, and the marks are stripped
+before the count so that 72 counts the characters a reader sees, not the
+backticks and asterisks around them. The result is never longer than 72
+characters.
 
 ## 4. Meta, grounding and issue
 
@@ -113,7 +132,9 @@ An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 
 Text inside backticks is quoted, not asserted: `supersedes R3` inside a code
 span describes an edge and creates none, which is how prose talks about an
-edge it does not make. An edge's target must exist and must be defined earlier
+edge it does not make. The verbs are recognised in this one form and no other:
+`superseded R3` and `superseding R3` make no edge, and a sentence that needs a
+verb of the list beside an id it does not mean to bind quotes the id. An edge's target must exist and must be defined earlier
 in the ledger than its source (a strictly smaller heading line). An edge from a ruling to itself is a
 failure (13, check 5). No status is ever computed from edges (D3): `governs`
 shows them with their clauses and the reader judges.
@@ -146,15 +167,21 @@ its title (`UIUX §<x>.<y> <title>`).
 
 A **cite** is an id on word boundaries, `<P><n>`, in any text file, where
 `<P>` is one of the prefixes of that file's ledger. A cite to a number that
-does not exist in that ledger is a failure (check 1). An id whose prefix is not
-one of the ledger's prefixes is not a cite and is ignored. Cites inside the
-ledger itself are references between rulings, not code cites: `governs` and
-`status` count code cites in every governed file except the ledger.
+does not exist in that ledger is a failure (check 1); `<n>` has the grammar of 2
+(`D05` is not a cite). An id whose prefix is not
+one of the ledger's prefixes is not a cite and is ignored. An id inside a code
+span (backticks) is quoted, not cited, in every text file, as an edge inside one
+is quoted and not asserted (5): the `D7` in section 2 is an example, not a
+reference, and check 1, `near`, `governs` and `status` pass over it. Cites inside the
+ledger itself are references between rulings, not code cites: check 1 requires
+them to resolve like any other, and `governs` and `status` count code cites in
+every governed file except the ledger.
 
 A **governed file** is a text file with at least one cite that resolves.
 
-A **spec cite** is `UIUX §<x>[.<y>[.<z>]]` or `PRD §<x>[.<y>]`; it must resolve
-to a spec heading (check 3). A **bare cite** is `§<digits>` not preceded by a
+A **spec cite** is `UIUX §<x>[.<y>[.<z>]]` or `PRD §<x>[.<y>[.<z>]]`, the same
+depth the heading grammar allows (7); it must resolve to a spec heading
+(check 3). A **bare cite** is `§<digits>` not preceded by a
 document name; it is counted per file, and the count is ratcheted against the
 baseline (9). Spec documents themselves are exempt from the bare-cite count.
 
@@ -212,7 +239,9 @@ contract line, parse loosely (2) and are held to nothing more. The contract:
 ## 12. Prefixes and numbering
 
 The prefixes of a ledger are the distinct `<P>` of its entry headings. Within a
-prefix, numbers are contiguous from 1 in order of appearance (check 2); `docket
+prefix, each entry's number is its position among that prefix's entries — 1, 2,
+3… in order of appearance, so a gap, a repeated id and an entry out of order all
+fail (check 2); `docket
 append` writes `<P><max+1>` for the prefix given with `--prefix`, else for the
 prefix of the ledger's last entry; a ledger with no entry requires `--prefix`
 and `append` exits 2 without it.
@@ -226,12 +255,16 @@ cite, heading or edge, never only the file.
 | k | Check | Fails when |
 |---|---|---|
 | 1 | Cites resolve | a cite in a git-tracked text file names a number that does not exist in that file's ledger |
-| 2 | Numbering | a prefix's numbers are not contiguous from 1 in order of appearance |
+| 2 | Numbering | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an existing entry's heading or body differs, line for line, from the committed ledger other than by appended addendum lines; the committed ledger is `HEAD`'s, or its first parent's when the working tree already equals `HEAD` (so a check run on a fresh commit, as in CI, judges the commit it was given); skipped when no such version exists — a ledger not yet committed, or a clean tree whose `HEAD` has no parent |
+| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), both read with the normalisation of 1; skipped when no such version exists — a ledger not yet committed, or a clean tree whose `HEAD` has no parent |
+
+Check 7's reference point — the first parent when the ledger is unchanged since
+`HEAD` — is a rule of this repository's ledger, stated with its reason in the preamble of
+`docs/DECISIONS.md` beside the append-only law it enforces.
 
 `docket check --json` prints the same findings as JSON. Run with no subcommand,
 `docket` is the witness: `check` over the tree and `spec-check` for the nearest
@@ -273,10 +306,11 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 
 | `old_string` matches | `replace_all` | `near` does |
 |---|---|---|
-| one | any | the window: 20 lines either side of the match, clamped to the file; at most eight rulings, nearest first |
-| many | `true` | the union of the windows; the eight most cited, nearest to the first match among equals, then the earlier line, listed in that order |
+| one | any | the window: the 20 lines before and the 20 after the matched line — the line where the match begins — both inclusive (41 lines), clamped to the file; at most eight rulings, nearest first, a ruling cited more than once ranked by its nearest cite |
+| many | `true` | the union of the windows; the eight most cited within it, nearest to the first match among equals, then the earlier line, then the earlier on that line, listed in that order |
 | many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
 | zero, or `old_string` empty | any | silent |
+| an edit of a file that does not exist | any | silent: there is no region to govern, and the edit tool refuses the edit |
 | `Write` of an existing governed file | | the whole file; the eight most cited, earliest first among equals |
 | `Write` of an existing file that cites nothing | | silent |
 | `Write` of a file that does not exist | | silent |
@@ -284,13 +318,18 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 The text opens with one line naming the ledger and the region —
 `Governed here (<ledger>, ±20 lines of <file>:<line>):` — the ledger's path
 relative to the project root, the file's relative to the ledger's home. A union
-names each matched line, `<file>:70, 140, 210`, the first eight (the cap, D2)
-and then `+<n> more`; a whole-file write says `whole file <file>`.
+names each matched line, `<file>:70, 140, 210`, the first eight and then
+`+<n> more`: the count tells the maker how much denser the region is than the
+list shows, and the list stops where the ruling list does so that the hook's
+text stays short enough to be read at every edit; a whole-file write says
+`whole file <file>`.
 
 Under it the window lists at most eight rulings (D2) in the order its row gives
 — a single window nearest first, ties by line order, the earlier line first —
 each as
-`<id>  <title>` plus `  · issue #<n>` when the entry has one; then the edges
+`<id>  <title>` plus `  · issue #<n>` when the entry has one, and when more
+than eight are cited a last line `  +<n> more` (a cap that hid its own overflow
+would settle a conflict silently, D14); then the edges
 touching any listed ruling (5), each rendered with its qualifier; then the
 listed rulings that carry addenda, with their dates; then the spec cites in the
 window with their titles (7); then one instruction line. A governed file whose
@@ -299,4 +338,5 @@ A file that cites nothing anywhere, or has no ledger above it, gets silence.
 When the stdin object carries a `hook_event_name`, the same text is printed
 inside `{"hookSpecificOutput":{"hookEventName":<that>,"additionalContext":<text>}}`
 so a host that reads that shape can inject it; otherwise the text is printed
-bare.
+bare. Silent means nothing is printed at all — no wrapper with an empty context —
+and the exit code is 0, with or without a `hook_event_name`.

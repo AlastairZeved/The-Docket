@@ -7,6 +7,11 @@ calls. Everything else — discovery, the window, the edges, the gate, the
 verdict, the intakes — is the core's, and nothing in it moves when a second
 host arrives.
 
+**Reader.** The author of a second host's binding; they know their host's hook
+and subagent mechanisms, and they do not know this core. **Purpose.** Bind the
+core to a host in three calls and nothing more. **Source.** D13 in
+`docs/DECISIONS.md`.
+
 ## The three calls
 
 **1. Before an edit** — pipe the edit into `near` and show its stdout to the
@@ -25,7 +30,7 @@ else the core uses the git root.
     node bin/docket.js status
 
 It prints the docket: the last rulings, rulings cited nowhere, pending addenda,
-the last verdict, and the witness result.
+the last verdict and whether its session is surfaced, and the witness result.
 
 **3. At "done"** — run a read-only subagent on `judge/PROTOCOL.md`, passing it
 the transcript path, the session identifier and whether this stop was already

@@ -6,6 +6,12 @@ file is the whole of its instructions. It names no host and no model (D13): any
 subagent that can read files and run a shell can follow it, on whatever model
 the host gives it.
 
+**Reader.** The judge itself — a subagent with a shell and no pen — and whoever
+binds one; it knows how to run a command and read a diff, and it does not know
+the maker's intentions or this repository's history. **Purpose.** Decide whether
+one stop stands, in seven steps, in this order. **Source.** D8, D10, D11, D12
+and D15 in `docs/DECISIONS.md`.
+
 ## What the judge is given
 
 | Input | From |
@@ -66,7 +72,9 @@ diff "reads well overall".
    code the reason describes is gone), or a cite no longer points at code that
    implements the ruling. A diff that earns both is FAIL: FAIL names every
    located failure, the stale ones with their addendum route among them, and
-   STALE is the verdict only when every failure is a stale one.
+   STALE is the verdict only when every failure is a stale one. A stale
+   contradiction is never itself the FAIL (D7): it keeps its addendum route
+   whatever the verdict, and the verdict is FAIL for the other failures.
    Record it: `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id>`.
 7. **Return.**
    PASS → allow the stop.
@@ -107,14 +115,19 @@ and decides mechanically (D10, D11): the hash is the SHA-256 of the diff since
 the committed head over every governed file and the ledger, followed by, for
 each untracked governed file in path order, a line `+++ <path>` and the file's
 content; `SKIP` when that diff is empty or its hash equals the
-last PASS's; `SURFACE` when this session has been blocked five times or more since the
+last PASS's, or when this session is already surfaced; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. So a session whose failures stop
 falling is surfaced at its fourth stop, after three judged blocks; one whose
 failures keep falling without reaching zero is blocked five times by the judge
 and a sixth time by `SURFACE`; either way the stop after `SURFACE` is allowed.
-The block counter — one block per judged cycle that failed — is per session,
-reset only by a PASS, never by a changed hash. `gate` itself records the session
+The re-entry flag the host passes is its word that this stop follows a block in
+the same turn, and D11 honours it: a session is blocked at most once per turn,
+so the stops counted above are one per turn, with the maker's work between them.
+The block counter — one block per judged cycle that failed, FAIL or STALE — is
+per session, reset only by a PASS, never by a changed hash; it counts the five
+judged blocks, not the surfacing stop, and the plateau test above is made at
+every stop from the fourth on, not once. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
 by a new session, or by a PASS the human records with `docket verdict PASS`
@@ -128,8 +141,14 @@ count, or resets it on PASS. The judge is the only party that calls it, by
 contract, not by mechanism: a forged verdict is a visible shell call in the
 maker's transcript.
 
+Nothing verifies the relay. The residue reaches the human only through the
+maker's own reply (D11), and a maker can drop it; the boundary is the maker's
+compliance, as the boundary against a forged verdict is tool permission.
+
 ## Cost
 
 One judge per stop that touched a governed file, and at most five per session
-between passes (D11). A stop that touched nothing governed costs one `gate`
+between passes (D11); the surfacing block that may follow the fifth costs no
+judge, so a session is denied at most six stops, five judged and one surfacing,
+before its next stop is allowed. A stop that touched nothing governed costs one `gate`
 call and no judge.

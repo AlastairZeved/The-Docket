@@ -3,7 +3,9 @@
 The ledger of this repository's own rulings. The repository is governed by
 this file through the plugin it ships (D6): `bin/docket.js` cites the rulings
 below where it implements them, the hooks run on this working tree, and the
-witness checks every cite.
+witness checks every cite. A file a ruling names that is not yet in the tree is
+one the ruling anticipates: the law is stated whole from the first commit, and
+the mechanisms arrive under it.
 
 | Question | Authority |
 |---|---|
@@ -18,7 +20,10 @@ entry that names it with a verb; it is never edited away. A ruling whose stated
 reason no longer holds gets a dated addendum under it first, and a superseding
 ruling second. Existing headings and bodies are unchanged from one commit to
 the next except for appended addendum lines; the seventh check of `docket check`
-enforces it.
+enforces it against the committed ledger — `HEAD`'s, or its first parent's when
+the ledger in the working tree already equals `HEAD`'s, so that the check in CI
+judges the commit it was given: a fresh commit compared with itself would
+witness nothing.
 
 **Header contract.** Every entry from D1 on satisfies the header contract in
 section 11 of `docs/FORMAT.md`: a heading `### D<n>. <Title> (<grounding>; <edges>)`,
