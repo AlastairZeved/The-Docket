@@ -16,3 +16,5 @@ jobs:
           node-version: 20
       - name: The witness
         run: node test/docket.js
+      - name: The docket (D6)
+        run: node bin/docket.js

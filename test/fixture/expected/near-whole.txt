@@ -1,0 +1,14 @@
+Governed here (test/fixture/DECISIONS.md, whole file app.js):
+  R2  Positions are never mutated on read
+  R1  Capture before shape
+  R5  Three tabs because the lot has three sections  · issue #8
+  R6  The toolbar replaces the long-press menu  · issue #12
+  R4  Fold similarity: shape held, size uniform
+  R3  Fold similarity  · issue #4
+  A1  Long-press menu order
+  R7  The relational plane keeps its long-press menu  · issue #14
+  +1 more
+Edges among these: R8 waives R1; R7 partially reverses R6 (relational plane only); R4 supersedes R3.
+Addenda: R2 (2026-09-11).
+Also cited: UIUX §4.5 The minimum; PRD §1 Principles.
+Name the ruling you rely on before you edit.

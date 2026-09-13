@@ -1,0 +1,10 @@
+/* styles.css — the Lot. Tokens per UIUX §2; one value disagrees with the spec on purpose. */
+:root {
+  --paper: #f4efe6;
+  --ink: #1b1b1b;
+  --line: #7a8fa7;
+}
+body { background: var(--paper); color: var(--ink); margin: 0; }
+.note { position: absolute; border: 1px solid var(--line); min-width: 88px; } /* R2: positions are never mutated on read; the frame only reads them */
+.toolbar { position: absolute; display: flex; gap: 8px; min-height: 44px; } /* R6: the toolbar replaces the long-press menu */
+.dashed { border-style: dashed; }

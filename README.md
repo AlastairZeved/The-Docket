@@ -271,8 +271,8 @@ sh test/judge.sh
 ```
 
 Neither script is in CI, because they need credentials. Both are runnable by
-anyone with the CLI. Their results are recorded in the ledger, under D16 and
-D18.
+anyone with the CLI. Their results are recorded in the ledger, under `D16` and
+`D18`.
 
 ---
 
@@ -340,7 +340,7 @@ node bin/docket.js check && node bin/docket.js status
   session between passes. A one-line change to an ungoverned file spawns
   nothing.
 * **The judge's accuracy is the host's subagent's accuracy.** The protocol
-  chooses no model, so the results recorded under D18 state which host and which
+  chooses no model, so the results recorded under `D18` state which host and which
   date produced them. They are results on that host, on that date — not a
   general claim.
 

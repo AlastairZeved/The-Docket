@@ -75,6 +75,7 @@ Principle: One home per value.
 ### D7. The four located rules (cases cheap to decide now, expensive to discover in use)
 Principle: A rule carries its reason.
 (1) Non-unique `old_string`: without `replace_all`, the hook is silent, because the edit tool will reject the edit and the retry fires the hook again; with `replace_all`, the union of the windows, capped at eight by citation count and then by nearness to the first match. (2) Title truncation: a title is the heading after its id, cut at the first ` (`, backticks and bold stripped, then at the last word boundary before 72 characters with `…`. (3) The wedge is measured: whether a maker names a ruling from the injected list, and whether it surfaces a conflict the list forbids, are counted in headless runs and recorded in this ledger as a dated result. (4) STALE and the addendum: a ruling contradicted whose stated reason no longer holds is STALE, routed to a dated addendum under it, not to a new ruling and not to a FAIL. Reason: cheap to decide now, expensive to discover in use.
+> Addendum 2026-09-13: a fifth located rule, found by the fixture: a governed file whose edit window cites no ruling gets a one-line notice naming the window, so the maker learns the file is governed without a list to read (FORMAT.md 15); a file that cites nothing anywhere stays silent.
 
 ### D8. The harness runs the judge, and the human confirms the law (who may grade, and who may amend)
 Principle: The maker does not grade its own work.

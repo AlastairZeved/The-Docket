@@ -1,0 +1,2 @@
+Governed here (test/fixture/DECISIONS.md, ±20 lines of app.js:253):
+  no ruling is cited in this window; run docket governs <id> for the one you rely on.

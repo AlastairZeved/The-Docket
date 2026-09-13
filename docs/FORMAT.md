@@ -36,6 +36,11 @@ its own nearest ledger, so a repository may hold more than one ledger, and an
 example `R6` in a file that resolves to a ledger whose prefixes are `{D}` is not
 a cite (8).
 
+A ledger's **home** is the directory that holds it, or that holds the `docs/`
+holding it: `docs/DECISIONS.md` has the project root as its home;
+`test/fixture/DECISIONS.md` has `test/fixture/`. Paths printed by `near` and
+listed in the bare-cite baseline (9) are relative to the home.
+
 A **text file** is a file whose first 8000 bytes contain no NUL byte — git's
 own sniff for a binary, so the two agree on what is text, which is the property
 the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files;
@@ -129,6 +134,10 @@ boundaries (`.`, `;`, or a line break).
 
 An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 `R7 partially reverses R6 (relational plane only)` is one edge from R7 to R6.
+The same edge stated twice — in the heading's meta and again in the body — is
+one edge, and its clause is the first statement. One verb may name several
+targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with
+the same clause.
 
 Text inside backticks is quoted, not asserted: `supersedes R3` inside a code
 span describes an edge and creates none, which is how prose talks about an
@@ -175,9 +184,15 @@ is quoted and not asserted (5): the `D7` in section 2 is an example, not a
 reference, and check 1, `near`, `governs` and `status` pass over it. Cites inside the
 ledger itself are references between rulings, not code cites: check 1 requires
 them to resolve like any other, and `governs` and `status` count code cites in
-every governed file except the ledger.
+every governed file except the ledger. A fenced code block — a line that
+begins with three backticks opens it, the next such line closes it — is quoted
+like a code span: no id, spec cite or bare cite inside it is counted, so a
+document may quote a ledger's output or another project's rulings.
 
-A **governed file** is a text file with at least one cite that resolves.
+A **governed file** is a text file with at least one cite that resolves. A
+**ledger document** — any file named `DECISIONS*.md`, the ledger itself or a
+frozen copy of it — has its cites checked (check 1) but is never governed code:
+`governs`, `status` and `gate` leave it out of code cites and governed files.
 
 A **spec cite** is `UIUX §<x>[.<y>[.<z>]]` or `PRD §<x>[.<y>[.<z>]]`, the same
 depth the heading grammar allows (7); it must resolve to a spec heading
@@ -191,7 +206,7 @@ The ledger preamble may carry one comment
 
     <!-- docket: bare-cites <file>=<n> <file>=<n> … -->
 
-with paths relative to the ledger's directory. When the comment is present, a
+with paths relative to the ledger's home (1). When the comment is present, a
 file's bare-cite count may not exceed its allowance, and a file not listed has
 an allowance of 0 (check 4); the comment may list no file at all, and then every
 file's allowance is 0. When the comment is absent, counts are reported and
@@ -270,6 +285,11 @@ Check 7's reference point — the first parent when the ledger is unchanged sinc
 `docket` is the witness: `check` over the tree and `spec-check` for the nearest
 ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
 `<dir>/test/docket.js`, so a repository runs that witness without the plugin.
+`docket check` covers every ledger in the tree; `docket spec-check` covers the
+ledger nearest the working directory (a fixture ledger under `test/` is reached
+from inside it, or with `--all`). `governs <id>` names the ledger it searched and
+exits 2 when `<id>` is not one of its entries; `query <term>` prints that nothing
+matches and exits 0; `diff` exits 2 when a revision or file cannot be read.
 
 ## 14. A worked example
 
