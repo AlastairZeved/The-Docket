@@ -45,7 +45,9 @@ listed in the bare-cite baseline (9) are relative to the home.
 A **text file** is a file whose first 8000 bytes contain no NUL byte — git's
 own sniff for a binary, so the two agree on what is text, which is the property
 the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files;
-`near` reads the edited file from disk whether or not it is tracked; `gate` adds
+`near` reads the edited file from disk whether or not it is tracked, and reads
+it only if it is a text file — a binary one is no more governed for `near` than
+for the walk, and an edit of it is silent; `gate` adds
 untracked text files that cite a ruling to the diff it hashes. Line endings are
 normalised on reading, the working tree's file and the committed version alike:
 CRLF and LF both end a line, a bare CR does not, and a CRLF ledger parses, cites
@@ -386,6 +388,9 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 | `Write` of an existing governed file | | the whole file; the eight most cited, earliest first among equals |
 | `Write` of an existing file that cites nothing | | silent |
 | `Write` of a file that does not exist | | silent |
+
+Silent is silent on both streams: nothing on standard output, nothing on
+standard error, exit 0.
 
 The text opens with one line naming the ledger and the region —
 `Governed here (<ledger>, ±20 lines of <file>:<line>):` — the ledger's path

@@ -93,30 +93,30 @@ const SEC = String.fromCharCode(0xa7);
   const one = docket(['near'], { input: nearInput(APP, 'makeToolbar(') });
   ok('near: one match → the ±20 window, byte for byte', one.code === 0 && one.out === expected('near-41.txt'), one.out);
   const manyNo = docket(['near'], { input: nearInput(APP, "  el.classList.add('note');") });
-  ok('near: many matches without replace_all → silent', manyNo.code === 0 && manyNo.out === '', manyNo.out);
+  ok('near: many matches without replace_all → silent', manyNo.code === 0 && manyNo.out === '' && manyNo.err === '', manyNo.out);
   const manyYes = docket(['near'], { input: nearInput(APP, "  el.classList.add('note');", { replace_all: true }) });
   ok('near: many matches with replace_all → the union, cap 8 by count then nearest to the first', manyYes.code === 0 && manyYes.out === expected('near-union.txt'), manyYes.out);
   const zero = docket(['near'], { input: nearInput(APP, 'no such text anywhere') });
-  ok('near: zero matches → silent', zero.code === 0 && zero.out === '');
+  ok('near: zero matches → silent', zero.code === 0 && zero.out === '' && zero.err === '');
   const empty = docket(['near'], { input: nearInput(APP, '') });
-  ok('near: an empty old_string → silent', empty.code === 0 && empty.out === '');
+  ok('near: an empty old_string → silent', empty.code === 0 && empty.out === '' && empty.err === '');
   const whole = docket(['near'], { input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: APP, content: 'x' } }) });
   ok('near: Write of an existing governed file → whole file, cap 8 by count', whole.code === 0 && whole.out === expected('near-whole.txt'), whole.out);
   const fresh = docket(['near'], { input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path.join(FIX, 'brand-new.js'), content: 'x' } }) });
-  ok('near: Write of a new file → silent', fresh.code === 0 && fresh.out === '');
+  ok('near: Write of a new file → silent', fresh.code === 0 && fresh.out === '' && fresh.err === '');
   const far = docket(['near'], { input: nearInput(APP, '  return JSON.stringify(out);') });
   ok('near: a governed file whose window cites nothing → the one-line notice', far.code === 0 && far.out === expected('near-empty-window.txt'), far.out);
   const ungoverned = docket(['near'], { input: nearInput(path.join(ROOT, 'LICENSE'), 'Permission is hereby granted') });   // one match, so this is the cites-nothing row and not the many-matches row
-  ok('near: a file that cites nothing → silent', ungoverned.code === 0 && ungoverned.out === '');
+  ok('near: a file that cites nothing → silent', ungoverned.code === 0 && ungoverned.out === '' && ungoverned.err === '');
   const hook = docket(['near'], { input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: APP, old_string: 'makeToolbar(' } }) });
   const hj = hook.code === 0 ? JSON.parse(hook.out) : null;
   ok('near: with a hook event name the same text is wrapped for injection', hj && hj.hookSpecificOutput.hookEventName === 'PreToolUse' && hj.hookSpecificOutput.additionalContext + '\n' === expected('near-41.txt'), hook.out);
   const garbage = docket(['near'], { input: 'not json' });
-  ok('near: unusable stdin never blocks (exit 0, silent)', garbage.code === 0 && garbage.out === '');
+  ok('near: unusable stdin never blocks (exit 0, silent)', garbage.code === 0 && garbage.out === '' && garbage.err === '');
   const noLedger = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-nl-'));
   fs.writeFileSync(path.join(noLedger, 'a.js'), 'const x = 1; // R6\n');
   const nl = docket(['near'], { input: nearInput(path.join(noLedger, 'a.js'), 'x = 1') });
-  ok('near: a file with no ledger above it → silent', nl.code === 0 && nl.out === '');
+  ok('near: a file with no ledger above it → silent', nl.code === 0 && nl.out === '' && nl.err === '');
   // a governed file of 5,000 lines: the window stays ±20 and the answer is immediate
   const big = tempRepo(dir => {
     const lines = [];
@@ -208,7 +208,8 @@ const SEC = String.fromCharCode(0xa7);
   // a ledger with CRLF line endings parses, cites and compares like an LF one
   const crlf = tempRepo(d => { const p = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(p, read(p).replace(/\n/g, '\r\n')); });
   r = docket(['check'], { cwd: crlf });
-  ok('check: a CRLF ledger passes every check', r.code === 0, r.out + r.err);
+  const crlfIx = JSON.parse(docket(['index'], { cwd: path.join(crlf, 'test', 'fixture') }).out);
+  ok('check: a CRLF ledger passes every check, and the check had entries to run on — an empty ledger also exits 0', r.code === 0 && crlfIx.rulings.length === 9 && /governed-tree file/.test(r.out), r.out + r.err + JSON.stringify(crlfIx.rulings.length));
   const crlfNear = docket(['near'], { cwd: crlf, input: nearInput(path.join(crlf, 'test', 'fixture', 'app.js'), 'makeToolbar(') });
   ok('near: a CRLF ledger yields the same window text', crlfNear.out === expected('near-41.txt'), crlfNear.out);
   // an empty ledger: nothing governed, nothing fails
@@ -223,7 +224,7 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['check'], { cwd: cr });
   ok('check: a ledger with bare CR endings is one line with no entries, and the info line names it (FORMAT.md 1)', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out), r.out + r.err);
   const emptyNear = docket(['near'], { cwd: emptyL, input: nearInput(path.join(emptyL, 'test', 'fixture', 'app.js'), 'makeToolbar(') });
-  ok('near: under an empty ledger every file is ungoverned → silent', emptyNear.code === 0 && emptyNear.out === '');
+  ok('near: under an empty ledger every file is ungoverned → silent', emptyNear.code === 0 && emptyNear.out === '' && emptyNear.err === '');
   const json = docket(['check', '--json'], { cwd: c1 });
   ok('check --json reports the same failure', json.code === 1 && JSON.parse(json.out).failures[0].k === 1);
 }
@@ -294,7 +295,7 @@ const SEC = String.fromCharCode(0xa7);
   const g = docket(['governs', 'R6'], { cwd: FIX });
   ok('governs shows in-edges with their clause text and code cites with file:line', g.code === 0 && /In-edges[^\n]*\n  R7 partially reverses R6 \(relational plane only\)  — "This partially reverses R6/.test(g.out) && /Code cites:\n  test\/fixture\/app\.js:41  function makeToolbar/.test(g.out) && /test\/fixture\/styles\.css:\d+/.test(g.out), g.out);
   const gStat = docket(['governs', 'R3'], { cwd: FIX }).out, gHeads = gStat.split('\n').filter(l => /^\S.*:$/.test(l));
-  ok('governs computes no status (D3): its only sections are the four it prints, and no line names a state, a label or a verdict for the ruling', gHeads.join('|') === 'Out-edges (what R3 does to earlier rulings):|In-edges (what later rulings do to R3):|Addenda:|Code cites:' && !/\b(superseded|retired|dead|obsolete|inactive|current|live|status|state)\b/i.test(gStat), gStat);
+  ok('governs computes no status (D3): its only sections are the four it prints, and no line names a state, a label or a verdict for the ruling', gHeads.join('|') === 'Out-edges (what R3 does to earlier rulings):|In-edges (what later rulings do to R3):|Addenda:|Code cites:' && gStat.split('\n').filter(Boolean).every((l, i) => i === 0 ? /^R3  .+  \(.+:\d+\)$/.test(l) : (gHeads.includes(l) || /^  \S/.test(l))), gStat);
   const g4 = docket(['governs', 'R4'], { cwd: FIX });
   ok('governs R4 renders a populated out-edge list: the header with no issue, then the edge with its clause text, and an empty in-edge section', g4.code === 0 && /^R4  Fold similarity: shape held, size uniform  \(test\/fixture\/DECISIONS\.md:\d+\)\nOut-edges \(what R4 does to earlier rulings\):\n  R4 supersedes R3  — "supersedes R3"\nIn-edges \(what later rulings do to R4\):\n  none\n/.test(g4.out), g4.out);
   const g2 = docket(['governs', 'R3'], { cwd: FIX });
@@ -330,7 +331,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('check --json: a failure carries file, line, k, message', cj1.ok === false && Object.keys(cj1.failures[0]).join(',') === 'file,line,k,message' && cj1.failures[0].file === 'test/fixture/app.js' && cj1.failures[0].line === 41 && cj1.failures[0].k === 1, JSON.stringify(cj1));
   const silent = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-s-'));
   const ss = docket(['status'], { cwd: silent });
-  ok('status in an ungoverned directory is silent', ss.code === 0 && ss.out === '');
+  ok('status in an ungoverned directory is silent', ss.code === 0 && ss.out === '' && ss.err === '');
   const usage = docket(['nonsense']);
   ok('an unknown subcommand is a usage error (exit 2)', usage.code === 2);
   const root = docket(['check']);
@@ -425,7 +426,7 @@ const SEC = String.fromCharCode(0xa7);
   const to = docket(['near'], { cwd: un, input: nearInput(path.join(un, 'test', 'fixture', 'ticks.js'), 'tick()', { replace_all: true }) });
   ok('near: nine matches name the first eight lines and +1 more', to.out.startsWith('Governed here (test/fixture/DECISIONS.md, ±20 lines of ticks.js:1, 2, 3, 4, 5, 6, 7, 8 +1 more):\n  R2  '), to.out);
   const missing = docket(['near'], { input: nearInput(path.join(FIX, 'no-such-file.js'), 'x') });
-  ok('near: an edit of a file that does not exist → silent', missing.code === 0 && missing.out === '');
+  ok('near: an edit of a file that does not exist → silent', missing.code === 0 && missing.out === '' && missing.err === '');
 }
 
 // ── boundaries, line endings, the ledger's own edits, --json, discovery, shapes (Phase 1 fix; FORMAT.md 1, 8, 15) ──
@@ -464,9 +465,9 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and the CRLF ledger parses to ten rulings with the addendum under R5', cjx.rulings.length === 10 && cjx.rulings.find(x => x.id === 'R5').addenda.length === 1 && cjx.baseline['app.js'] === 3, JSON.stringify(cjx.baseline));
   // the ledger is amended through append: near is silent for an edit of a ledger document
   const ln = docket(['near'], { input: nearInput(path.join(FIX, 'DECISIONS.md'), '### R6.') });
-  ok('near: an edit inside the ledger itself → silent (FORMAT.md 8)', ln.code === 0 && ln.out === '', ln.out);
+  ok('near: an edit inside the ledger itself → silent (FORMAT.md 8)', ln.code === 0 && ln.out === '' && ln.err === '', ln.out);
   const lh = docket(['near'], { input: nearInput(path.join(FIX, 'history', 'DECISIONS.v1.md'), '### R1.') });
-  ok('near: an edit of a frozen ledger copy → silent', lh.code === 0 && lh.out === '', lh.out);
+  ok('near: an edit of a frozen ledger copy → silent', lh.code === 0 && lh.out === '' && lh.err === '', lh.out);
   // --json on near: the window as an object; silence stays silence
   const nj = docket(['near', '--json'], { input: nearInput(APP, 'makeToolbar(') });
   const njo = nj.code === 0 && nj.out ? JSON.parse(nj.out) : null;
@@ -477,7 +478,7 @@ const SEC = String.fromCharCode(0xa7);
   const nje = JSON.parse(docket(['near', '--json'], { input: nearInput(APP, '  return JSON.stringify(out);') }).out);
   ok('near --json: the empty-window notice is the notice field with no rulings', nje.rulings.length === 0 && /^no ruling is cited in this window/.test(nje.notice), JSON.stringify(nje));
   const njs = docket(['near', '--json'], { input: nearInput(APP, 'no such text anywhere') });
-  ok('near --json: silence is silence', njs.code === 0 && njs.out === '');
+  ok('near --json: silence is silence', njs.code === 0 && njs.out === '' && njs.err === '');
   // --json on query, governs, append, principles
   const qj = JSON.parse(docket(['query', 'fold', '--json'], { cwd: FIX }).out);
   ok('query --json: the matching rulings with their edges in and out', Array.isArray(qj) && qj.map(x => x.id).join(',') === 'R3,R4' && qj[0].inEdges.length === 1 && qj[0].inEdges[0].from === 'R4' && qj[1].edges[0].to === 'R3', JSON.stringify(qj.map(x => x.id)));
@@ -554,7 +555,7 @@ const SEC = String.fromCharCode(0xa7);
   // an empty ledger ends the walk even with a real ledger above it
   const stop = tempRepo(d => { fs.mkdirSync(path.join(d, 'test', 'fixture', 'sub')); fs.writeFileSync(path.join(d, 'test', 'fixture', 'sub', 'DECISIONS.md'), '# Empty\n'); fs.writeFileSync(path.join(d, 'test', 'fixture', 'sub', 'a.js'), 'const a = 1; // R6 is not a cite here: the empty ledger ends the walk\n'); });
   const sn = docket(['near'], { cwd: stop, input: nearInput(path.join(stop, 'test', 'fixture', 'sub', 'a.js'), 'a = 1') });
-  ok('discovery: an empty ledger ends the walk — a file under it is ungoverned though a real ledger sits above (FORMAT.md 1)', sn.code === 0 && sn.out === '', sn.out);
+  ok('discovery: an empty ledger ends the walk — a file under it is ungoverned though a real ledger sits above (FORMAT.md 1)', sn.code === 0 && sn.out === '' && sn.err === '', sn.out);
   let r = docket(['check'], { cwd: stop });
   ok('…and check reports the empty ledger with the info line, failing nothing', r.code === 0 && /^info  test\/fixture\/sub\/DECISIONS\.md: no entries; its subtree is ungoverned and no check runs on its 1 file$/m.test(r.out), r.out);
   // a file with a NUL byte in its first 8000 bytes is not text and is skipped
@@ -730,7 +731,7 @@ const SEC = String.fromCharCode(0xa7);
   const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-bare-'));
   fs.mkdirSync(path.join(bare, 'sub')); fs.writeFileSync(path.join(bare, 'sub', 'DECISIONS.md'), '# L\n\n### Q1. One (issue #1)\nReason: r.\n');
   r = docket(['status'], { cwd: bare });
-  ok('status in a bare directory (no git, no project variable) stays silent: a directory the host does not name is not searched', r.code === 0 && r.out === '', r.out);
+  ok('status in a bare directory (no git, no project variable) stays silent: a directory the host does not name is not searched', r.code === 0 && r.out === '' && r.err === '', r.out);
   r = docket(['status'], { cwd: bare, env: { CLAUDE_PROJECT_DIR: bare } });
   ok('…and named by the host, its ledgers below are listed', r.code === 0 && / below it: sub\/DECISIONS\.md /.test(r.out), r.out);
   r = docket(['status'], { cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'docket-none-')) });
@@ -813,7 +814,7 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['near'], { cwd: sl, input: nearInput(path.join(sl, 'test', 'fixture', 'sameline.js'), 'f(x)', { replace_all: true }) });
   ok('near: two matches on one line name the line once', r.out.startsWith('Governed here (test/fixture/DECISIONS.md, ±20 lines of sameline.js:2):\n  R6  '), r.out);
   const slNo = docket(['near'], { cwd: sl, input: nearInput(path.join(sl, 'test', 'fixture', 'sameline.js'), 'f(x)') });
-  ok('…and without replace_all they are still many: silent', slNo.code === 0 && slNo.out === '', slNo.out);
+  ok('…and without replace_all they are still many: silent', slNo.code === 0 && slNo.out === '' && slNo.err === '', slNo.out);
   // the code-span near test against the golden file, not the live base
   const csp = tempRepo(d => edit(d, 'test/fixture/app.js', 'function makeToolbar(', 'const quoted = "`R2`"; // a span, not a cite\nfunction makeToolbar('));
   r = docket(['near'], { cwd: csp, input: nearInput(path.join(csp, 'test', 'fixture', 'app.js'), 'makeToolbar(') });
@@ -854,11 +855,20 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['append', '--title', 'Capital edge', '--issue', '73', '--principle', 'Capture precedes structure', '--edge', 'Extends R1', '--body', 'x. Reason: r.'], { cwd: path.join(ce, 'test', 'fixture') });
   ok('append --edge accepts a capitalised verb and writes it in lowercase', r.code === 0 && /^### R9\. Capital edge \(issue #73; extends R1\)$/m.test(r.out) && /check: ok/.test(r.out), r.err + r.out);
   // the repository's own lines, exactly: check, the witness, status — the counts recomputed here from git and findLedger
-  const core2 = require(CORE);
   const trackedAll = sh('git', ['ls-files', '-z'], ROOT).stdout.split('\0').filter(Boolean).map(f => path.join(ROOT, f));
   const isText = f => { const b = fs.readFileSync(f); const n = Math.min(b.length, 8000); for (let i = 0; i < n; i++) if (b[i] === 0) return false; return true; };
-  const governedTree = trackedAll.filter(f => fs.statSync(f).isFile() && isText(f) && core2.findLedger(f, ROOT));
-  const ledgerSet = new Set(governedTree.map(f => core2.findLedger(f, ROOT)));
+  // the walk of FORMAT.md 1, written here from the prose and not borrowed from the core: nearest DECISIONS.md
+  // or docs/DECISIONS.md from the file's own directory up to the root. A count the core computes for itself
+  // agrees with itself whatever it does; this one does not.
+  const walkUp = f => {
+    for (let dir = path.dirname(path.resolve(f)); ; dir = path.dirname(dir)) {
+      for (const cand of [path.join(dir, 'DECISIONS.md'), path.join(dir, 'docs', 'DECISIONS.md')])
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) return cand;
+      if (dir === ROOT || dir === path.dirname(dir)) return null;
+    }
+  };
+  const governedTree = trackedAll.filter(f => fs.statSync(f).isFile() && isText(f) && walkUp(f));
+  const ledgerSet = new Set(governedTree.map(walkUp));
   const rootCheck = docket(['check']);
   ok('check at the root ends with its exact summary line — the ledger count and the governed-tree file count, both recomputed here', rootCheck.code === 0 && rootCheck.out.trimEnd().split('\n').pop() === 'check: ok (' + ledgerSet.size + ' ledgers, ' + governedTree.length + ' governed-tree files)' && ledgerSet.size === 2 && governedTree.length > 10, rootCheck.out);
   const rootWitness = docket([]);
@@ -912,7 +922,10 @@ const SEC = String.fromCharCode(0xa7);
   const b15 = JSON.parse(docket(['index'], { cwd: path.join(big15, 'test', 'fixture') }).out);
   ok('a sixteen-digit numeral is not an entry heading; a fifteen-digit one is, with an exact n', !b15.rulings.some(x => x.id === 'R9007199254740993') && b15.rulings.some(x => x.id === 'R999999999999999' && x.n === 999999999999999), b15.rulings.map(x => x.id).join(','));
   r = docket(['append', '--title', 'The next number', '--issue', '92', '--principle', 'Capture precedes structure', '--body', 'x. Reason: r.'], { cwd: path.join(big15, 'test', 'fixture') });
-  ok('append after a fifteen-digit numeral writes the next number exactly', /^### R1000000000000000\. The next number \(issue #92\)$/m.test(r.out) || /^append: /.test(r.err), r.err + r.out);
+  const b15Cwd = path.join(big15, 'test', 'fixture'), b15Before = read(path.join(b15Cwd, 'DECISIONS.md'));
+  ok('append at the largest number the grammar allows is refused, naming the ceiling and the way out, and writes nothing', r.code === 2 && /^append: the R entries end at 999999999999999, the largest number the grammar allows \(15 digits\); a further ruling needs a new prefix — pass --prefix \(FORMAT\.md 2, 12\)$/m.test(r.err) && r.out === '' && read(path.join(b15Cwd, 'DECISIONS.md')) === b15Before, r.err + r.out);
+  r = docket(['append', '--prefix', 'S', '--title', 'The next number', '--issue', '92', '--principle', 'Capture precedes structure', '--body', 'x. Reason: r.'], { cwd: b15Cwd });
+  ok('…and the way out works: a new prefix starts at 1, and nothing check reports is about it', /^### S1\. The next number \(issue #92\)$/m.test(r.out) && !/check \d+: .*\bS1\b/.test(r.out), r.err + r.out);
   // the project ledger by discovery: governs and query on a D ruling from the root
   const gD8 = docket(['governs', 'D8']);
   ok('governs D8 at the root resolves docs/DECISIONS.md by discovery and lists code cites in bin/docket.js', gD8.code === 0 && /^D8  .+  \(docs\/DECISIONS\.md:\d+\)$/m.test(gD8.out) && /^  bin\/docket\.js:\d+  /m.test(gD8.out), gD8.out);
@@ -938,7 +951,7 @@ const SEC = String.fromCharCode(0xa7);
   fs.writeFileSync(path.join(innerRepo, 'lone.js'), 'const l = 1; // Q1\n');
   sh('git', ['init', '-q', '-b', 'main'], innerRepo); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], innerRepo); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'inner'], innerRepo);
   const loneNear = docket(['near'], { cwd: innerRepo, input: nearInput(path.join(innerRepo, 'lone.js'), 'l = 1') });
-  ok('a ledger above the git root is not reached: near is silent for a file whose only ledger lies outside the repository', loneNear.code === 0 && loneNear.out === '', loneNear.out);
+  ok('a ledger above the git root is not reached: near is silent for a file whose only ledger lies outside the repository', loneNear.code === 0 && loneNear.out === '' && loneNear.err === '', loneNear.out);
   r = docket(['check'], { cwd: innerRepo });
   ok('…and check at that root finds no ledger and nothing governed', r.code === 0 && /^check: ok \(0 ledgers, 0 governed-tree files\)$/m.test(r.out), r.out);
   // spec-check reports every disagreement, not the first
@@ -1098,8 +1111,154 @@ const SEC = String.fromCharCode(0xa7);
   const c0j = JSON.parse(docket(['index'], { cwd: path.join(c0l, 'test', 'fixture') }).out);
   r = docket(['check'], { cwd: c0l });
   ok('a contract line numbered 0 is no contract line: it binds nothing, and the loose entries stay loose', c0j.contractFrom.R === undefined && r.code === 0 && !/check 6:/.test(r.out), JSON.stringify(c0j.contractFrom) + r.out);
+  // no principles list, asked for JSON: one exit code for both branches (FORMAT.md 10)
+  const npText = docket(['principles', '--ledger', path.join(ROOT, 'test', 'fixture', 'history', 'DECISIONS.v1.md')]);
+  const npJson = docket(['principles', '--json', '--ledger', path.join(ROOT, 'test', 'fixture', 'history', 'DECISIONS.v1.md')]);
+  ok('principles: a ledger with no list exits 1 in text and 1 in JSON — the two branches never disagree about whether it found one', npText.code === 1 && /no principles list found/.test(npText.out) && npJson.code === 1 && JSON.parse(npJson.out).list.length === 0 && JSON.parse(npJson.out).source === null, JSON.stringify([npText.code, npJson.code, npJson.out]));
+  const pText = docket(['principles'], { cwd: FIX }), pJson = docket(['principles', '--json'], { cwd: FIX });
+  ok('…and a ledger with a list exits 0 in both', pText.code === 0 && pJson.code === 0 && JSON.parse(pJson.out).list.length === 3, JSON.stringify([pText.code, pJson.code]));
+  // a usage error is the command not being understood, so it answers in text on stderr whatever the flags say (FORMAT.md 13)
+  for (const [name, args] of [['an unknown id', ['governs', 'Z999', '--json']], ['an option the subcommand does not take', ['check', '--ledger', 'docs/DECISIONS.md', '--json']], ['a missing required flag', ['append', '--issue', '1', '--principle', 'Zero cognitive tax', '--body', 'x. Reason: r.', '--json']]]) {
+    const ue = docket(args);
+    ok('usage error (' + name + ') is plain text on stderr with exit 2, and prints nothing on stdout, with --json as without it', ue.code === 2 && ue.out === '' && ue.err.trim().length > 0 && !/^[[{]/.test(ue.err.trim()), JSON.stringify([ue.code, ue.out, ue.err.slice(0, 60)]));
+  }
+  // no ledger and asked for JSON, and the shape of the whole parse (FORMAT.md 15)
+  const njKeys = Object.keys(JSON.parse(docket(['near', '--json'], { input: nearInput(APP, 'makeToolbar(') }).out));
+  ok('near --json prints exactly the eleven fields the grammar names, in order, and no others', njKeys.join(',') === 'ledger,file,mode,anchors,region,rulings,more,edges,addenda,specCites,notice', njKeys.join(','));
+  const njOne = JSON.parse(docket(['near', '--json'], { input: nearInput(APP, 'makeToolbar(') }).out);
+  ok('…and its addenda and specCites carry what the text mode prints, not just a key', njOne.addenda.length === 1 && njOne.addenda[0].id === 'R2' && njOne.addenda[0].dates.join() === '2026-09-11' && njOne.specCites.length === 1 && njOne.specCites[0].doc === 'UIUX' && njOne.specCites[0].num === '4.5' && njOne.specCites[0].title === 'The minimum', JSON.stringify([njOne.addenda, njOne.specCites]));
+  // the witness answers in JSON too — --json on every subcommand, the one with no subcommand included
+  const wj = docket(['--json'], { cwd: FIX }), wjo = JSON.parse(wj.out);
+  ok('the witness prints its whole result as one object and nothing else, with the same exit code as its text', wj.code === 1 && Object.keys(wjo).join(',') === 'ok,ledgers,specRows,info,failures' && wjo.ok === false && wjo.failures.length === 1 && wjo.failures[0].check === 'spec-check' && wjo.failures[0].k === 'a', wj.out);
+  const wjRoot = docket(['--json']), wjr = JSON.parse(wjRoot.out);
+  ok('…and at the root it is ok, over both ledgers, with no failures', wjRoot.code === 0 && wjr.ok === true && wjr.ledgers === 2 && wjr.failures.length === 0, wjRoot.out);
+  // a project directory genuinely narrower than the git root bounds the walk (FORMAT.md 1): the ledger above it is not reached
+  const pb = tempRepo(d => fs.mkdirSync(path.join(d, 'test', 'fixture', 'a', 'b'), { recursive: true }));
+  const pbDeep = path.join(pb, 'test', 'fixture', 'a', 'b');
+  fs.writeFileSync(path.join(pbDeep, 'deep.js'), 'const d = 1; // R6 governs this line\n');
+  const pbPlain = docket(['near'], { cwd: pb, input: nearInput(path.join(pbDeep, 'deep.js'), 'const d = 1') });
+  const pbBound = docket(['near'], { cwd: pb, input: nearInput(path.join(pbDeep, 'deep.js'), 'const d = 1'), env: { CLAUDE_PROJECT_DIR: pbDeep } });
+  ok('near: a project directory narrower than the git root bounds the walk — the ledger two directories above it is not reached, and without it the same edit finds R6', /^  R6  /m.test(pbPlain.out) && pbBound.code === 0 && pbBound.out === '' && pbBound.err === '', pbPlain.out + '|' + pbBound.out);
+  const pbCheck = docket(['check'], { cwd: pbDeep, env: { CLAUDE_PROJECT_DIR: pbDeep } });
+  ok('…and check under that bound enumerates the tree it was given, not the one above it', pbCheck.code === 0 && /check: ok \(0 ledgers, \d+ governed-tree files\)/.test(pbCheck.out), pbCheck.out);
+  // status surfaces a verdict that is on disk, not only the absence of one (D11)
+  const sv = tempRepo(), svCwd = path.join(sv, 'test', 'fixture');
+  fs.mkdirSync(path.join(sv, '.docket'), { recursive: true });
+  fs.writeFileSync(path.join(sv, '.docket', 'verdict.json'), JSON.stringify({ last: { verdict: 'FAIL', hash: 'abc', failures: 3, at: '2026-09-14T12:00:00.000Z', session: 'sv' }, sessions: { sv: { blocks: 2, history: [4, 3], surfaced: false } } }));
+  const svOut = docket(['status'], { cwd: svCwd }), svJson = JSON.parse(docket(['status', '--json'], { cwd: svCwd }).out);
+  ok('status names the verdict on disk with its word, its time and its count — not just "none"', /^Last verdict: FAIL at 2026-09-14T12:00:00\.000Z \(3 located failures\)$/m.test(svOut.out) && svJson.lastVerdict.verdict === 'FAIL' && svJson.lastVerdict.failures === 3 && svJson.surfaced === false, svOut.out);
+  // an empty ledger's subtree is ungoverned for every check, not only the one the earlier test planted
+  const eb = tempRepo(d => { fs.writeFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '# Empty\n'); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const bare = 1; // ' + SEC + '9 a bare cite under an empty ledger\nconst spec = 2; // UIUX ' + SEC + '9.9 names no heading\n'); });
+  r = docket(['check'], { cwd: eb });
+  ok('check: under an empty ledger neither the bare-cite ratchet nor the spec-cite check runs — no check runs at all', r.code === 0 && !/  check [1-7]:/.test(r.out) && /no entries; its subtree is ungoverned/.test(r.out), r.out);
+  // the frozen versions are what the fixture says they are, so a later phase's diff has the ground it was promised
+  const cur = read(path.join(FIX, 'DECISIONS.md')), v1 = read(path.join(FIX, 'history', 'DECISIONS.v1.md')), v2 = read(path.join(FIX, 'history', 'DECISIONS.v2.md'));
+  const heads = t => t.split('\n').filter(l => /^### /.test(l));
+  ok('history/DECISIONS.v1.md is the current ledger without R8 and without R2\'s addendum, and nothing else', heads(v1).length === heads(cur).length - 1 && !/^### R8\./m.test(v1) && !/^> Addendum /m.test(v1) && /^> Addendum /m.test(cur), heads(v1).length + ' vs ' + heads(cur).length);
+  ok('history/DECISIONS.v2.md is the current ledger with R3\'s heading changed, and nothing else', heads(v2).length === heads(cur).length && /^### R3\. Fold similarity, by shape and by size \(issue #4\)$/m.test(v2) && heads(v2).filter((h, i) => h !== heads(cur)[i]).length === 1, JSON.stringify(heads(v2).filter((h, i) => h !== heads(cur)[i])));
+  // CI runs the witness and the docket, on a pinned runtime, for a push and a pull request
+  const ci = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
+  ok('CI runs the witness and then the docket itself, on both a push and a pull request, with the runtime pinned and no step allowed to pass while failing', /^on:\n  push:\n  pull_request:$/m.test(ci) && /node-version: 20/.test(ci) && /run: node test\/docket\.js/.test(ci) && /run: node bin\/docket\.js/.test(ci) && !/continue-on-error/.test(ci), ci);
+  // a multi-line edit finds its window whichever newline the file and the host use (FORMAT.md 1)
+  const ml = tempRepo(), mlApp = path.join(ml, 'test', 'fixture', 'app.js');
+  const mlTwo = read(mlApp).split('\n').slice(40, 42).join('\n');      // lines 41 and 42, joined the way a host writes them
+  const mlLf = docket(['near'], { cwd: ml, input: nearInput(mlApp, mlTwo) });
+  const crFile = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'app.js'); fs.writeFileSync(q, read(q).replace(/\n/g, '\r\n')); });
+  const crApp = path.join(crFile, 'test', 'fixture', 'app.js');
+  const mlCr = docket(['near'], { cwd: crFile, input: nearInput(crApp, mlTwo) });
+  ok('near: a multi-line edit whose old_string is joined with LF finds the same window in a CRLF file as in an LF one', mlLf.code === 0 && /^  R6  /m.test(mlLf.out) && mlCr.out === mlLf.out, mlLf.out + '|' + mlCr.out);
+  const mlCrNeedle = docket(['near'], { cwd: crFile, input: nearInput(crApp, mlTwo.replace(/\n/g, '\r\n')) });
+  ok('…and an old_string carrying the file\'s own CRLF finds it too: both sides are normalised, not one', mlCrNeedle.out === mlLf.out, mlCrNeedle.out);
+  // near reads what check can read: a binary file is not a governed file (FORMAT.md 1, 15)
+  const binDir = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'blob.dat'),
+    Buffer.concat([Buffer.from('R6 lives here\n'), Buffer.from([0]), Buffer.from('\nand R2 too\n')])));
+  const blob = path.join(binDir, 'test', 'fixture', 'blob.dat');
+  const binNear = docket(['near'], { cwd: binDir, input: nearInput(blob, 'R6 lives') });
+  const binCheck = docket(['check'], { cwd: binDir });
+  ok('near: a file holding a NUL byte is not governed — near is silent on it, as check is', binNear.code === 0 && binNear.out === '' && binNear.err === '' && !/blob\.dat/.test(binCheck.out), binNear.out + '|' + binNear.err + '|' + binCheck.out);
+  ok('…and the binary file is not counted in the governed tree either', /check: ok \(1 ledger, 11 governed-tree files\)/.test(binCheck.out), binCheck.out);
+  // one governed file under a ledger is a file, not files
+  const LONE_LEDGER = '# Rulings\n\nPrinciples:\n\n- Capture precedes structure\n\n### R1. One file is governed here\nPrinciple: Capture precedes structure.\nThe tree below holds one file that cites it. Reason: the count is a boundary.\n';
+  const oneDir = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-one-'));
+  fs.writeFileSync(path.join(oneDir, 'DECISIONS.md'), LONE_LEDGER);
+  // the ledger is itself a file of the tree it governs, so one file is a tree holding the ledger alone
+  sh('git', ['init', '-q', '-b', 'main'], oneDir);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], oneDir);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'one'], oneDir);
+  r = docket(['check'], { cwd: oneDir });
+  ok('check: a tree with one governed-tree file says file, not files', /^check: ok \(1 ledger, 1 governed-tree file\)$/m.test(r.out), r.out);
+  // a ruling cited only by another ruling's edge is cited nowhere: an edge is a reference, not a code cite (FORMAT.md 8)
+  const edgeOnly = tempRepo(d => {
+    const q = path.join(d, 'test', 'fixture', 'DECISIONS.md');
+    fs.appendFileSync(q, '\n### R9. Only an edge names it (issue #74)\nPrinciple: Capture precedes structure.\nA ruling no file cites. Waives R8. Reason: r.\n');
+  });
+  r = docket(['status'], { cwd: path.join(edgeOnly, 'test', 'fixture') });
+  ok('status: an in-edge is not a code cite, so a ruling only an edge names is cited nowhere', /^Cited nowhere: [^\n]*\bR9\b/m.test(r.out), r.out);
+  r = docket(['governs', 'R9'], { cwd: path.join(edgeOnly, 'test', 'fixture') });
+  ok('…and governs R9 names the edge that points at it while listing no code cite', /R9/.test(r.out) && /waives R8/.test(r.out) && !/^  test\/fixture\//m.test(r.out), r.out);
+  // an edge whose ends sit under different prefixes of one ledger
+  const xp = tempRepo(d => {
+    const q = path.join(d, 'test', 'fixture', 'DECISIONS.md');
+    fs.appendFileSync(q, '\n### R9. A ruling that waives an A (issue #75; waives A1)\nPrinciple: Capture precedes structure.\nThe two prefixes are one ledger. Reason: r.\n');
+  });
+  const xpj = JSON.parse(docket(['index'], { cwd: path.join(xp, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9');
+  ok('an edge may cross prefixes inside one ledger: R9 waives A1 parses, and check accepts it', xpj.edges.some(e => e.verb === 'waives' && e.to === 'A1') && docket(['check'], { cwd: xp }).code === 0, JSON.stringify(xpj.edges));
+  // check 7's two skip reasons are told apart: a ledger with no committed version of its own
+  const nc = tempRepo(d => fs.rmSync(path.join(d, 'test', 'fixture', 'DECISIONS.md')));
+  fs.writeFileSync(path.join(nc, 'test', 'fixture', 'DECISIONS.md'), read(path.join(FIX, 'DECISIONS.md')));
+  r = docket(['check'], { cwd: nc });
+  ok('check 7: a ledger the tree holds but no commit does is skipped, and the skip is said', r.code === 0 && /check 7 skipped/.test(r.out), r.out);
+  // the enumeration root with neither the variable nor a git root: the nearest ledger's home (FORMAT.md 1)
+  const noGit = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-nogit-'));
+  fs.mkdirSync(path.join(noGit, 'sub', 'deeper'), { recursive: true });
+  fs.writeFileSync(path.join(noGit, 'sub', 'DECISIONS.md'), LONE_LEDGER);
+  fs.writeFileSync(path.join(noGit, 'sub', 'deeper', 'a.js'), 'x();   // R1\n');
+  r = docket(['check'], { cwd: path.join(noGit, 'sub', 'deeper'), env: { CLAUDE_PROJECT_DIR: '' } });
+  ok('check outside a git repository and with no project directory enumerates from the nearest ledger\'s home', r.code === 0 && /^check: ok \(1 ledger, 2 governed-tree files\)$/m.test(r.out), r.out + r.err);
+  // spec-check (b) against the formula itself, re-derived here and not borrowed from the core
+  const srgb = c => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const lum = hex => { const h = hex.replace('#', ''); const n = i => parseInt(h.slice(i * 2, i * 2 + 2), 16); return 0.2126 * srgb(n(0)) + 0.7152 * srgb(n(1)) + 0.0722 * srgb(n(2)); };
+  const ratioHere = (a, b) => { const la = lum(a), lb = lum(b); const hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); };
+  const here = Math.round(ratioHere('#1b1b1b', '#f4efe6') * 100) / 100;
+  ok('spec-check (b) computes WCAG relative luminance: the fixture\'s own row, re-derived here from the formula, is 15.04', here === 15.04 && /15\.04:1/.test(read(path.join(FIX, 'UIUX.md'))), String(here));
+  const wrongRow = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', String(Math.round((here + 0.02) * 100) / 100) + ':1')); });
+  r = docket(['spec-check'], { cwd: path.join(wrongRow, 'test', 'fixture') });
+  ok('…and a row two hundredths off the re-derived value is a failure', r.code === 1 && /15\.04/.test(r.out), r.out);
+  // the recorded expectation files are the text FORMAT.md 15 describes, not merely whatever near last printed
+  const hdr = /^Governed here \([^,]+, ±20 lines of [^:]+:\d+\):(?: |$)/m;
+  ok('the recorded near expectations open with the header FORMAT.md 15 states', hdr.test(expected('near-41.txt')) && hdr.test(expected('near-empty-window.txt')) && /^Governed here \([^,]+, ±20 lines of [^:]+:\d+(, \d+)+\):$/m.test(expected('near-union.txt')) && /^Governed here \([^,]+, whole file [^)]+\):$/m.test(expected('near-whole.txt')), expected('near-41.txt').split('\n')[0] + '|' + expected('near-whole.txt').split('\n')[0]);
+  ok('…and each ends with the instruction line the window is for', ['near-41.txt', 'near-union.txt', 'near-whole.txt'].every(n => /Name the ruling you rely on before you edit\.$/m.test(expected(n).trimEnd())), expected('near-41.txt').trimEnd().split('\n').pop());
+  // an option that lost its value does not take the next option's name as one
+  const fp = tempRepo(), fpFix = path.join(fp, 'test', 'fixture');
+  const fpBefore = read(path.join(fpFix, 'DECISIONS.md'));
+  r = docket(['append', '--title', '--issue', '55', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
+  ok('append: a --title whose value the shell dropped is a usage error, not a ruling titled "--issue"', r.code === 2 && /--title needs a value/.test(r.err) && r.out === '' && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err + r.out);
+  r = docket(['append', '--title', 'A real title', '--issue', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
+  ok('…and so is a dropped --issue, whichever option follows it', r.code === 2 && /--issue needs a value/.test(r.err) && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err);
+  r = docket(['append', '--title', 'A real title', '--issue', '56', '--principle', 'Zero cognitive tax', '--body'], { cwd: fpFix });
+  ok('…and an option left last with nothing after it', r.code === 2 && /--body needs a value/.test(r.err) && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err);
+  r = docket(['check', '--no-such-option'], { cwd: fp });
+  ok('an option the core does not know is a usage error, not a flag silently passed over', r.code === 2 && /unknown option "--no-such-option"/.test(r.err), r.code + '|' + r.err);
+  r = docket(['--help']);
+  ok('--help prints the usage and exits 0, as help and -h do', r.code === 0 && /^docket — the ledger of rulings/m.test(r.out) && /^  docket near /m.test(r.out) && r.out === docket(['help']).out && r.out === docket(['-h']).out, r.out.split('\n')[0]);
+  // the docket opens a stretch of work: a state file it cannot use informs, and never throws (D1)
+  const stDir = tempRepo();
+  const stFile = path.join(stDir, '.docket', 'verdict.json');
+  fs.mkdirSync(path.dirname(stFile), { recursive: true });
+  const stShapes = ['not valid json {{{', '{"last": {"session": "s1", "verdict": "FAIL", "at": "x", "failures": 1}}', '[]', '{"sessions": null, "last": 3}', 'null'];
+  let stOk = true, stWhy = '';
+  for (const shape of stShapes) {
+    fs.writeFileSync(stFile, shape);
+    const sr = docket(['status'], { cwd: path.join(stDir, 'test', 'fixture') });
+    if (sr.code !== 0 || /TypeError|at Object\.|Cannot read properties/.test(sr.err)) { stOk = false; stWhy = shape + ' → ' + sr.code + ' ' + sr.err; break; }
+  }
+  ok('status: a state file that is unusable in any of five ways still opens the docket, with no stack trace', stOk, stWhy);
+  fs.writeFileSync(stFile, JSON.stringify({ last: { session: 'sess-A', verdict: 'FAIL', at: 'x', failures: 1 }, sessions: { 'sess-A': { blocks: 6, surfaced: true } } }));
+  r = docket(['status'], { cwd: path.join(stDir, 'test', 'fixture') });
+  ok('…and a state file that does record the session says the stretch is surfaced', r.code === 0 && /SURFACED/.test(r.out), r.out);
   // the core requires Node built-ins only (dependency-free)
   const reqs = Array.from(read(CORE).matchAll(/require\((['"])([^'"]+)\1\)/g)).map(m => m[2]);
+  ok('the core loads nothing by a name it computes: every require names a literal', !/require\(\s*[^'")]/.test(read(CORE)) && !/\bimport\s*\(/.test(read(CORE)), 'computed require or dynamic import');
   ok('the core requires only Node built-ins', reqs.length >= 4 && reqs.every(m => ['fs', 'path', 'os', 'child_process', 'crypto'].includes(m)), reqs.join(','));
 }
 

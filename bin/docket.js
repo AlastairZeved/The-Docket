@@ -16,8 +16,11 @@
 // 7  check                the seven checks
 // 8  spec-check           token rows and contrast rows
 // 9  append               entry, addendum, baseline (D4, D8)
-// 10  status               the docket
-// 11  cli
+// 10  diff                 two versions of a ledger
+// 11  status               the docket
+// 12  gate/verdict         the judge's two commands (D10, D11)
+// 13  vendor/constitute    the witness copied; a spine from four answers (D9)
+// 14  cli
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
 
@@ -141,7 +144,8 @@ function specDocs(ledgerPath) {
 
 // ─── 2. parse ───────────────────────────────────────────────────────────────
 
-const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.\s+(.*?)\s*$/;   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
+const NUMERAL_MAX_DIGITS = 15;                                        // FORMAT.md 2: fifteen keeps the number exact
+const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+(.*?)[ \t]*$/;   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
 const SECTION_RE = /^## ([A-Za-z]+)\.\s+(.*?)\s*$/;
 const ADDENDUM_RE = /^> Addendum (\d{4}-\d{2}-\d{2}): (.*?)\s*$/;
 const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+)*)\s+(.*?)\s*$/;
@@ -282,7 +286,7 @@ function parseLedger(text, ledgerPath) {
   const firstAt = { bareCites: 0 };
   for (let li = 0; li < preambleLines.length; li++) {
     const l = preambleLines[li];
-    let m = /<!--\s*docket:\s*contract from ([A-Za-z]+)([1-9]\d{0,14})\s*-->/.exec(l);   // a ruling number (2): D0 names no entry, so it binds none
+    let m = /<!--\s*docket:\s*contract from ([A-Za-z]+)([1-9]\d{0,14})\s*-->/.exec(l);   // a ruling number (2): a zero names no entry, so it binds none
     if (m) {
       if (contractFrom[m[1]] !== undefined) directiveFaults.push({ k: 6, line: li + 1, message: 'a second contract line for prefix ' + m[1] + ' (line ' + firstAt[m[1]] + ' binds); the preamble carries one per prefix (FORMAT.md 11)' });
       else { contractFrom[m[1]] = Number(m[2]); firstAt[m[1]] = li + 1; }
@@ -437,7 +441,8 @@ function codeCites(ctx, ledger) {
   const cites = [];
   for (const e of ctx.files) {
     if (e.ledger !== ledger.path || isLedgerDoc(e.path)) continue;
-    for (const c of citesIn(fileText(e), ledger)) if (c.exists) cites.push(Object.assign({ file: e.path, rel: e.rel }, c));
+    const seen = new Set();                                           // one line, one cite: the same id twice on a line is one reliance, as near and status read it
+    for (const c of citesIn(fileText(e), ledger)) if (c.exists && !seen.has(c.id + ':' + c.line)) { seen.add(c.id + ':' + c.line); cites.push(Object.assign({ file: e.path, rel: e.rel }, c)); }
   }
   return cites;
 }
@@ -501,15 +506,16 @@ function near(argv) {
   if (!lp) return 0;                                                   // ungoverned tree: silent
   if (isLedgerDoc(file)) return 0;                                     // FORMAT.md 8: the ledger is amended through append; a direct edit is check 7's business
   if (!isFile(file)) return 0;                                         // D7: a Write of a new file is silent
+  if (!isTextFile(file)) return 0;                                     // FORMAT.md 1, 15: a governed file is a text file; a binary one check never sees is never reported as governed
   const ledger = loadLedger(lp);
-  const text = readText(file), lines = splitLines(text), N = lines.length, fenced = fencedLines(lines);
+  const text = normEol(readText(file)), lines = splitLines(text), N = lines.length, fenced = fencedLines(lines);   // one reading for the match and the lines (1)
   const fileRel = rel(ledger.home, file), ledgerRel = ledgerLabel(pr, lp);
   let windows, anchors, mode;
   if (tool === 'Write') { windows = [[1, N]]; anchors = []; mode = 'whole'; }
   else if (tool === 'Edit') {
     const needle = ti.old_string;
     if (typeof needle !== 'string' || needle === '') return 0;          // zero matches: silent
-    const matches = findAll(text, needle);
+    const matches = findAll(text, normEol(needle));                   // the edit's text is normalised too: a host joins lines with the newline it writes
     if (matches.length === 0) return 0;                                 // zero: silent
     if (matches.length > 1 && ti.replace_all !== true) return 0;        // D7 (1): the tool will reject; silent
     anchors = uniq(matches);                                            // two matches on one line are one anchor: the line is named once
@@ -682,7 +688,7 @@ function governs(argv) {
 function principles(argv) {
   const { root, ledger } = ledgerFromCwd(argv);
   const p = principlesOf(ledger);
-  if (argv.json) { out(JSON.stringify({ source: p.source ? rel(root, p.source) : null, list: p.list }, null, 2)); return 0; }   // paths in JSON are root-relative, as everywhere else
+  if (argv.json) { out(JSON.stringify({ source: p.source ? rel(root, p.source) : null, list: p.list }, null, 2)); return p.list.length ? 0 : 1; }   // one exit code for both branches (FORMAT.md 10)   // paths in JSON are root-relative, as everywhere else
   if (!p.list.length) { out('no principles list found (the first section of PRD.md, or the ledger preamble)'); return 1; }
   out(p.list.map(x => x.text).join('\n'));
   return 0;
@@ -764,7 +770,7 @@ function runCheck(root, opts) {
       if (!r.hasReason) fail(lp, r.line, 6, r.id + ': body has no "Reason:"');   // quoted in code, it is not stated (FORMAT.md 5)
     }
     // 7. append only: existing headings and bodies unchanged vs the committed ledger
-    const committed = committedText(root, lp);
+    const committed = committedText(root, lp, ledger.text);
     if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no committed version to compare (a ledger not yet committed, or a clean tree whose HEAD has no parent)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
       const old = parseLedger(committed, lp);
@@ -790,12 +796,12 @@ function bodyOnlyAppended(oldLines, newLines) {
 // equals HEAD's, so a check run on a fresh commit (as in CI) judges the commit it was given; null when no
 // such version exists, and then the check is skipped.
 function normEol(s) { return s.replace(/\r\n/g, '\n'); }
-function committedText(root, filePath) {
+function committedText(root, filePath, workingText) {
   const p = rel(root, filePath);
   const head = sh('git', ['show', 'HEAD:' + p], root);
   if (head.status !== 0) return null;
-  let working = null;
-  try { working = fs.readFileSync(filePath, 'utf8'); } catch (e) { return head.stdout; }
+  let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
+  if (working === undefined) { try { working = readText(filePath); } catch (e) { return head.stdout; } }
   if (normEol(working) !== normEol(head.stdout)) return head.stdout;  // FORMAT.md 1: both sides normalised
   const parent = sh('git', ['show', 'HEAD~1:' + p], root);
   return parent.status === 0 ? parent.stdout : null;
@@ -807,7 +813,7 @@ function check(argv) {
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2)); return res.failures.length ? 1 : 0; }
   for (const f of res.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const i of res.info) out('info  ' + i);
-  if (!res.failures.length) out('check: ok (' + res.ctx.ledgers.size + ' ledger' + (res.ctx.ledgers.size === 1 ? '' : 's') + ', ' + res.ctx.files.length + ' governed-tree files)');
+  if (!res.failures.length) out('check: ok (' + res.ctx.ledgers.size + ' ledger' + (res.ctx.ledgers.size === 1 ? '' : 's') + ', ' + res.ctx.files.length + ' governed-tree file' + (res.ctx.files.length === 1 ? '' : 's') + ')');
   return res.failures.length ? 1 : 0;
 }
 
@@ -878,6 +884,10 @@ function runSpecCheck(root, ctx, onlyLedger) {
       if (toks.length !== 2) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row names ' + toks.length + ' tokens; a contrast row names exactly two' }); return; }
       const a = valueOf(toks[0]), b = valueOf(toks[1]);
       if (!a || !b) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: no hex known for ' + (a ? toks[1] : toks[0]) }); return; }
+      for (const [tok, hx] of [[toks[0], a], [toks[1], b]]) if (hx.length === 5 || hx.length === 9) {   // #rgba or #rrggbbaa
+        failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: ' + tok + ' is ' + hx + ', which carries an alpha channel; what it meets the eye as depends on what lies behind it, so a ratio cannot be recomputed from it' });
+        return;
+      }
       const statedH = hundredths(cm[1]), gotH = Math.round(contrast(a, b) * 100);   // both in hundredths: the stated one from its digits, the computed one from its value
       if (gotH !== statedH) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: toks[0] + ' on ' + toks[1] + ' states ' + fixed2(statedH) + ':1 but the hexes give ' + fixed2(gotH) + ':1' });
     });
@@ -969,6 +979,7 @@ function appendEntry(argv) {
   if (!prefix) die('append: --prefix is required for an empty ledger', 2);
   if (!/^[A-Za-z]+$/.test(prefix)) die('append: --prefix must be letters', 2);
   const n = ledger.rulings.filter(r => r.prefix === prefix).reduce((m, r) => Math.max(m, r.n), 0) + 1;
+  if (String(n).length > NUMERAL_MAX_DIGITS) die('append: the ' + prefix + ' entries end at ' + (n - 1) + ', the largest number the grammar allows (' + NUMERAL_MAX_DIGITS + ' digits); a further ruling needs a new prefix — pass --prefix (FORMAT.md 2, 12)', 2);
   // The ledger is append only: an entry whose text names a ruling that does not exist is refused before it is written,
   // not failed by check 1 after (FORMAT.md 8). The entry's own id may appear in its body.
   const probe = parseLedger(ledger.text + '\n### ' + prefix + n + '. x\n', ledger.path);
@@ -1030,7 +1041,15 @@ function append(argv) {
 // ─── 10. status: the docket ─────────────────────────────────────────────────
 
 function statePath(root) { return path.join(root, '.docket', 'verdict.json'); }
-function loadState(root) { try { return JSON.parse(readText(statePath(root))); } catch (e) { return { last: null, lastPassHash: null, sessions: {} }; } }
+function loadState(root) {
+  let st = null;
+  try { st = JSON.parse(readText(statePath(root))); } catch (e) { st = null; }
+  if (!st || typeof st !== 'object' || Array.isArray(st)) st = {};
+  // Every field is filled here so that a file written by hand, or half-written, informs rather than throws (D1).
+  const sessions = st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions) ? st.sessions : {};
+  const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
+  return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
+}
 function saveState(root, st) { fs.mkdirSync(path.dirname(statePath(root)), { recursive: true }); fs.writeFileSync(statePath(root), JSON.stringify(st, null, 2) + '\n'); }
 function pendingAddenda(ledger) {
   const pend = [];
@@ -1056,7 +1075,7 @@ function status(argv) {
   const uncited = ledger.rulings.filter(r => !cited.has(r.id)).map(r => r.id);
   const pend = pendingAddenda(ledger);
   const st = loadState(root);
-  const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show
+  const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show; a verdict naming a session the file never recorded is not surfaced
   const check_ = runCheck(root, { ctx });
   const spec_ = runSpecCheck(root, ctx, lp);
   const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, failures: check_.failures.concat(spec_.failures) };
@@ -1099,15 +1118,24 @@ const USAGE = [
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
+const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target']);
+const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help']);
 function parseArgv(args) {
   const raw = args.slice();
   const _ = [];
-  const takesValue = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target']);
   for (let i = 0; i < raw.length; i++) {
     const a = raw[i];
-    if (a === '--json' || a === '--baseline' || a === '--files' || a === '--text-only') continue;
-    if (takesValue.has(a)) { i++; continue; }
-    if (a.startsWith('--')) continue;
+    if (BARE_FLAGS.has(a)) continue;
+    if (TAKES_VALUE.has(a)) {
+      // A value is missing, or is the next flag's own name — the shell dropped an empty variable.
+      // Writing "--issue" into a ruling's title would be permanent, so this is a usage error, not a value.
+      if (i + 1 >= raw.length) die('docket: ' + a + ' needs a value', 2);
+      const v = raw[i + 1];
+      if (TAKES_VALUE.has(v) || BARE_FLAGS.has(v)) die('docket: ' + a + ' needs a value, and "' + v + '" is the name of another option — an empty shell variable drops the value and leaves the next option in its place', 2);
+      i++;
+      continue;
+    }
+    if (a.startsWith('--')) die('docket: unknown option "' + a + '"\n\n' + USAGE, 2);
     _.push(a);
   }
   return { raw, _, json: raw.includes('--json') };
@@ -1118,19 +1146,25 @@ function witness(argv) {
   const root = enumerationRoot(process.cwd());
   const c = runCheck(root);
   const s = runSpecCheck(root, c.ctx, findLedger(path.join(process.cwd(), 'x'), root));
+  const n = c.failures.length + s.failures.length;
+  if (argv.json) {                                                    // --json on every subcommand, the witness included
+    out(JSON.stringify({ ok: n === 0, ledgers: c.ctx.ledgers.size, specRows: s.rows, info: c.info,
+      failures: c.failures.map(f => Object.assign({ check: 'check' }, f)).concat(s.failures.map(f => Object.assign({ check: 'spec-check' }, f))) }, null, 2));
+    return n ? 1 : 0;
+  }
   for (const f of c.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const f of s.failures) out(f.file + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
   for (const i of c.info) out('info  ' + i);
-  const n = c.failures.length + s.failures.length;
   out(n ? 'witness: ' + n + ' failure' + (n === 1 ? '' : 's') : 'witness: ok (' + c.ctx.ledgers.size + ' ledger' + (c.ctx.ledgers.size === 1 ? '' : 's') + ', ' + s.rows + ' spec rows)');
   return n ? 1 : 0;
 }
 function main() {
   const argv = parseArgv(process.argv.slice(2));
+  if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
   const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status };
   if (!sub) return witness(argv);
-  if (sub === 'help' || sub === '--help' || sub === '-h') { out(USAGE); return 0; }
+  if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);
   return table[sub](argv);
 }
