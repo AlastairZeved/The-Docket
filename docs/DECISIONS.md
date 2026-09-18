@@ -55,6 +55,7 @@ The pre-edit hook never denies; the judge at stop can. The hook prints what gove
 ### D2. Window ±20 lines, cap 8, nearest first (how much a person reads before an edit)
 Principle: Claim no more than you measured.
 The pre-edit hook lists the rulings cited within 20 lines either side of the edited line, at most eight, nearest first. Reason: a ledger-governed codebase runs about one citing line per 12 lines of code; ±20 yields four to six rulings, a list a person reads; the enclosing function would dump twenty. The fixture in `test/fixture/` is built at that density so the number is testable here.
+> Addendum 2026-09-18: Measured on the fixture the ruling says is built at that density: 260 lines of code with 20 citing lines is one per 13, not one per 12, and a window centred on a citing line holds two to five rulings, a mean of 3.5 — across every line of the file, zero to five, a mean of 2.67. Six never occurs, and the cap of eight is never reached. The window and the cap stand; the estimate that motivated them was high, and this records what the fixture yields rather than what the reason predicted.
 
 ### D3. The index is an edge list, never a status table (supersession is clause-level)
 Principle: Claim no more than you measured.
