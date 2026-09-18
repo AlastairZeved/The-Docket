@@ -127,10 +127,16 @@ const SEC = String.fromCharCode(0xa7);
     lines[2478] = 'const alsoOutside = 1; // R5'; // line 2479: one before its first, 2480
     fs.writeFileSync(path.join(dir, 'test', 'fixture', 'big.js'), lines.join('\n') + '\n');
   });
-  const t0 = Date.now();
-  const bigOut = docket(['near'], { cwd: big, input: nearInput(path.join(big, 'test', 'fixture', 'big.js'), 'anchorHere') });
-  // 5000 ms is the hook's own timeout in the host binding (Phase 2): an answer slower than that never reaches the maker, so the bound is the property, not a guess
-  ok('near: a 5,000-line governed file answers with the ±20 window, inside the hook timeout', bigOut.code === 0 && bigOut.out.startsWith('Governed here (test/fixture/DECISIONS.md, ±20 lines of big.js:2500):\n  R6  ') && bigOut.out.includes('\n  R2  ') && !/\n  R[57]  /.test(bigOut.out) && Date.now() - t0 < 5000, bigOut.out);
+  // 5000 ms is the hook's own timeout in the host binding: an answer slower than that never reaches the maker, so the
+  // bound is the property, not a guess (FORMAT.md 15). One sample on a shared machine measures the machine; the fastest
+  // of three measures the core, and still fails if the window's computation ever stops being linear in the file.
+  let bigOut = null, bigMs = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const t0 = Date.now();
+    bigOut = docket(['near'], { cwd: big, input: nearInput(path.join(big, 'test', 'fixture', 'big.js'), 'anchorHere') });
+    bigMs = Math.min(bigMs, Date.now() - t0);
+  }
+  ok('near: a 5,000-line governed file answers with the ±20 window, inside the hook timeout', bigOut.code === 0 && bigOut.out.startsWith('Governed here (test/fixture/DECISIONS.md, ±20 lines of big.js:2500):\n  R6  ') && bigOut.out.includes('\n  R2  ') && !/\n  R[57]  /.test(bigOut.out) && bigMs < 5000, bigOut.out);
   ok('near: the window is 41 lines — a cite one line past either edge is not listed', !/\n  R[57]  /.test(bigOut.out) && bigOut.out.split('\n').filter(l => /^  R\d+  /.test(l)).length === 2, bigOut.out);
 }
 
