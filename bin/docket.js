@@ -419,9 +419,15 @@ function loadContext(root, opts) {
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
     entries.push({ path: f, ledger: lp, rel: rel(root, f) });
   }
+  seedLedgerText(entries, ledgers);                                   // one read per file, so one version per run
   return { root, ledgers, files: entries };
 }
 function fileText(entry) { if (entry.text === undefined) entry.text = readText(entry.path); return entry.text; }
+// A ledger is read once, as the ledger. Where it is also one of the files a check walks, it carries that same text, so
+// a run never holds a parse from one version of a ledger and a text from another (a write can land between two reads).
+function seedLedgerText(entries, ledgers) {
+  for (const e of entries) if (e.text === undefined && ledgers.has(e.path)) e.text = ledgers.get(e.path).text;
+}
 function isSpecDoc(entry, ledger) { return entry.path === path.join(ledger.dir, 'UIUX.md') || entry.path === path.join(ledger.dir, 'PRD.md'); }
 // A ledger document — any DECISIONS*.md — is checked for its cites but is never governed code:
 // its cites are references between rulings, not implementation.
