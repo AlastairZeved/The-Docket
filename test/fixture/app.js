@@ -5,12 +5,12 @@
 const CAPTURE_AT_ONCE = true; // R1: capture before shape
 const LOGICAL_W = 1440, LOGICAL_H = 2560;
 let scale = 1, offX = 0, offY = 0;
-const notes = new Map();
+const notes = new Map(); // R2: the map is read, never mutated in place
 
 // The parking lot at the foot of the page has three sections, and one tab per section.
 
 const SECTIONS = ['now', 'next', 'later']; // R5: three tabs because the lot has three sections
-const TABS = SECTIONS.length;
+const TABS = SECTIONS.length; // R5: the tab count follows the section count
 
 
 const MENU_ORDER = ['capture', 'colour', 'copy']; // A1: capture first in the long-press menu
@@ -97,7 +97,7 @@ function canFold(a, b) { return alike(a, b); } // R3: fold similarity — shape 
 
 
 
-function onBlur(n, el) {
+function onBlur(n, el) { // R8: the blur handler owns the empty-frame rule
   if (el.textContent.trim() !== '') return;
 
 
@@ -158,7 +158,7 @@ function capture(text, at) {
 
 
 function tabs() {
-  const row = document.createElement('nav');
+  const row = document.createElement('nav'); // R5: one row of tabs for the lot
 
 
 
@@ -177,7 +177,7 @@ function tabs() {
 
 
 
-function principlesBanner() {
+function principlesBanner() { // R1: the banner states the first principle before the first note
 
 
 

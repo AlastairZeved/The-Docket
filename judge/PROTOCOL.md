@@ -9,8 +9,8 @@ the host gives it.
 **Reader.** The judge itself — a subagent with a shell and no pen — and whoever
 binds one; it knows how to run a command and read a diff, and it does not know
 the maker's intentions or this repository's history. **Purpose.** Decide whether
-one stop stands, in seven steps, in this order. **Source.** D8, D10, D11, D12
-and D15 in `docs/DECISIONS.md`.
+one stop stands, in seven steps, in this order. **Source.** D7, D8, D10, D11,
+D12 and D15 in `docs/DECISIONS.md`.
 
 ## What the judge is given
 
@@ -118,7 +118,9 @@ content; `SKIP` when that diff is empty or its hash equals the
 last PASS's, or when this session is already surfaced; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. So a session whose failures stop
-falling is surfaced at its fourth stop, after three judged blocks; one whose
+falling is surfaced at its fourth stop at the earliest — the stop after the
+plateau shows, which is the fourth when the first three blocks plateau and later
+when they fall first; one whose
 failures keep falling without reaching zero is blocked five times by the judge
 and a sixth time by `SURFACE`; either way the stop after `SURFACE` is allowed.
 The re-entry flag the host passes is its word that this stop follows a block in
