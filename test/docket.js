@@ -1464,5 +1464,120 @@ const SEC = String.fromCharCode(0xa7);
   ok('the core requires only Node built-ins', reqs.length >= 4 && reqs.every(m => ['fs', 'path', 'os', 'child_process', 'crypto'].includes(m)), reqs.join(','));
 }
 
+// ── what batch 5 showed the blind reader could not see ──────────────────────
+// A tie-break test holds the earlier key constant by construction, so it can never show
+// that the earlier key is the wrong one. These build the case where the keys DISAGREE.
+{
+  function ledgerRepo(ledgerBody, appLines) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-b5-'));
+    fs.writeFileSync(path.join(dir, 'DECISIONS.md'), ledgerBody);
+    fs.writeFileSync(path.join(dir, 'app.js'), appLines.join('\n') + '\n');
+    sh('git', ['init', '-q', '-b', 'main'], dir);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], dir);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'b5'], dir);
+    return dir;
+  }
+  const HEAD3 = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n'
+    + '### R1. Cited once and close\nPrinciple: One.\nReason: r.\n\n'
+    + '### R2. Cited three times and far\nPrinciple: One.\nReason: r.\n\n'
+    + '### R3. Also cited once and close\nPrinciple: One.\nReason: r.\n';
+
+  // COUNT IS NOT A KEY OF THE SINGLE-MATCH ORDER (FORMAT.md 15, D2: nearest first).
+  // R2 is cited three times at distance 15-17; R1 once at distance 1. A comparator that
+  // ranks by count before distance puts R2 first. The rule says the nearest leads.
+  const lines = [];
+  for (let i = 1; i <= 60; i++) {
+    if (i >= 13 && i <= 15) lines.push('// R2 far but often');
+    else if (i === 29) lines.push('// R1 right beside the edit');
+    else lines.push('const x' + i + ' = ' + i + ';');
+  }
+  lines[29] = 'ANCHOR_LINE();';                                        // line 30
+  const kd = ledgerRepo(HEAD3, lines);
+  let r = docket(['near'], { cwd: kd, input: nearInput(path.join(kd, 'app.js'), 'ANCHOR_LINE();') });
+  const kdIds = (r.out.match(/^ {2}(R\d+)/gm) || []).map(x => x.trim());
+  ok('near one: a ruling cited once beside the edit outranks one cited three times far away — count is not a key of this order', kdIds[0] === 'R1' && kdIds[1] === 'R2', r.out);
+
+  // The last level FORMAT.md 15 names, in single-match mode too: two ids on one line,
+  // tied on distance and line, order by position in the line. Built in both orders so a
+  // pass cannot come from the ids' own order.
+  const same = i => { const L = []; for (let n = 1; n <= 60; n++) L.push(n === 29 ? i : (n === 30 ? 'ANCHOR_LINE();' : 'const x' + n + ' = ' + n + ';')); return L; };
+  const fwd = ledgerRepo(HEAD3, same('// R1 and R3 both here'));
+  const rev = ledgerRepo(HEAD3, same('// R3 and R1 both here'));
+  const oneOrder = d => { const q = docket(['near'], { cwd: d, input: nearInput(path.join(d, 'app.js'), 'ANCHOR_LINE();') }); return (q.out.match(/^ {2}(R\d+)/gm) || []).map(x => x.trim()).join(','); };
+  ok('near one: two rulings on one line, tied on distance and line, list by the earlier on that line', oneOrder(fwd) === 'R1,R3', oneOrder(fwd));
+  ok('…and reversing them in the line reverses the listing, so it is position and not id order', oneOrder(rev) === 'R3,R1', oneOrder(rev));
+
+  // The sanitizer is not a comment: a ledger may hold a character that reorders a terminal,
+  // and check 2 names it, but what a reader is shown still reads straight (FORMAT.md 13).
+  const RLO = String.fromCharCode(0x202e);
+  const rlo = ledgerRepo('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. Heading with ' + RLO + ' in it\nPrinciple: One.\nReason: r.\n',
+    ['// R1 governs this', 'ANCHOR_LINE();']);
+  r = docket(['near'], { cwd: rlo, input: nearInput(path.join(rlo, 'app.js'), 'ANCHOR_LINE();') });
+  ok('near: a heading carrying an override reaches the reader with the override replaced, not raw', r.out.includes('R1') && !r.out.includes(RLO) && r.out.includes('�'), JSON.stringify(r.out));
+  r = docket(['check'], { cwd: rlo });
+  ok('…and check 2 still names the character in the ledger, so the fault is reported and not merely hidden', r.code === 1 && /RLO|202E/i.test(r.out), r.out);
+  r = docket(['query', 'Heading'], { cwd: rlo });
+  ok('…and query shows it plain too, since every reader-facing byte leaves by one door', !r.out.includes(RLO), JSON.stringify(r.out));
+
+  // An id is a name, and a name is read whatever its case — in append's edge target as in governs.
+  const ci = ledgerRepo(HEAD3, ['// R1 here', 'const a = 1;']);
+  r = docket(['append', '--title', 'Names its target in lower case', '--issue', '91', '--principle', 'One', '--edge', 'supersedes r1', '--body', 'Reason: a name is read whatever its case.'], { cwd: ci });
+  ok('append --edge: a target named in lower case resolves, as governs resolves one', r.code === 0 && /supersedes R1/.test(read(path.join(ci, 'DECISIONS.md'))), r.code + '|' + r.err);
+  r = docket(['append', '--title', 'Names one that is not there at all', '--issue', '92', '--principle', 'One', '--edge', 'supersedes r99', '--body', 'Reason: r.'], { cwd: ci });
+  ok('…while a target no case can reach is still refused by name', r.code === 2 && /r99, which is not in/.test(r.err), r.code + '|' + r.err);
+
+  // "any verb" means the twelve, not the six a loop happened to try (FORMAT.md 6).
+  for (const verb of ['overrides', 'retires', 're-tunes', 'replaces', 'corrects', 'revises']) {
+    const d = ledgerRepo(HEAD3, ['// R1 here', 'const a = 1;']);
+    docket(['append', '--addendum', 'R1', '--text', 'one more thing'], { cwd: d });
+    const before = docket(['status'], { cwd: d });
+    docket(['append', '--title', 'It edges into R1', '--issue', '93', '--principle', 'One', '--edge', verb + ' R1', '--body', 'Reason: r.'], { cwd: d });
+    const after = docket(['status'], { cwd: d });
+    ok('status: "' + verb + '" closes a pending addendum too — any verb is the twelve, not the six', /Addenda pending/.test(before.out) && /R1/.test(before.out) && !/Addenda pending:[^\n]*R1/.test(after.out), before.out + '||' + after.out);
+  }
+
+  // A ruling can carry more than one addendum; the fixture ships none that does.
+  const two = ledgerRepo(HEAD3, ['// R1 here', 'const a = 1;']);
+  docket(['append', '--addendum', 'R1', '--text', 'the first'], { cwd: two, env: { DOCKET_TODAY: '2026-09-18' } });
+  docket(['append', '--addendum', 'R1', '--text', 'the second'], { cwd: two, env: { DOCKET_TODAY: '2026-09-19' } });
+  r = docket(['governs', 'R1'], { cwd: two });
+  ok('governs: a second addendum on one ruling is kept beside the first, both dated, in the order written', /2026-09-18[\s\S]*the first[\s\S]*2026-09-19[\s\S]*the second/.test(r.out), r.out);
+  r = docket(['near'], { cwd: two, input: nearInput(path.join(two, 'app.js'), 'const a = 1;') });
+  ok('…and the window names both dates in one entry', /R1 \(2026-09-18, 2026-09-19\)/.test(r.out), r.out);
+
+  // The ruling record's own shape, checked whole rather than field by field.
+  const ix = JSON.parse(docket(['index'], { cwd: two }).out);
+  ok('index: a ruling record carries exactly the fields the grammar names, prefix among them', Object.keys(ix.rulings[0]).join(',') === 'id,prefix,n,line,heading,title,meta,grounding,issue,principle,edges,addenda,body', Object.keys(ix.rulings[0]).join(','));
+  ok('…and prefix is the entry’s own letter, not the ledger’s list', ix.rulings[0].prefix === 'R', String(ix.rulings[0].prefix));
+
+  // The title rule's second transition: marks come off BEFORE the 72 is counted (FORMAT.md 3).
+  // 70 code points of text; two pairs of ** make the raw heading 74. Cut first and it ends in an
+  // ellipsis; strip first and it does not.
+  const stem = 'Marks come off before the count and this heading shows the order';
+  const plain70 = stem + '.'.repeat(70 - stem.length);                 // exactly 70 code points
+  const marked = '**' + plain70.slice(0, 5) + '**' + plain70.slice(5);  // 74 raw, 70 once the marks come off
+  const tl = ledgerRepo('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. ' + marked + '\nPrinciple: One.\nReason: r.\n', ['// R1 here', 'const a = 1;']);
+  const tix = JSON.parse(docket(['index'], { cwd: tl }).out);
+  ok('the title rule strips marks before it counts to 72: a heading over 72 raw and under it plain is not cut', plain70.length <= 72 && marked.length > 72 && tix.rulings[0].title === plain70, plain70.length + '/' + marked.length + '|' + JSON.stringify(tix.rulings[0].title));
+}
+
+// ── the repo governs itself, so the way it runs itself is part of it (D6) ────
+// check 7 compares the working ledger against HEAD, and against HEAD~1 when the tree
+// already matches HEAD — the normal state of a clean checkout. A runner given only the
+// tip commit cannot do that, and check 7 reports itself skipped on every push forever.
+// A check that reports itself skipped is not running, so the depth is a shipped value.
+{
+  const wfDir = path.join(ROOT, '.github', 'workflows');
+  const wfs = fs.existsSync(wfDir) ? fs.readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f)) : [];
+  ok('the repo ships at least one workflow that runs itself', wfs.length > 0, wfDir);
+  for (const f of wfs) {
+    const y = read(path.join(wfDir, f));
+    if (!/docket\.js/.test(y)) continue;                               // a workflow that never runs the docket sets no depth requirement
+    const depth = (y.match(/fetch-depth:\s*\S+/g) || []).join(' ') || 'no fetch-depth given';
+    ok(f + ': a workflow that runs the docket fetches the whole history, so check 7 can compare against a parent rather than skip', /fetch-depth:\s*0\b/.test(y), depth);
+    ok(f + ': …and it does not ask for a shallow one, which would make that skip permanent', !/fetch-depth:\s*[1-9]/.test(y), depth);
+  }
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

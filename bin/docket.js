@@ -43,10 +43,13 @@ const ADVERBS = ['partially', 'partly', 'in part'];
 const NOT_WORD_BEFORE = '(?<![\\p{L}\\p{N}_])', NOT_WORD_AFTER = '(?![\\p{L}\\p{N}_])';
 const INVALID_ROLES = ['general audience', 'everyone', 'anyone', 'non-technical', 'users', 'people', 'the public', 'all users', 'someone curious'];
 
-function out(s) { process.stdout.write(s.endsWith('\n') ? s : s + '\n'); }
+// Every reader-facing byte leaves through here and through die(), and neither carries a character
+// that reorders what a terminal shows. A ledger may hold one — check 2 names it — but the text a
+// maker is shown still reads straight, which is the whole of that guarantee (FORMAT.md 13).
+function out(s) { const t = plain(s); process.stdout.write(t.endsWith('\n') ? t : t + '\n'); }
 // A reader that stops reading (`docket check | head -1`) is not a failure of the ledger: end quietly, exit 0.
 process.stdout.on('error', e => { if (e && e.code === 'EPIPE') process.exit(0); throw e; });
-function die(msg, code) { process.stderr.write(msg + '\n'); process.exit(code === undefined ? 2 : code); }
+function die(msg, code) { process.stderr.write(plain(msg) + '\n'); process.exit(code === undefined ? 2 : code); }
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
 function readText(p) { return fs.readFileSync(p, 'utf8'); }
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
@@ -373,7 +376,7 @@ function citesInLine(line, ledger) {
   const found = [];
   let m;
   const scan = maskCode(line);                                        // FORMAT.md 8: an id in a code span is quoted, not cited
-  while ((m = re.exec(scan)) !== null) found.push({ id: m[1] + m[2], prefix: m[1], n: Number(m[2]), exists: ledger.byId.has(m[1] + m[2]) });
+  while ((m = re.exec(scan)) !== null) found.push({ id: m[1] + m[2], prefix: m[1], n: Number(m[2]), col: m.index, exists: ledger.byId.has(m[1] + m[2]) });
   return found;
 }
 // A fenced code block — a line beginning ``` opens it, the next such line closes it — is quoted like a code span
@@ -560,8 +563,9 @@ function near(argv) {
       if (!c.exists) continue;
       const d0 = anchors.length ? Math.abs(ln - anchors[0]) : ln;
       const cur = byId.get(c.id);
-      if (!cur) byId.set(c.id, { id: c.id, count: 1, dist: d, dist0: d0, first: ln });
-      else { cur.count++; cur.dist = Math.min(cur.dist, d); cur.dist0 = Math.min(cur.dist0, d0); cur.first = Math.min(cur.first, ln); }
+      if (!cur) byId.set(c.id, { id: c.id, count: 1, dist: d, dist0: d0, first: ln, col: c.col });
+      // first is the earliest cite by line and then by column: FORMAT.md 15's last level is a key here, not an order of visits.
+      else { cur.count++; cur.dist = Math.min(cur.dist, d); cur.dist0 = Math.min(cur.dist0, d0); if (ln < cur.first || (ln === cur.first && c.col < cur.col)) { cur.first = ln; cur.col = c.col; } }
     }
     SPEC_CITE_RE.lastIndex = 0; let m;
     while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) specs.push({ doc: m[1], num: m[2], line: ln });
@@ -578,9 +582,11 @@ function near(argv) {
     return emitNear(input, argv, outLines.join('\n'), obj);
   }
   let list = Array.from(byId.values());
-  if (mode === 'one') list.sort((a, b) => a.dist - b.dist || a.first - b.first);             // D2: nearest first
-  else if (mode === 'many') list.sort((a, b) => b.count - a.count || a.dist0 - b.dist0 || a.first - b.first); // D7: by count, then nearest to the first
-  else list.sort((a, b) => b.count - a.count || a.first - b.first);                           // whole file: by count
+  // Every level FORMAT.md 15 names is a key. Count is NOT a key of the single-match order: a ruling
+  // cited many times but never near the edit does not outrank one cited once beside it (D2, nearest first).
+  if (mode === 'one') list.sort((a, b) => a.dist - b.dist || a.first - b.first || a.col - b.col);
+  else if (mode === 'many') list.sort((a, b) => b.count - a.count || a.dist0 - b.dist0 || a.first - b.first || a.col - b.col); // D7
+  else list.sort((a, b) => b.count - a.count || a.first - b.first || a.col - b.col);           // whole file: by count
   const total = list.length;
   list = list.slice(0, CAP);
   const listed = new Set(list.map(x => x.id));
@@ -677,16 +683,22 @@ function query(argv) {
   out(lines.join('\n'));
   return 0;
 }
+// FORMAT.md 12: an id resolves exactly; failing that, whatever its case, when that is unambiguous.
+function resolveRuling(ledger, id) {
+  const exact = ledger.byId.get(id);
+  if (exact) return { r: exact };
+  const same = ledger.rulings.filter(x => x.id.toLowerCase() === String(id).toLowerCase());
+  if (same.length === 1) return { r: same[0] };
+  if (same.length > 1) return { r: null, ambiguous: same.map(x => x.id) };
+  return { r: null };
+}
 function governs(argv) {
   const id = argv._[1];
   if (!id) die('usage: docket governs <id>', 2);
   const { root, ledger } = ledgerFromCwd(argv);
-  let r = ledger.byId.get(id);
-  if (!r) {                                                            // an id is a name, and a name is read whatever its case, as query reads one
-    const same = ledger.rulings.filter(x => x.id.toLowerCase() === String(id).toLowerCase());
-    if (same.length === 1) r = same[0];
-    else if (same.length > 1) die('no ruling ' + id + ' in ' + rel(root, ledger.path) + '; ' + same.map(x => x.id).join(' and ') + ' differ only in case — name one exactly', 2);
-  }
+  const res = resolveRuling(ledger, id);                                // an id is a name, and a name is read whatever its case, as query reads one
+  if (res.ambiguous) die('no ruling ' + id + ' in ' + rel(root, ledger.path) + '; ' + res.ambiguous.join(' and ') + ' differ only in case — name one exactly', 2);
+  let r = res.r;
   if (!r) die('no ruling ' + id + ' in ' + rel(root, ledger.path), 2);
   const ctx = loadContext(root);
   const cites = codeCites(ctx, ledger).filter(c => c.id === r.id);
@@ -873,7 +885,8 @@ const UNSAFE_NAME = { '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b
 function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'); }
 // What a reader is shown never carries them, whatever a ledger holds: check says so, and until it is
 // fixed the text still reads straight.
-function plain(t) { return String(t).replace(UNSAFE_RE_G, '\ufffd'); }
+const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+function plain(t) { return String(t).replace(UNSAFE_OUT_RE_G, '\ufffd'); }
 const CONTRAST_RE = /(\d+(?:\.\d+)?):1/;
 const CONTRAST_RE_ALL = /(\d+(?:\.\d+)?):1/g;
 function hexToRgb(hex) {
@@ -1045,7 +1058,12 @@ function appendEntry(argv) {
     const p = parseEdgeArg(e);
     if (!p) die('append: --edge "' + e + '" is not "<verb> <id>" with a verb from: ' + VERBS.join(', '), 2);
     if (/;/.test(p.qualifier)) die('append: --edge "' + e + '": a qualifier may not contain ";" — the meta\'s clauses are split on it (FORMAT.md 4)', 2);
-    for (const to of p.tos) if (!ledger.byId.has(to)) die('append: --edge "' + e + '" names ' + to + ', which is not in ' + rel(root, ledger.path), 2);
+    p.tos = p.tos.map(to => {                                           // the target is read whatever its case, as governs reads one
+      const res = resolveRuling(ledger, to);
+      if (res.ambiguous) die('append: --edge "' + e + '" names ' + to + '; ' + res.ambiguous.join(' and ') + ' differ only in case — name one exactly', 2);
+      if (!res.r) die('append: --edge "' + e + '" names ' + to + ', which is not in ' + rel(root, ledger.path), 2);
+      return res.r.id;
+    });
     const k = [p.adverb, p.verb, p.tos.join('/'), p.qualifier].join('|');
     if (edgeKeys.has(k)) continue;                                      // the same edge given twice is one edge
     edgeKeys.add(k); parsedEdges.push(p);

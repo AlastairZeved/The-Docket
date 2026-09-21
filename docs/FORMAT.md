@@ -328,7 +328,7 @@ cite, heading or edge, never only the file.
 | k | Check | Fails when |
 |---|---|---|
 | 1 | Cites resolve | a cite in a git-tracked text file names a number that does not exist in that file's ledger |
-| 2 | Numbering | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order |
+| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
@@ -390,7 +390,7 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 
 | `old_string` matches | `replace_all` | `near` does |
 |---|---|---|
-| one | any | the window: the 20 lines before and the 20 after the matched line — the line where the match begins — both inclusive (41 lines), clamped to the file; at most eight rulings, nearest first, a ruling cited more than once ranked by its nearest cite |
+| one | any | the window: the 20 lines before and the 20 after the matched line — the line where the match begins — both inclusive (41 lines), clamped to the file; at most eight rulings, nearest first, a ruling cited more than once ranked by its nearest cite and never by how many times it is cited, then the earlier line, then the earlier on that line |
 | many | `true` | the union of the windows — a line inside two overlapping windows is read once, at its distance to the nearest match, and two matches on one line are one anchor; the eight most cited within it, nearest to the first match among equals, then the earlier line, then the earlier on that line, listed in that order |
 | many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
 | zero, or `old_string` empty | any | silent |
@@ -417,7 +417,7 @@ count, line), `more`, `edges`, `addenda`, `specCites`, `notice` — and is silen
 exactly where the text is.
 
 Under it the window lists at most eight rulings (D2) in the order its row gives
-— a single window nearest first, ties by line order, the earlier line first —
+— a single window nearest first, ties by line order, the earlier line first, and among two on one line the earlier on that line —
 each as
 `<id>  <title>` plus `  · issue #<n>` when the entry has one, and when more
 than eight are cited a last line `  +<n> more` (a cap that hid its own overflow
