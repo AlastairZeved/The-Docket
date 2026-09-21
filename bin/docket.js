@@ -402,20 +402,23 @@ function bareCitesIn(text) {
 
 // ─── 4. context: every tracked text file resolved to its own ledger ─────────
 
-function walkFiles(dir, acc) {
+const WALK_MAX = 20000;                                                // entries read, not files kept: the bound is on the work, not the answer
+function walkFiles(dir, acc, root, seen) {
+  seen = seen || { n: 0 };
   let ents;
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
   for (const ent of ents) {
+    if (++seen.n > WALK_MAX) die('the tree under ' + (root || dir) + ' holds more than ' + WALK_MAX + ' entries and is not a git repository, so there is no tracked set to enumerate; run the docket inside the repository, or set the project directory to it (FORMAT.md 1)', 2);
     if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === '.docket' || ent.isSymbolicLink()) continue;
     const p = path.join(dir, ent.name);
-    if (ent.isDirectory()) walkFiles(p, acc); else if (ent.isFile()) acc.push(p);
+    if (ent.isDirectory()) walkFiles(p, acc, root || dir, seen); else if (ent.isFile()) acc.push(p);
   }
   return acc;
 }
 function loadContext(root, opts) {
   opts = opts || {};
   let files = trackedFiles(root);
-  if (files === null) files = walkFiles(root, []);
+  if (files === null) files = walkFiles(root, [], root);
   if (opts.includeUntracked) files = files.concat(untrackedFiles(root));
   const ledgers = new Map();
   const entries = [];
@@ -912,7 +915,9 @@ function flags(argv, name) { const r = []; for (let i = 0; i < argv.raw.length; 
 // A CRLF ledger stays CRLF through every write (FORMAT.md 1): the line ending is read once, from the file.
 // Atomic within the directory: a reader sees the ledger before the write or after it, never half of it.
 function writeLedger(ledger, text) {
-  if (/\r\n/.test(ledger.text)) text = text.replace(/\r?\n/g, '\r\n');
+  const crlf = (ledger.text.match(/\r\n/g) || []).length, lf = (ledger.text.match(/(^|[^\r])\n/g) || []).length;
+  if (crlf && lf) die('append: ' + ledger.path + ' ends some lines with CRLF and some with LF; a write would have to give the whole file one ending, rewriting lines this entry does not touch, and the ledger is append only (FORMAT.md 1; D4)', 2);
+  if (crlf) text = text.replace(/\r?\n/g, '\r\n');
   const tmp = ledger.path + '.docket-' + process.pid;
   fs.writeFileSync(tmp, text);
   fs.renameSync(tmp, ledger.path);

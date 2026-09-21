@@ -1304,6 +1304,31 @@ const SEC = String.fromCharCode(0xa7);
   const denAnchored = denCiting.map(([a]) => denWindow(a)), denEvery = denLines.map((_, k) => denWindow(k + 1));
   const denMean = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 100) / 100;
   ok('the fixture is built at the density D2 reasons from, and at the one its addendum records: one citing line per 13, never six rulings in a window and never the cap', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.67, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
+  // a ledger with two line endings is not written to: the write would have to rewrite lines this
+  // entry does not touch, and check 7 compares line for line, so it could not see that it had (D4)
+  const mixed = tempRepo(d => {
+    const q = path.join(d, 'test', 'fixture', 'DECISIONS.md');
+    const ls = read(q).split('\n');
+    fs.writeFileSync(q, ls.map((l, k) => k === 2 ? l + '\r' : l).join('\n'));   // one line of eleven ends CRLF
+  });
+  const mixedCwd = path.join(mixed, 'test', 'fixture'), mixedBefore = fs.readFileSync(path.join(mixedCwd, 'DECISIONS.md'));
+  r = docket(['append', '--title', 'Into a mixed file', '--issue', '77', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: mixedCwd });
+  ok('append refuses a ledger that ends some lines with CRLF and some with LF, rather than rewriting every line', r.code === 2 && /ends some lines with CRLF and some with LF/.test(r.err) && fs.readFileSync(path.join(mixedCwd, 'DECISIONS.md')).equals(mixedBefore), r.code + '|' + r.err);
+  r = docket(['append', '--addendum', 'R5', '--text', 'noted.'], { cwd: mixedCwd });
+  ok('…and an addendum is refused on the same ground, for the same reason', r.code === 2 && /ends some lines with CRLF and some with LF/.test(r.err) && fs.readFileSync(path.join(mixedCwd, 'DECISIONS.md')).equals(mixedBefore), r.code + '|' + r.err);
+  // the walk that stands in for a git tree is bounded: a huge directory that is not a repository
+  // says so instead of reading for minutes (the docket opens a stretch of work, D1)
+  const wide = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-wide-'));
+  fs.mkdirSync(path.join(wide, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(wide, 'sub', 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- Capture precedes structure\n\n### R1. One ruling (issue #78)\nPrinciple: Capture precedes structure.\nThe tree above it is wide. Reason: r.\n');
+  fs.writeFileSync(path.join(wide, 'sub', 'a.js'), 'x();   // R1\n');
+  const wideFill = path.join(wide, 'fill');
+  fs.mkdirSync(wideFill);
+  for (let k = 0; k < 20050; k++) fs.writeFileSync(path.join(wideFill, 'f' + k + '.txt'), 'x\n');
+  const wideStart = Date.now();
+  r = docket(['check'], { cwd: path.join(wide, 'sub'), env: { CLAUDE_PROJECT_DIR: wide } });
+  ok('check under a directory that is not a repository and holds more than twenty thousand entries says so, and does not read them all', r.code === 2 && /holds more than 20000 entries and is not a git repository/.test(r.err) && Date.now() - wideStart < 30000, r.code + '|' + r.err.slice(0, 120));
+  fs.rmSync(wide, { recursive: true, force: true });
   // the core requires Node built-ins only (dependency-free)
   const reqs = Array.from(read(CORE).matchAll(/require\((['"])([^'"]+)\1\)/g)).map(m => m[2]);
   ok('the core loads nothing by a name it computes: every require names a literal', !/require\(\s*[^'")]/.test(read(CORE)) && !/\bimport\s*\(/.test(read(CORE)), 'computed require or dynamic import');
