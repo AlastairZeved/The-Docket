@@ -1672,5 +1672,78 @@ const SEC = String.fromCharCode(0xa7);
   ok('…in both directions', wholeOrder('// R2 and R1 share this line') === 'R2,R1', wholeOrder('// R2 and R1 share this line'));
 }
 
+// ── the host binding, checked by its values and not by its shape ────────────────
+// hooks.json is three lines of JSON that decide whether any of this runs at all. Each
+// value here is load-bearing: a matcher that misses a tool, a session source that never
+// prints the docket, a timeout that lets a slow answer arrive after the edit. So each is
+// named, and the timeout is also read back and measured against the thing it bounds.
+{
+  const hp = path.join(ROOT, 'hooks', 'hooks.json');
+  ok('the plugin ships hooks/hooks.json', fs.existsSync(hp), hp);
+  let H = null;
+  try { H = JSON.parse(read(hp)); } catch (e) { ok('hooks/hooks.json is JSON', false, String(e)); }
+  if (H) {
+    // the wrapper the host documents: an object with a "hooks" key, events beneath it
+    ok('hooks.json wraps its events in a "hooks" object, as a settings file does', H.hooks && typeof H.hooks === 'object' && !Array.isArray(H.hooks), Object.keys(H).join(','));
+    const pre = (H.hooks.PreToolUse || [])[0], ses = (H.hooks.SessionStart || [])[0];
+    ok('hooks.json binds PreToolUse and SessionStart, and nothing else at this phase', Object.keys(H.hooks).sort().join(',') === 'PreToolUse,SessionStart', Object.keys(H.hooks).join(','));
+
+    // PreToolUse: the matcher names BOTH tools that write to a file. One alone leaves the
+    // other unwatched, which is the whole of job 1 for half the ways a file changes.
+    ok('PreToolUse matches Edit and Write, both, by that exact matcher', pre && pre.matcher === 'Edit|Write', pre && pre.matcher);
+    const preCmd = pre && pre.hooks && pre.hooks[0];
+    ok('…and runs the core’s near through the plugin root, quoted so a path with a space survives', preCmd && preCmd.type === 'command' && /"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js"/.test(preCmd.command) && /\bnear\b/.test(preCmd.command), preCmd && preCmd.command);
+
+    // The timeout is in seconds. 5 is not a round number chosen for looks: near must answer
+    // before the edit proceeds, so the bound is measured below against a real large file.
+    ok('the PreToolUse timeout is 5 seconds', preCmd && preCmd.timeout === 5, preCmd && String(preCmd.timeout));
+
+    // SessionStart: every source the plan names, each one named here. A missing source is a
+    // session that silently starts without its docket.
+    for (const source of ['startup', 'resume', 'clear', 'compact']) {
+      ok('SessionStart matches "' + source + '", so a session begun that way still prints the docket', ses && ses.matcher.split('|').includes(source), ses && ses.matcher);
+    }
+    const sesCmd = ses && ses.hooks && ses.hooks[0];
+    ok('…and SessionStart runs status, not near', sesCmd && /\bstatus\b/.test(sesCmd.command) && !/\bnear\b/.test(sesCmd.command), sesCmd && sesCmd.command);
+
+    // The timeout is a promise about how long near may take. Measure it rather than trust it:
+    // a 5,000-line governed file, timed, against the number the file itself declares.
+    if (preCmd && typeof preCmd.timeout === 'number') {
+      const big = tempRepo(d => {
+        const lines = [];
+        for (let i = 1; i <= 5000; i++) lines.push(i % 250 === 0 ? 'const a' + i + ' = 1; // R' + ((i / 250 | 0) % 8 + 1) : 'const a' + i + ' = ' + i + ';');
+        lines[2499] = 'const anchorHere = 1;';
+        fs.writeFileSync(path.join(d, 'test', 'fixture', 'big.js'), lines.join('\n') + '\n');
+      });
+      const t0 = Date.now();
+      const r = docket(['near'], { cwd: big, input: nearInput(path.join(big, 'test', 'fixture', 'big.js'), 'const anchorHere = 1;') });
+      const ms = Date.now() - t0;
+      ok('near answers a 5,000-line governed file inside the timeout hooks.json declares for it', r.code === 0 && ms < preCmd.timeout * 1000, ms + 'ms vs ' + (preCmd.timeout * 1000) + 'ms');
+    }
+  }
+}
+
+// ── the skill documents only verbs the core answers ─────────────────────────────
+// A skill that advertises a subcommand the core does not have documents a call that
+// exits 2. The verbs it names are checked against the dispatch table, so the skill and
+// the core cannot drift apart in either direction.
+{
+  const sp = path.join(ROOT, 'skills', 'docket', 'SKILL.md');
+  ok('the plugin ships skills/docket/SKILL.md', fs.existsSync(sp), sp);
+  if (fs.existsSync(sp)) {
+    const sk = read(sp);
+    ok('the skill opens with frontmatter naming itself', /^---\n(?:[\s\S]*?\n)?name:\s*docket\s*$/m.test(sk), sk.slice(0, 120));
+    ok('…and says what it is for, so the host can offer it', /^description:\s*\S/m.test(sk), sk.slice(0, 200));
+    const core = read(CORE);
+    const table = (core.match(/const table = \{([\s\S]*?)\}/) || [])[1] || core;
+    const verbs = Array.from(new Set((sk.match(/\/docket ([a-z-]+)/g) || []).map(m => m.split(' ')[1])));
+    ok('the skill names at least one subcommand', verbs.length > 0, verbs.join(','));
+    for (const v of verbs) {
+      ok('the skill’s "/docket ' + v + '" is a subcommand the core answers', new RegExp("['\"]?" + v + "['\"]?\\s*[:,]").test(table) || new RegExp('\\b' + v + '\\b').test(table), v + ' not in the dispatch table');
+    }
+    ok('the skill does not advertise a verb this phase has not built', !/\/docket diff\b/.test(sk), 'names /docket diff');
+  }
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
