@@ -651,7 +651,7 @@ const SEC = String.fromCharCode(0xa7);
   // spec-check --json
   const scj = docket(['spec-check', '--json'], { cwd: FIX });
   const scjo = scj.out ? JSON.parse(scj.out) : {};
-  ok('spec-check --json has the shape ok, rows, failures, and the same finding as the text', scj.code === 1 && Object.keys(scjo).join(',') === 'ok,rows,failures' && scjo.ok === false && scjo.rows === 4 && scjo.failures.length === 1 && scjo.failures[0].k === 'a' && scjo.failures[0].line === 9, scj.out);
+  ok('spec-check --json has the shape ok, rows, failures, and the same finding as the text', scj.code === 1 && Object.keys(scjo).join(',') === 'ok,rows,info,failures' && scjo.ok === false && scjo.rows === 4 && scjo.failures.length === 1 && scjo.failures[0].k === 'a' && scjo.failures[0].line === 9, scj.out);
   // the title rule counts code points: astral-plane characters are one each, and the cut never splits a surrogate pair
   const star = String.fromCodePoint(0x1f700), star2 = String.fromCodePoint(0x1f701);
   const as = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. ' + 'a'.repeat(70) + star + star2 + 'zz (issue #53)\nPrinciple: Zero cognitive tax.\nReason: r.\n### R10. ' + 'b'.repeat(70) + star + ' (issue #54)\nPrinciple: Zero cognitive tax.\nReason: r.\n### R11. ' + 'c'.repeat(70) + star + star2 + ' (issue #55)\nPrinciple: Zero cognitive tax.\nReason: r.\n'));
@@ -1299,14 +1299,14 @@ const SEC = String.fromCharCode(0xa7);
   // D2's reason estimates one citing line per twelve; its addendum measures what this fixture actually
   // yields, and the ledger keeps both, the later one winning. The measurement is repeated here so the
   // fixture cannot drift away from the addendum that records it, and so the two numbers stay told apart.
-  const denLines = read(APP).split('\n'), denN = denLines.length;
+  const denLines = read(APP).replace(/\n$/, '').split('\n'), denN = denLines.length;   // the final newline ends the last line; it opens no other
   const denIds = new Set(JSON.parse(docket(['index'], { cwd: FIX }).out).rulings.map(x => x.id));
   const denCited = l => (l.match(/\b[A-Za-z]+[1-9][0-9]*\b/g) || []).filter(x => denIds.has(x));
   const denCiting = denLines.map((l, k) => [k + 1, denCited(l)]).filter(([, c]) => c.length);
   const denWindow = a => { const seen = new Set(); for (let k = Math.max(1, a - 20); k <= Math.min(denN, a + 20); k++) for (const id of denCited(denLines[k - 1])) seen.add(id); return seen.size; };
   const denAnchored = denCiting.map(([a]) => denWindow(a)), denEvery = denLines.map((_, k) => denWindow(k + 1));
   const denMean = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 100) / 100;
-  ok('the fixture is built at the density D2\'s addendum measures — one citing line per 13, not the one per 12 its reason estimated — and never holds six rulings in a window, nor reaches the cap', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.67, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
+  ok('the fixture is built at the density D2\'s addendum measures — one citing line per 13, not the one per 12 its reason estimated — and never holds six rulings in a window, nor reaches the cap; the mean over its 260 lines is 2.68', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.68 && denN === 260, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
   // a ledger with two line endings is not written to: the write would have to rewrite lines this
   // entry does not touch, and check 7 compares line for line, so it could not see that it had (D4)
   const mixed = tempRepo(d => {
@@ -1356,7 +1356,8 @@ const SEC = String.fromCharCode(0xa7);
   const b3LkNear = docket(['near'], { cwd: b3Lk, input: nearInput(path.join(b3Lk, 'link.js'), 'const a'), env: { CLAUDE_PROJECT_DIR: '' } });
   const b3LkGov = docket(['governs', 'R1'], { cwd: b3Lk, env: { CLAUDE_PROJECT_DIR: '' } });
   const b3LkChk = docket(['check'], { cwd: b3Lk, env: { CLAUDE_PROJECT_DIR: '' } });
-  ok('a symlink to a file in the tree is that file for every command: near reports it governed, governs lists it, check counts it', b3LkNear.out.includes('R1') && /link\.js/.test(b3LkGov.out) && /3 governed-tree files/.test(b3LkChk.out), b3LkNear.out + '|' + b3LkGov.out + '|' + b3LkChk.out);
+  const b3LkReal = docket(['near'], { cwd: b3Lk, input: nearInput(path.join(b3Lk, 'real.js'), 'const a'), env: { CLAUDE_PROJECT_DIR: '' } });
+  ok('a symlink to a file in the tree is that file for every command: near\'s window is the real file\'s with only the name changed, governs lists both, check counts both', b3LkNear.out === b3LkReal.out.replace(/\breal\.js\b/g, 'link.js') && /^  link\.js:1  /m.test(b3LkGov.out) && /^  real\.js:1  /m.test(b3LkGov.out) && /^check: ok \(1 ledger, 3 governed-tree files\)$/m.test(b3LkChk.out), b3LkNear.out + '|' + b3LkReal.out + '|' + b3LkGov.out + '|' + b3LkChk.out);
   ok('…and a symlink that leads nowhere is no file at all', !/broken\.js/.test(b3LkChk.out) && docket(['near'], { cwd: b3Lk, input: nearInput(path.join(b3Lk, 'broken.js'), 'x'), env: { CLAUDE_PROJECT_DIR: '' } }).out === '', b3LkChk.out);
   // a ledger carries nothing that changes what a reader is shown without changing what is written
   for (const [name, ch, shown] of [['an escape', '\u001b[31m', 'U+001B'], ['a right-to-left override', '\u202e', 'RLO'], ['a NUL', '\u0000', 'U+0000']]) {
@@ -1389,6 +1390,74 @@ const SEC = String.fromCharCode(0xa7);
   ok('append: a check that fails b3After the write says so, exits 1, and the entry is written all the same — exit 1 does not mean nothing happened', r.code === 1 && /check: 1 failure\(s\) — the ledger is written; fix before you rely on it/.test(r.out) && read(path.join(b3WfCwd, 'DECISIONS.md')).includes('### R9. Written while the tree is broken'), r.out + r.err);
   const b3R5 = JSON.parse(docket(['index'], { cwd: FIX }).out).rulings.find(x => x.id === 'R5');
   ok('the fixture carries the sentence a later change is meant to make stale: R5 ties its tab count to the section count in the file, and the file states that count', /three tabs/.test(b3R5.body) && /section count in `app\.js`/.test(b3R5.body) && /const SECTIONS = \['now', 'next', 'later'\]/.test(read(APP)), b3R5.body);
+  // a contract line naming a prefix no entry uses binds nothing, and a typo is exactly that
+  const ctp = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: contract from R8 -->', '<!-- docket: contract from r8 -->'));
+  r = docket(['check'], { cwd: ctp });
+  ok('check 6: a contract line naming a prefix no entry uses is a fault, not a contract quietly turned off', r.code === 1 && /check 6: the contract line names prefix r, which no entry uses/.test(r.out) && /prefixes are A, R/.test(r.out), r.out);
+  // an id is a name: governs reads one whatever its case, as query does
+  const gcCwd = path.join(tempRepo(), 'test', 'fixture');
+  const gcLower = docket(['governs', 'r6'], { cwd: gcCwd }), gcUpper = docket(['governs', 'R6'], { cwd: gcCwd });
+  ok('governs resolves an id in any case, as query does', gcLower.code === 0 && gcUpper.code === 0 && gcLower.out === gcUpper.out && /^R6  /m.test(gcUpper.out), gcLower.code + '|' + gcLower.err + '|' + gcUpper.out.slice(0, 60));
+  ok('…and an id no ledger holds is still refused by name', docket(['governs', 'r99'], { cwd: gcCwd }).code === 2, docket(['governs', 'r99'], { cwd: gcCwd }).err);
+  // an edge target carries the numeral of an id: a leading zero names no entry, so it is no edge
+  const lz = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. A leading zero is no id (issue #86; supersedes R03)\nPrinciple: Capture precedes structure.\nReason: r.\n'));
+  const lzj = JSON.parse(docket(['index'], { cwd: path.join(lz, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9');
+  r = docket(['check'], { cwd: lz });
+  ok('an edge target with a leading zero is not an edge at all, exactly as such a cite is not a cite', !lzj.edges.length && !/check 5: edge R9 supersedes R03/.test(r.out), JSON.stringify(lzj.edges) + '|' + r.out);
+  // a spec cite written without its space is a typo named, not a bare cite counted
+  const glu = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const g = 1;   /* UIUX' + SEC + '4.5 the minimum */\n'));
+  r = docket(['check'], { cwd: glu });
+  ok('check 3: a spec cite with its space missing is named as the typo it is, not absorbed by the bare-cite ratchet', r.code === 1 && new RegExp('check 3: UIUX' + SEC + '4\\.5 is written without the space').test(r.out) && !/check 4: bare-/.test(r.out), r.out);
+  // a ledger with no entries governs nothing, in both halves of the witness
+  const esc = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '# Empty\n'));
+  r = docket(['spec-check'], { cwd: path.join(esc, 'test', 'fixture') });
+  ok('spec-check honours the same exemption check does: no entries, no row read, and it says so', r.code === 0 && /no entries; its subtree is ungoverned and spec-check reads no row beside it/.test(r.out), r.out);
+  // a row that means to assert a ratio and writes it in a shape the grammar does not read
+  for (const shape of ['15.04 :1', '15.04: 1', '15.04 to 1']) {
+    const badR = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', shape)); });
+    r = docket(['spec-check'], { cwd: path.join(badR, 'test', 'fixture') });
+    ok('spec-check (b): a row naming two tokens whose ratio reads "' + shape + '" is named, not passed over as prose', r.code === 1 && /the ratio is not written as <n>:1/.test(r.out), r.out);
+  }
+  // the lock gives up and says so, which is the far side of its own wait
+  const stale = tempRepo(), staleCwd = path.join(stale, 'test', 'fixture');
+  fs.writeFileSync(path.join(staleCwd, 'DECISIONS.md.lock'), 'docket 999999\n');
+  const staleBefore = read(path.join(staleCwd, 'DECISIONS.md')), t0 = Date.now();
+  r = docket(['append', '--title', 'Waits for a lock nobody holds', '--issue', '87', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: staleCwd });
+  const waited = Date.now() - t0;
+  ok('append waits the five seconds it states and then says which lock is holding it, having written nothing', r.code === 2 && /is held by another append that has not finished; if none is running, remove/.test(r.err) && waited >= 5000 && waited < 15000 && read(path.join(staleCwd, 'DECISIONS.md')) === staleBefore && fs.existsSync(path.join(staleCwd, 'DECISIONS.md.lock')), r.code + '|' + waited + '|' + r.err);
+  // the binary sniff reads eight thousand bytes, and the byte after them is not sniffed
+  for (const [at, governed] of [[7999, false], [8000, true]]) {
+    const nb = tempRepo(d => {
+      const q = path.join(d, 'test', 'fixture', 'sniff.js');
+      const head = Buffer.from('const a = 1;   // R6\n' + 'x'.repeat(at - 21));
+      fs.writeFileSync(q, Buffer.concat([head, Buffer.from([0]), Buffer.from('\ntail\n')]));
+    });
+    r = docket(['check'], { cwd: nb });
+    const seen = /12 governed-tree files/.test(r.out);
+    ok('the text sniff reads the first eight thousand bytes: a NUL at byte ' + at + ' makes the file ' + (governed ? 'text, and it is counted' : 'binary, and it is not'), seen === governed, r.out);
+  }
+  // an entry whose body names itself with a verb would fail check 5 for ever, and the ledger is
+  // append only, so nothing could ever clear it: it is refused before it is written
+  const seCwd = path.join(tempRepo(), 'test', 'fixture'), seBefore = read(path.join(seCwd, 'DECISIONS.md'));
+  r = docket(['append', '--title', 'It names itself', '--issue', '88', '--principle', 'Zero cognitive tax', '--body', 'This supersedes R9, its own id. Reason: r.'], { cwd: seCwd });
+  ok('append refuses a --body that writes an edge from the new entry to itself, before writing it', r.code === 2 && /is an edge from R9 to itself/.test(r.err) && read(path.join(seCwd, 'DECISIONS.md')) === seBefore, r.code + '|' + r.err);
+  r = docket(['append', '--title', 'It names one that is not there', '--issue', '88', '--principle', 'Zero cognitive tax', '--body', 'This supersedes R77. Reason: r.'], { cwd: seCwd });
+  ok('…and a --body edge naming a ruling the ledger does not hold, for the same reason', r.code === 2 && /R77, which is not in/.test(r.err) && read(path.join(seCwd, 'DECISIONS.md')) === seBefore, r.code + '|' + r.err);
+  r = docket(['append', '--title', 'It merely mentions itself', '--issue', '88', '--principle', 'Zero cognitive tax', '--body', 'R9 holds where R4 holds, with no verb between them. Reason: r.'], { cwd: seCwd });
+  ok('…while a body that names its own id with no verb before it is no edge, and is written', r.code === 0 && /check: ok/.test(r.out), r.err + r.out);
+  // a heading with no meta breaks one clause of five; the other four are still reported
+  const m6 = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(q, read(q) + '\n### R9. No meta no principle no reason\nA body with nothing the contract asks for.\n'); });
+  r = docket(['check'], { cwd: m6 });
+  ok('check 6: an entry missing its meta is told what else it is missing, not only the meta', r.code === 1 && /R9: heading does not end with a parenthetical meta/.test(r.out) && /R9: no "Principle:" line/.test(r.out) && /R9: body has no "Reason:"/.test(r.out), r.out);
+  // two lines naming Principles, each followed by a list: the ledger does not say which is the list
+  const twoP = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-twop-'));
+  fs.writeFileSync(path.join(twoP, 'DECISIONS.md'), '# Rulings\n\nEarlier drafts listed other Principles, kept for reference:\n\n- **Wrong one.** Not the list.\n\nPrinciples:\n\n- **Capture precedes structure.** The real one.\n\n### R1. One ruling (issue #89)\nPrinciple: Capture precedes structure.\nReason: r.\n');
+  fs.writeFileSync(path.join(twoP, 'a.js'), 'x();   // R1\n');
+  sh('git', ['init', '-q', '-b', 'main'], twoP);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], twoP);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'two'], twoP);
+  r = docket(['check'], { cwd: twoP });
+  ok('check 6: two lines naming Principles, each with a list under it, is a fault rather than a silent choice between them', r.code === 1 && /two lines name Principles and each is followed by a list/.test(r.out), r.out);
   // the core requires Node built-ins only (dependency-free)
   const reqs = Array.from(read(CORE).matchAll(/require\((['"])([^'"]+)\1\)/g)).map(m => m[2]);
   ok('the core loads nothing by a name it computes: every require names a literal', !/require\(\s*[^'")]/.test(read(CORE)) && !/\bimport\s*\(/.test(read(CORE)), 'computed require or dynamic import');

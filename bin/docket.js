@@ -150,7 +150,7 @@ const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+)*)\s+(.*?)\s*$/;
 // A verb or adverb may open a sentence with a capital — "Supersedes R1", "In part reverses R6" — and is recorded in
 // lowercase; any other casing is no edge (FORMAT.md 5).
 function caseHead(words) { return words.map(w => '[' + w[0] + w[0].toUpperCase() + ']' + w.slice(1)); }
-const EDGE_RE = new RegExp('(?:' + NOT_WORD_BEFORE + '(' + caseHead(ADVERBS).join('|') + ')\\s+)?' + NOT_WORD_BEFORE + '(' + caseHead(VERBS).join('|') + ')\\s+([A-Za-z]+)(\\d+)((?:/[A-Za-z]+\\d+)*)' + NOT_WORD_AFTER + '(?:\\s*\\(([^()]*)\\))?', 'gu');
+const EDGE_RE = new RegExp('(?:' + NOT_WORD_BEFORE + '(' + caseHead(ADVERBS).join('|') + ')\\s+)?' + NOT_WORD_BEFORE + '(' + caseHead(VERBS).join('|') + ')\\s+([A-Za-z]+)([1-9]\\d*)((?:/[A-Za-z]+[1-9]\\d*)*)' + NOT_WORD_AFTER + '(?:\\s*\\(([^()]*)\\))?', 'gu');
 
 // The index of the "(" that opens the meta: the first one outside a backtick span that begins the heading or follows
 // a space (FORMAT.md 3, 4). A parenthesis inside inline code is code, not the meta; a heading with an unpaired
@@ -255,12 +255,16 @@ function principlesOf(ledger) {
     }
   }
   const lines = ledger.preambleLines;
+  const found = [];
   for (let i = 0; i < lines.length; i++) {
-    if (/Principles/.test(lines[i])) {
-      const list = principlesFromList(lines, i + 1);
-      if (list.length) return { source: ledger.path, list };
-    }
+    if (!/Principles/.test(lines[i])) continue;
+    const list = principlesFromList(lines, i + 1);
+    if (list.length) found.push({ at: i + 1, list });
   }
+  if (found.length > 1 && found[0].list[0].line !== found[1].list[0].line) {
+    return { source: ledger.path, list: found[0].list, skipped: found[0].list.skipped || [], ambiguous: found.map(f => f.at) };
+  }
+  if (found.length) return { source: ledger.path, list: found[0].list, skipped: found[0].list.skipped || [] };
   return { source: null, list: [] };
 }
 function principleNamed(list, name) {
@@ -282,13 +286,14 @@ function parseLedger(text, ledgerPath) {
   }
   const preambleLines = lines.slice(0, firstHeading);
   const directiveFaults = [];                                          // {k, line, message}: check reports them, parse reads the first directive
+  const contractFromLine = {};                                         // where each contract line sits, so check can name it
   const firstAt = { bareCites: 0 };
   for (let li = 0; li < preambleLines.length; li++) {
     const l = preambleLines[li];
     let m = /<!--\s*docket:\s*contract from ([A-Za-z]+)([1-9]\d{0,14})\s*-->/.exec(l);   // a ruling number (2): a zero names no entry, so it binds none
     if (m) {
       if (contractFrom[m[1]] !== undefined) directiveFaults.push({ k: 6, line: li + 1, message: 'a second contract line for prefix ' + m[1] + ' (line ' + firstAt[m[1]] + ' binds); the preamble carries one per prefix (FORMAT.md 11)' });
-      else { contractFrom[m[1]] = Number(m[2]); firstAt[m[1]] = li + 1; }
+      else { contractFrom[m[1]] = Number(m[2]); firstAt[m[1]] = li + 1; contractFromLine[m[1]] = li + 1; }
     }
     m = /<!--\s*docket:\s*bare-cites([^>]*)-->/.exec(l);
     if (m) {
@@ -342,7 +347,7 @@ function parseLedger(text, ledgerPath) {
   const prefixes = uniq(rulings.map(r => r.prefix));
   const byId = new Map();
   for (const r of rulings) if (!byId.has(r.id)) byId.set(r.id, r);     // FORMAT.md 12: a repeated id resolves to its first entry, the one at its position; the later one is check 2's failure
-  return { path: ledgerPath, dir: path.dirname(ledgerPath), home: ledgerHome(ledgerPath), text, lines, preambleLines, prefixes, rulings, sections, byId, contractFrom, baseline, hasBaseline, directiveFaults };
+  return { path: ledgerPath, dir: path.dirname(ledgerPath), home: ledgerHome(ledgerPath), text, lines, preambleLines, prefixes, rulings, sections, byId, contractFrom, contractFromLine, baseline, hasBaseline, directiveFaults };
 }
 function parseSpec(text) {
   const heads = [];
@@ -392,7 +397,8 @@ function specCitesIn(text) {
   lines.forEach((l, i) => { if (fenced[i]) return; SPEC_CITE_RE.lastIndex = 0; let m; while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) all.push({ doc: m[1], num: m[2], line: i + 1 }); });
   return all;
 }
-const BARE_CITE_RE = /(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD) )§\d/gu;
+const BARE_CITE_RE = /(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD) )(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD))§\d/gu;
+const GLUED_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD)§(\d+(?:\.\d+)*)/gu;   // the document's name against the mark, with the space missing
 function bareCitesIn(text) {
   const lines = splitLines(text), fenced = fencedLines(lines); let n = 0;
   lines.forEach((l, i) => { if (fenced[i]) return; const m = maskCode(l).match(BARE_CITE_RE); if (m) n += m.length; });
@@ -675,11 +681,16 @@ function governs(argv) {
   const id = argv._[1];
   if (!id) die('usage: docket governs <id>', 2);
   const { root, ledger } = ledgerFromCwd(argv);
-  const r = ledger.byId.get(id);
+  let r = ledger.byId.get(id);
+  if (!r) {                                                            // an id is a name, and a name is read whatever its case, as query reads one
+    const same = ledger.rulings.filter(x => x.id.toLowerCase() === String(id).toLowerCase());
+    if (same.length === 1) r = same[0];
+    else if (same.length > 1) die('no ruling ' + id + ' in ' + rel(root, ledger.path) + '; ' + same.map(x => x.id).join(' and ') + ' differ only in case — name one exactly', 2);
+  }
   if (!r) die('no ruling ' + id + ' in ' + rel(root, ledger.path), 2);
   const ctx = loadContext(root);
-  const cites = codeCites(ctx, ledger).filter(c => c.id === id);
-  const ins = inEdges(ledger, id);
+  const cites = codeCites(ctx, ledger).filter(c => c.id === r.id);
+  const ins = inEdges(ledger, r.id);
   if (argv.json) {
     out(JSON.stringify({ ruling: rulingJson(r), outEdges: r.edges, inEdges: ins, addenda: r.addenda, cites: cites.map(c => ({ file: c.rel, line: c.line, text: c.text.trim() })) }, null, 2));
     return 0;
@@ -743,6 +754,13 @@ function runCheck(root, opts) {
         if (m) { fail(lp, li, 2, r.id + ': the text carries ' + unsafeName(m[0]) + ', which changes what a reader is shown without changing what is written (FORMAT.md 2)'); break; }
       }
     }
+    for (const e of empty ? [] : files) {                              // a spec cite with its space missing is a typo named, not a bare cite counted (FORMAT.md 8)
+      const ls = splitLines(fileText(e)), fenced = fencedLines(ls);
+      ls.forEach((l, i) => {
+        if (fenced[i]) return;
+        for (const g of maskCode(l).matchAll(GLUED_CITE_RE)) fail(e.path, i + 1, 3, g[1] + '\u00a7' + g[2] + ' is written without the space the grammar reads; a spec cite is "' + g[1] + ' \u00a7' + g[2] + '"');
+      });
+    }
     // 3. every UIUX §x / PRD §x cite resolves
     for (const e of empty ? [] : files) {
       for (const c of specCitesIn(fileText(e))) {
@@ -773,17 +791,23 @@ function runCheck(root, opts) {
     }
     // 6. header contract for entries bound by the contract line — the line itself first (FORMAT.md 11)
     for (const f of ledger.directiveFaults) if (f.k === 6) fail(lp, f.line, 6, f.message);
+    for (const pfx of empty ? [] : Object.keys(ledger.contractFrom)) { // a contract for a prefix no entry uses binds nothing, and a typo is exactly that (FORMAT.md 11, 12)
+      if (!ledger.prefixes.includes(pfx)) fail(lp, ledger.contractFromLine[pfx] || 1, 6, 'the contract line names prefix ' + pfx + ', which no entry uses' + (ledger.prefixes.length ? ' — this ledger\'s prefixes are ' + ledger.prefixes.join(', ') : '') + '; it binds nothing');
+    }
     const prin = principlesOf(ledger);
     for (const li of (prin.skipped || [])) info.push(rel(root, prin.source || lp) + ':' + li + ': a bullet with no bolded name in the principles list — no principle to cite (FORMAT.md 10)');
+    if (prin.ambiguous) fail(lp, prin.ambiguous[1], 6, 'two lines name Principles and each is followed by a list (lines ' + prin.ambiguous.join(' and ') + '); the preamble carries one principles list (FORMAT.md 10)');
     for (const r of ledger.rulings) {
       const from = ledger.contractFrom[r.prefix];
       if (from === undefined || r.n < from) continue;
       const { meta, end } = metaOf(r.heading);
       if (!r.title) fail(lp, r.line, 6, r.id + ': title is empty — a bound entry is named in words (FORMAT.md 3, 11)');
-      if (!meta || end !== r.heading.length - 1) { fail(lp, r.line, 6, r.id + ': heading does not end with a parenthetical meta'); continue; }
-      const clauses = clausesOf(meta);
-      if (!clauses.length || isEdgeClause(clauses[0])) fail(lp, r.line, 6, r.id + ': meta must open with a grounding (issue #n or a context), not an edge');
-      for (const c of clauses.slice(1)) if (!isEdgeClause(c)) fail(lp, r.line, 6, r.id + ': meta clause is not an edge: "' + c + '"');
+      if (!meta || end !== r.heading.length - 1) fail(lp, r.line, 6, r.id + ': heading does not end with a parenthetical meta');
+      const clauses = meta && end === r.heading.length - 1 ? clausesOf(meta) : [];
+      if (meta && end === r.heading.length - 1) {
+        if (!clauses.length || isEdgeClause(clauses[0])) fail(lp, r.line, 6, r.id + ': meta must open with a grounding (issue #n or a context), not an edge');
+        for (const c of clauses.slice(1)) if (!isEdgeClause(c)) fail(lp, r.line, 6, r.id + ': meta clause is not an edge: "' + c + '"');
+      }
       if (!r.principle) fail(lp, r.line, 6, r.id + ': no "Principle:" line');
       else if (!prin.list.length) fail(lp, r.line, 6, r.id + ': names a principle but no principles list was found');
       else if (!principleNamed(prin.list, r.principle)) fail(lp, r.line, 6, r.id + ': principle "' + r.principle + '" is not in the list (' + prin.list.map(p => p.name).join(' · ') + ')');
@@ -880,6 +904,10 @@ function runSpecCheck(root, ctx, onlyLedger) {
     if (onlyLedger && lp !== onlyLedger) continue;
     const docs = specDocs(lp);
     if (!docs.uiux) continue;
+    if (!ledger.rulings.length) {                                      // FORMAT.md 1: no entries, nothing governed — the same exemption check makes, said the same way
+      info.push(rel(root, lp) + ': no entries; its subtree is ungoverned and spec-check reads no row beside it');
+      continue;
+    }
     const specLines = splitLines(readText(docs.uiux));
     const cssFiles = ctx.files.filter(e => e.ledger === lp && /\.css$/i.test(e.path));
     const decls = new Map(); // token -> [{value, file, line}]
@@ -905,9 +933,14 @@ function runSpecCheck(root, ctx, onlyLedger) {
     const valueOf = t => specValue.get(t) || (decls.get(t) ? decls.get(t)[0].value : null);
     specLines.forEach((l, i) => {
       if (!/^\|/.test(l)) return;
+      const toksAll = uniq(Array.from(l.matchAll(/`(--[A-Za-z0-9_-]+)`/g)).map(m => m[1]));
       const cm = CONTRAST_RE.exec(l);
-      if (!cm) return;
-      const toks = uniq(Array.from(l.matchAll(/`(--[A-Za-z0-9_-]+)`/g)).map(m => m[1]));
+      if (!cm) {
+        // two tokens and no ratio the grammar reads: the row means to assert one and does not.
+        if (toksAll.length === 2 && /\d\s*(?::\s*1\b|to\s+1\b)/.test(l)) { rows++; failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: toksAll.join(' on ') + ': the ratio is not written as <n>:1, so no ratio is read from this row' }); }
+        return;
+      }
+      const toks = toksAll;
       if (toks.length === 0) return;                                   // a ratio in prose, no tokens: not a contrast row
       rows++;
       const allRatios = uniq((l.match(CONTRAST_RE_ALL) || []));
@@ -928,8 +961,9 @@ function runSpecCheck(root, ctx, onlyLedger) {
 function specCheck(argv) {
   const s = scope(argv);
   const res = runSpecCheck(s.root, null, has(argv, '--all') ? null : s.ledger);
-  if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, rows: res.rows, failures: res.failures }, null, 2)); return res.failures.length ? 1 : 0; }
+  if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, rows: res.rows, info: res.info, failures: res.failures }, null, 2)); return res.failures.length ? 1 : 0; }
   for (const f of res.failures) out(f.file + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
+  for (const i of res.info) out('info  ' + i);
   if (!res.failures.length) out('spec-check: ok (' + res.rows + ' rows)');
   return res.failures.length ? 1 : 0;
 }
@@ -1026,6 +1060,11 @@ function appendEntry(argv) {
   // not failed by check 1 after (FORMAT.md 8). The entry's own id may appear in its body.
   const probe = parseLedger(ledger.text + '\n### ' + prefix + n + '. x\n', ledger.path);
   for (const c of citesIn(title + '\n' + body, probe)) if (!c.exists) die('append: the entry names ' + c.id + ', which is not in ' + rel(root, ledger.path), 2);
+  const selfId = prefix + n;
+  for (const li of splitLines(body)) for (const ed of edgesIn(li, selfId, 0, false)) {
+    if (ed.to === selfId) die('append: --body says "' + ed.clause.trim() + '", which is an edge from ' + selfId + ' to itself; a ruling may not name itself (FORMAT.md 5), and once written the ledger could never stop failing check 5', 2);
+    if (!probe.byId.has(ed.to)) die('append: --body says "' + ed.clause.trim() + '", naming ' + ed.to + ', which is not in ' + rel(root, ledger.path), 2);
+  }
   const grounding = /^#?\d+$/.test(issue.trim()) ? 'issue #' + issue.trim().replace('#', '') : issue.trim();
   const metaParts = [grounding].concat(parsedEdges.map(e => (e.adverb ? e.adverb + ' ' : '') + e.verb + ' ' + e.tos.join('/') + (e.qualifier ? ' (' + e.qualifier + ')' : '')));   // one clause, the targets joined as the grammar reads them (5)
   const entry = '### ' + prefix + n + '. ' + title.trim() + ' (' + metaParts.join('; ') + ')\n' + 'Principle: ' + pr.name + '.\n' + body.trim() + '\n';
