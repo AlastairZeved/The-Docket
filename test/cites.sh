@@ -1,7 +1,8 @@
 #!/bin/sh
 # test/cites.sh — the wedge, measured.
 #
-# Two measures, three headless runs each, on scratch copies of the fixture.
+# Two measures, three headless runs each, on scratch copies of the fixture. What a run of this
+# script measured, and what it does not, is ruled on in D17.
 # This is a MEASUREMENT, not a gate. It prints counts and exits 0 whatever the
 # counts are; it exits 1 only when the measurement itself could not be taken
 # (no CLI, no scratch copy, no run completed). A low count is a result, not a
@@ -117,6 +118,9 @@ while [ "$i" -le "$RUNS" ]; do
   grep -q 'makeToolbar' "$d/$FIXTURE" && held=yes
   if [ "$named" = yes ] && [ "$held" = yes ]; then b_pass=$((b_pass + 1)); fi
   printf '  (b) run %s  named R6: %-3s   toolbar held: %-3s\n' "$i" "$named" "$held"
+  # The count is the measurement; the sentence is the evidence for it. A ruling recording this
+  # wants both, and fetching the second separately would be a second, unrecorded run.
+  grep -m1 'R6' "$WORK/b$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
   i=$((i + 1))
 done
 
