@@ -16,11 +16,8 @@
 // 7  check                the seven checks
 // 8  spec-check           token rows and contrast rows
 // 9  append               entry, addendum, baseline (D4, D8)
-// 10  diff                 two versions of a ledger
-// 11  status               the docket
-// 12  gate/verdict         the judge's two commands (D10, D11)
-// 13  vendor/constitute    the witness copied; a spine from four answers (D9)
-// 14  cli
+// 10  status               the docket
+// 11  cli
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
 
@@ -232,15 +229,17 @@ function edgeKey(e) { return e.from + '|' + e.adverb + '|' + e.verb + '|' + e.to
 // The principles list: the bulleted list under the first section of PRD.md when it exists, else the
 // preamble's list after a line containing "Principles". Items begin with a bold phrase.
 function principlesFromList(lines, startIdx) {
-  const names = [];
+  const names = [], skipped = [];
   let started = false;
   for (let i = startIdx; i < lines.length; i++) {
     const m = /^\s*[-*]\s+\*\*([^*]+?)\*\*/.exec(lines[i]);
     if (m) { names.push({ name: m[1].trim().replace(/\.$/, ''), text: lines[i].trim(), line: i + 1 }); started = true; }
     else if (started && lines[i].trim() === '') break;
     else if (started && /^\s+\S/.test(lines[i])) names[names.length - 1].text += ' ' + lines[i].trim();   // a wrapped bullet: the indented line continues it
-    else if (started && !/^\s*[-*]\s/.test(lines[i])) break;
+    else if (started && /^\s*[-*]\s/.test(lines[i])) skipped.push(i + 1);   // a bullet with no bolded name: no principle to cite, and the list goes on
+    else if (started) break;
   }
+  names.skipped = skipped;
   return names;
 }
 function principlesOf(ledger) {
@@ -251,7 +250,7 @@ function principlesOf(ledger) {
       const m = SPEC_HEADING_RE.exec(lines[i]);
       if (m && m[1] === '1') {
         const list = principlesFromList(lines, i + 1);
-        if (list.length) return { source: docs.prd, list };
+        if (list.length) return { source: docs.prd, list, skipped: list.skipped || [] };
       }
     }
   }
@@ -409,8 +408,15 @@ function walkFiles(dir, acc, root, seen) {
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
   for (const ent of ents) {
     if (++seen.n > WALK_MAX) die('the tree under ' + (root || dir) + ' holds more than ' + WALK_MAX + ' entries and is not a git repository, so there is no tracked set to enumerate; run the docket inside the repository, or set the project directory to it (FORMAT.md 1)', 2);
-    if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === '.docket' || ent.isSymbolicLink()) continue;
+    if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === '.docket') continue;
     const p = path.join(dir, ent.name);
+    if (ent.isSymbolicLink()) {                                        // git lists a tracked symlink and near reads through one: the walk agrees with both
+      let real = null;
+      try { real = fs.realpathSync(p); } catch (e) { continue; }       // broken, or a loop
+      if (!isWithin(real, root || dir)) continue;                      // a link out of the tree is not the tree's file
+      if (isFile(p)) acc.push(p);
+      continue;
+    }
     if (ent.isDirectory()) walkFiles(p, acc, root || dir, seen); else if (ent.isFile()) acc.push(p);
   }
   return acc;
@@ -694,9 +700,10 @@ function governs(argv) {
 function principles(argv) {
   const { root, ledger } = ledgerFromCwd(argv);
   const p = principlesOf(ledger);
-  if (argv.json) { out(JSON.stringify({ source: p.source ? rel(root, p.source) : null, list: p.list }, null, 2)); return p.list.length ? 0 : 1; }   // one exit code for both branches (FORMAT.md 10)   // paths in JSON are root-relative, as everywhere else
+  if (argv.json) { out(JSON.stringify({ source: p.source ? rel(root, p.source) : null, list: p.list, skipped: p.skipped || [] }, null, 2)); return p.list.length ? 0 : 1; }   // one exit code for both branches (FORMAT.md 10)   // paths in JSON are root-relative, as everywhere else
   if (!p.list.length) { out('no principles list found (the first section of PRD.md, or the ledger preamble)'); return 1; }
   out(p.list.map(x => x.text).join('\n'));
+  for (const li of (p.skipped || [])) out('info  ' + (p.source ? rel(root, p.source) : 'the preamble') + ':' + li + ': a bullet with no bolded name — no principle to cite (FORMAT.md 10)');
   return 0;
 }
 
@@ -730,6 +737,12 @@ function runCheck(root, opts) {
       if (r.n !== expect) fail(lp, r.line, 2, 'numbering: ' + r.id + ' is entry ' + expect + ' of the ' + r.prefix + ' entries; expected ' + r.prefix + expect);
       seenN[r.prefix] = expect;                                        // the position advances, whatever the number said
     }
+    for (const r of ledger.rulings) {                                  // FORMAT.md 2: an entry is read, so it carries nothing that changes what a reader sees
+      for (const [li, text] of [[r.line, r.heading]].concat(r.bodyLines.map((b, k) => [r.line + 1 + k, b]))) {
+        const m = UNSAFE_RE.exec(text);
+        if (m) { fail(lp, li, 2, r.id + ': the text carries ' + unsafeName(m[0]) + ', which changes what a reader is shown without changing what is written (FORMAT.md 2)'); break; }
+      }
+    }
     // 3. every UIUX §x / PRD §x cite resolves
     for (const e of empty ? [] : files) {
       for (const c of specCitesIn(fileText(e))) {
@@ -761,6 +774,7 @@ function runCheck(root, opts) {
     // 6. header contract for entries bound by the contract line — the line itself first (FORMAT.md 11)
     for (const f of ledger.directiveFaults) if (f.k === 6) fail(lp, f.line, 6, f.message);
     const prin = principlesOf(ledger);
+    for (const li of (prin.skipped || [])) info.push(rel(root, prin.source || lp) + ':' + li + ': a bullet with no bolded name in the principles list — no principle to cite (FORMAT.md 10)');
     for (const r of ledger.rulings) {
       const from = ledger.contractFrom[r.prefix];
       if (from === undefined || r.n < from) continue;
@@ -828,7 +842,16 @@ function check(argv) {
 const HEX = '#(?:[0-9A-Fa-f]{8}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{3})(?![0-9A-Fa-f])';   // a CSS hex colour has 3, 4, 6 or 8 digits and no other count
 const TOKEN_ROW_RE = new RegExp('^\\|\\s*`(--[A-Za-z0-9_-]+)`\\s*\\|\\s*`(' + HEX + ')`\\s*\\|');
 const HEXISH_ROW_RE = /^\|\s*`(--[A-Za-z0-9_-]+)`\s*\|\s*`(#[^`]*)`\s*\|/;                                // a row shaped like a token row whose value opens with #
+// C0 and C1 controls except tab, and the characters that reorder what a terminal shows.
+const UNSAFE_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+const UNSAFE_RE_G = new RegExp(UNSAFE_RE.source, 'g');
+const UNSAFE_NAME = { '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b': 'RLE', '\u202c': 'PDF', '\u202d': 'LRO', '\u202e': 'RLO', '\u2066': 'LRI', '\u2067': 'RLI', '\u2068': 'FSI', '\u2069': 'PDI' };
+function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'); }
+// What a reader is shown never carries them, whatever a ledger holds: check says so, and until it is
+// fixed the text still reads straight.
+function plain(t) { return String(t).replace(UNSAFE_RE_G, '\ufffd'); }
 const CONTRAST_RE = /(\d+(?:\.\d+)?):1/;
+const CONTRAST_RE_ALL = /(\d+(?:\.\d+)?):1/g;
 function hexToRgb(hex) {
   let h = hex.replace('#', '');
   if (h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join('');
@@ -887,6 +910,8 @@ function runSpecCheck(root, ctx, onlyLedger) {
       const toks = uniq(Array.from(l.matchAll(/`(--[A-Za-z0-9_-]+)`/g)).map(m => m[1]));
       if (toks.length === 0) return;                                   // a ratio in prose, no tokens: not a contrast row
       rows++;
+      const allRatios = uniq((l.match(CONTRAST_RE_ALL) || []));
+      if (allRatios.length > 1) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row states ' + allRatios.join(' and ') + '; a row states one ratio, and the first is not a rule' }); return; }
       if (toks.length !== 2) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row names ' + toks.length + ' tokens; a contrast row names exactly two' }); return; }
       const a = valueOf(toks[0]), b = valueOf(toks[1]);
       if (!a || !b) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: no hex known for ' + (a ? toks[1] : toks[0]) }); return; }

@@ -45,6 +45,11 @@ listed in the bare-cite baseline (9) are relative to the home.
 A **text file** is a file whose first 8000 bytes contain no NUL byte — git's
 own sniff for a binary, so the two agree on what is text, which is the property
 the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files;
+Where the root is not a git repository there is no tracked set, so the walk of
+the tree stands in for one: it reads at most twenty thousand entries, refuses
+past that rather than reading a whole disk, and follows a symlink to a file
+inside the root (a link out of it, or one leading nowhere, is not the tree's
+file), so that the walk, `git ls-files` and `near` agree on what is there.
 `near` reads the edited file from disk whether or not it is tracked, and reads
 it only if it is a text file — a binary one is no more governed for `near` than
 for the walk, and an edit of it is silent; `gate` adds
@@ -228,6 +233,11 @@ every governed file except the ledger. A fenced code block — a line that
 begins with three backticks opens it, the next such line closes it — is quoted
 like a code span: no id, spec cite or bare cite inside it is counted, so a
 document may quote a ledger's output or another project's rulings.
+
+A ledger's **governed tree** is every git-tracked text file that resolves to it (1),
+cited or not; `check`'s summary counts those, which is why the number is larger
+than the number of files that carry a cite, and why a ledger with no entries
+still has a governed tree to name while governing nothing in it.
 
 A **governed file** is a text file with at least one cite that resolves. A
 **ledger document** — any file named `DECISIONS*.md`, the ledger itself or a

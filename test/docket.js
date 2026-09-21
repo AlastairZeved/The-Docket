@@ -416,10 +416,11 @@ const SEC = String.fromCharCode(0xa7);
   const capFile = (dir, name, ids) => fs.writeFileSync(path.join(dir, 'test', 'fixture', name), ids.map((id, i) => 'const c' + i + ' = ' + i + '; // ' + id).join('\n') + '\n');
   const cap8 = tempRepo(d => { capFile(d, 'eight.js', capIds); capFile(d, 'nine.js', capIds.concat('A1')); });
   const wholeOf = name => docket(['near'], { cwd: cap8, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path.join(cap8, 'test', 'fixture', name), content: 'x' } }) });
-  const c8 = wholeOf('eight.js'), c8ids = c8.out.split('\n').filter(l => /^  [AR]\d+  /.test(l));
-  ok('near: exactly eight distinct rulings — the cap itself — are all listed, and no +more line appears (it appears when MORE than eight are cited)', c8.code === 0 && c8ids.length === 8 && !/\+\d+ more/.test(c8.out), c8.out);
-  const c9 = wholeOf('nine.js'), c9ids = c9.out.split('\n').filter(l => /^  [AR]\d+  /.test(l));
-  ok('near: one above the cap lists eight and says +1 more', c9.code === 0 && c9ids.length === 8 && /\n  \+1 more\n/.test(c9.out), c9.out);
+  const idsOf = r => r.out.split('\n').filter(l => /^  [AR]\d+  /.test(l)).map(l => l.trim().split(/\s+/)[0]);
+  const c8 = wholeOf('eight.js'), c8ids = idsOf(c8);
+  ok('near: exactly eight distinct rulings — the cap itself — are all listed, in the file\'s own order, and no +more line appears', c8.code === 0 && c8ids.join(',') === capIds.join(',') && !/\+\d+ more/.test(c8.out), c8.out);
+  const c9 = wholeOf('nine.js'), c9ids = idsOf(c9);
+  ok('near: one above the cap lists the eight cited earliest, in that order, and says +1 more — the ninth, cited last, is the one dropped', c9.code === 0 && c9ids.join(',') === capIds.join(',') && /\n  \+1 more\n/.test(c9.out) && !/\bA1\b/.test(c9.out), c9.out);
   const c7 = tempRepo(d => capFile(d, 'seven.js', capIds.slice(0, 7)));
   const c7o = docket(['near'], { cwd: c7, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path.join(c7, 'test', 'fixture', 'seven.js'), content: 'x' } }) });
   ok('near: one below the cap lists seven and says nothing more', c7o.code === 0 && c7o.out.split('\n').filter(l => /^  [AR]\d+  /.test(l)).length === 7 && !/\+\d+ more/.test(c7o.out), c7o.out);
@@ -1191,6 +1192,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('near: a file holding a NUL byte is not governed — near is silent on it, as check is', binNear.code === 0 && binNear.out === '' && binNear.err === '' && !/blob\.dat/.test(binCheck.out), binNear.out + '|' + binNear.err + '|' + binCheck.out);
   ok('…and the binary file is not counted in the governed tree either', /check: ok \(1 ledger, 11 governed-tree files\)/.test(binCheck.out), binCheck.out);
   // one governed file under a ledger is a file, not files
+  const LONE_LEDGER2 = '# Rulings\n\nPrinciples:\n\n- **Capture precedes structure**\n\n### R1. One ruling governs this tree (issue #85)\nPrinciple: Capture precedes structure.\nA file reached through a link is a file. Reason: one tree, one answer.\n';
   const LONE_LEDGER = '# Rulings\n\nPrinciples:\n\n- Capture precedes structure\n\n### R1. One file is governed here\nPrinciple: Capture precedes structure.\nThe tree below holds one file that cites it. Reason: the count is a boundary.\n';
   const oneDir = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-one-'));
   fs.writeFileSync(path.join(oneDir, 'DECISIONS.md'), LONE_LEDGER);
@@ -1294,8 +1296,9 @@ const SEC = String.fromCharCode(0xa7);
   // the table's row names replace_all false, and the payload a host sends always carries the field
   const raFalse = docket(['near'], { cwd: FIX, input: nearInput(APP, "  el.classList.add('note');", { replace_all: false }) });
   ok('near: many matches with replace_all given as false is silent, exactly as omitting it is', raFalse.code === 0 && raFalse.out === '' && raFalse.err === '' && docket(['near'], { cwd: FIX, input: nearInput(APP, "  el.classList.add('note');") }).out === '', raFalse.out + '|' + raFalse.err);
-  // D2 reasons from the fixture's density and its addendum records what the fixture yields: the numbers are
-  // measured here, so the fixture cannot drift away from the ruling the window and the cap rest on.
+  // D2's reason estimates one citing line per twelve; its addendum measures what this fixture actually
+  // yields, and the ledger keeps both, the later one winning. The measurement is repeated here so the
+  // fixture cannot drift away from the addendum that records it, and so the two numbers stay told apart.
   const denLines = read(APP).split('\n'), denN = denLines.length;
   const denIds = new Set(JSON.parse(docket(['index'], { cwd: FIX }).out).rulings.map(x => x.id));
   const denCited = l => (l.match(/\b[A-Za-z]+[1-9][0-9]*\b/g) || []).filter(x => denIds.has(x));
@@ -1303,7 +1306,7 @@ const SEC = String.fromCharCode(0xa7);
   const denWindow = a => { const seen = new Set(); for (let k = Math.max(1, a - 20); k <= Math.min(denN, a + 20); k++) for (const id of denCited(denLines[k - 1])) seen.add(id); return seen.size; };
   const denAnchored = denCiting.map(([a]) => denWindow(a)), denEvery = denLines.map((_, k) => denWindow(k + 1));
   const denMean = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 100) / 100;
-  ok('the fixture is built at the density D2 reasons from, and at the one its addendum records: one citing line per 13, never six rulings in a window and never the cap', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.67, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
+  ok('the fixture is built at the density D2\'s addendum measures — one citing line per 13, not the one per 12 its reason estimated — and never holds six rulings in a window, nor reaches the cap', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.67, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
   // a ledger with two line endings is not written to: the write would have to rewrite lines this
   // entry does not touch, and check 7 compares line for line, so it could not see that it had (D4)
   const mixed = tempRepo(d => {
@@ -1329,6 +1332,63 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['check'], { cwd: path.join(wide, 'sub'), env: { CLAUDE_PROJECT_DIR: wide } });
   ok('check under a directory that is not a repository and holds more than twenty thousand entries says so, and does not read them all', r.code === 2 && /holds more than 20000 entries and is not a git repository/.test(r.err) && Date.now() - wideStart < 30000, r.code + '|' + r.err.slice(0, 120));
   fs.rmSync(wide, { recursive: true, force: true });
+  // FORMAT.md 6 states a rule that ends — "pending until a later ruling has an edge into the entry
+  // (any verb)" — and a ledger shows only the side it happens to be on. Both sides are built here.
+  const b3AddCwd = path.join(tempRepo(), 'test', 'fixture');
+  const b3PendingOf = () => { const j = JSON.parse(docket(['status', '--json'], { cwd: b3AddCwd }).out); return j.pendingAddenda.map(a => a.id).sort().join(','); };
+  const b3PendBefore = b3PendingOf();
+  ok('status: an addendum with no later ruling naming its entry is pending', b3PendBefore === 'R2', b3PendBefore);
+  for (const verb of ['keeps', 'extends', 'supersedes', 'refines', 'waives', 'reverses']) {
+    const b3One = path.join(tempRepo(), 'test', 'fixture');
+    const b3Ap = docket(['append', '--title', 'It names R2', '--issue', '81', '--principle', 'Zero cognitive tax', '--edge', verb + ' R2', '--body', 'Reason: r.'], { cwd: b3One });
+    const b3After = JSON.parse(docket(['status', '--json'], { cwd: b3One }).out).pendingAddenda.map(a => a.id);
+    ok('status: once a later ruling has an edge into the entry — ' + verb + ', as any verb does — the addendum is no longer pending', b3Ap.code === 0 && !b3After.includes('R2'), b3Ap.err + JSON.stringify(b3After));
+  }
+  const b3Other = path.join(tempRepo(), 'test', 'fixture');
+  docket(['append', '--title', 'It names R1, not R2', '--issue', '82', '--principle', 'Zero cognitive tax', '--edge', 'extends R1', '--body', 'Reason: r.'], { cwd: b3Other });
+  ok('…while a later ruling that names some other entry leaves this one pending: the edge has to point at the entry', JSON.parse(docket(['status', '--json'], { cwd: b3Other }).out).pendingAddenda.some(a => a.id === 'R2'), docket(['status'], { cwd: b3Other }).out);
+  // near reads what the walk reads, symlink or not: b3One file, b3One answer, in a tree with no git
+  const b3Lk = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-link-'));
+  fs.writeFileSync(path.join(b3Lk, 'DECISIONS.md'), LONE_LEDGER2);
+  fs.writeFileSync(path.join(b3Lk, 'real.js'), 'const a = 1;   // R1\n');
+  fs.symlinkSync(path.join(b3Lk, 'real.js'), path.join(b3Lk, 'link.js'));
+  fs.symlinkSync(path.join(os.tmpdir(), 'docket-nowhere-' + process.pid), path.join(b3Lk, 'broken.js'));
+  const b3LkNear = docket(['near'], { cwd: b3Lk, input: nearInput(path.join(b3Lk, 'link.js'), 'const a'), env: { CLAUDE_PROJECT_DIR: '' } });
+  const b3LkGov = docket(['governs', 'R1'], { cwd: b3Lk, env: { CLAUDE_PROJECT_DIR: '' } });
+  const b3LkChk = docket(['check'], { cwd: b3Lk, env: { CLAUDE_PROJECT_DIR: '' } });
+  ok('a symlink to a file in the tree is that file for every command: near reports it governed, governs lists it, check counts it', b3LkNear.out.includes('R1') && /link\.js/.test(b3LkGov.out) && /3 governed-tree files/.test(b3LkChk.out), b3LkNear.out + '|' + b3LkGov.out + '|' + b3LkChk.out);
+  ok('…and a symlink that leads nowhere is no file at all', !/broken\.js/.test(b3LkChk.out) && docket(['near'], { cwd: b3Lk, input: nearInput(path.join(b3Lk, 'broken.js'), 'x'), env: { CLAUDE_PROJECT_DIR: '' } }).out === '', b3LkChk.out);
+  // a ledger carries nothing that changes what a reader is shown without changing what is written
+  for (const [name, ch, shown] of [['an escape', '\u001b[31m', 'U+001B'], ['a right-to-left override', '\u202e', 'RLO'], ['a NUL', '\u0000', 'U+0000']]) {
+    const b3Ug = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.appendFileSync(q, '\n### R9. A heading carrying ' + ch + 'something (issue #83)\nPrinciple: Capture precedes structure.\nReason: r.\n'); });
+    r = docket(['check'], { cwd: b3Ug });
+    ok('check 2: an entry carrying ' + name + ' is named, not passed over', r.code === 1 && r.out.includes('check 2: R9: the text carries ' + shown), r.out);
+  }
+  // a bullet the principles grammar cannot read is said, not swallowed
+  const b3Pb = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace('- **Zero cognitive tax.**', '- Forgot to bold this one\n- **Zero cognitive tax.**')); });
+  r = docket(['principles'], { cwd: path.join(b3Pb, 'test', 'fixture') });
+  ok('principles: a bullet with no bolded name is reported, not silently dropped', r.code === 0 && /info  .*PRD\.md:\d+: a bullet with no bolded name/.test(r.out) && /Zero cognitive tax/.test(r.out), r.out);
+  r = docket(['check'], { cwd: b3Pb });
+  ok('…and check says it too, where the ledger is read', r.code === 0 && /a bullet with no bolded name in the principles list/.test(r.out), r.out);
+  // b3One row, b3One ratio
+  const b3TwoR = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', 'AA needs 4.5:1; measured 15.04:1')); });
+  r = docket(['spec-check'], { cwd: path.join(b3TwoR, 'test', 'fixture') });
+  ok('spec-check (b): a row stating two ratios is refused rather than judged on whichever comes first', r.code === 1 && /a row states one ratio/.test(r.out), r.out);
+  // a contrast row naming a colour with an alpha channel is refused, and the grammar allows 4 and 8 digits
+  const b3AlphaRow = tempRepo(d => {
+    const q = path.join(d, 'test', 'fixture', 'UIUX.md'), c = path.join(d, 'test', 'fixture', 'styles.css');
+    fs.writeFileSync(c, read(c).replace('--ink: #1b1b1b;', '--ink: #1b1b1bff;'));
+    fs.writeFileSync(q, read(q).replace('`#1b1b1b`', '`#1b1b1bff`'));
+  });
+  r = docket(['spec-check'], { cwd: path.join(b3AlphaRow, 'test', 'fixture') });
+  ok('spec-check: an eight-digit hex is a colour the grammar allows, and a contrast row naming b3One is refused rather than recomputed without its alpha', r.code === 1 && /alpha/.test(r.out), r.out);
+  // append writes, then checks: the entry is there even when the ledger as a whole does not pass
+  const b3Wf = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const bad = 1;   // R99\n'));
+  const b3WfCwd = path.join(b3Wf, 'test', 'fixture');
+  r = docket(['append', '--title', 'Written while the tree is broken', '--issue', '84', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: b3WfCwd });
+  ok('append: a check that fails b3After the write says so, exits 1, and the entry is written all the same — exit 1 does not mean nothing happened', r.code === 1 && /check: 1 failure\(s\) — the ledger is written; fix before you rely on it/.test(r.out) && read(path.join(b3WfCwd, 'DECISIONS.md')).includes('### R9. Written while the tree is broken'), r.out + r.err);
+  const b3R5 = JSON.parse(docket(['index'], { cwd: FIX }).out).rulings.find(x => x.id === 'R5');
+  ok('the fixture carries the sentence a later change is meant to make stale: R5 ties its tab count to the section count in the file, and the file states that count', /three tabs/.test(b3R5.body) && /section count in `app\.js`/.test(b3R5.body) && /const SECTIONS = \['now', 'next', 'later'\]/.test(read(APP)), b3R5.body);
   // the core requires Node built-ins only (dependency-free)
   const reqs = Array.from(read(CORE).matchAll(/require\((['"])([^'"]+)\1\)/g)).map(m => m[2]);
   ok('the core loads nothing by a name it computes: every require names a literal', !/require\(\s*[^'")]/.test(read(CORE)) && !/\bimport\s*\(/.test(read(CORE)), 'computed require or dynamic import');
