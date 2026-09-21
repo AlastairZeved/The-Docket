@@ -85,7 +85,10 @@ function isTextFile(p) {
   } catch (e) { return false; } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 function rel(from, to) { const r = path.relative(from, to); return r === '' ? '.' : r.split(path.sep).join('/'); }
-function splitLines(text) { return text.split(/\r?\n/); }
+// One trailing newline ends the last line; it does not open another. A file of 260 lines that
+// ends as files do read as 260 here, which is what the ledger says the witness counts and what
+// every window bound and every line number is measured against (FORMAT.md 1).
+function splitLines(text) { return text.replace(/\r?\n$/, '').split(/\r?\n/); }
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function uniq(arr) { return Array.from(new Set(arr)); }
 function stripMarks(s) { return s.replace(/`/g, '').replace(/\*\*/g, ''); }

@@ -1687,6 +1687,13 @@ const SEC = String.fromCharCode(0xa7);
     ok('hooks.json wraps its events in a "hooks" object, as a settings file does', H.hooks && typeof H.hooks === 'object' && !Array.isArray(H.hooks), Object.keys(H).join(','));
     const pre = (H.hooks.PreToolUse || [])[0], ses = (H.hooks.SessionStart || [])[0];
     ok('hooks.json binds PreToolUse and SessionStart, and nothing else at this phase', Object.keys(H.hooks).sort().join(',') === 'PreToolUse,SessionStart', Object.keys(H.hooks).join(','));
+    // Each event has ONE matcher group holding ONE handler. A second of either fires the core twice
+    // for one edit — a hook with two homes, which is what D5 and D6 are for — and every assertion
+    // below reads index [0], so nothing but a count can see it.
+    for (const ev of ['PreToolUse', 'SessionStart']) {
+      ok(ev + ' has exactly one matcher group, so the core cannot be invoked twice for one event', Array.isArray(H.hooks[ev]) && H.hooks[ev].length === 1, ev + ': ' + (H.hooks[ev] || []).length + ' groups');
+      ok('…and that group holds exactly one handler, for the same reason', H.hooks[ev] && H.hooks[ev][0] && Array.isArray(H.hooks[ev][0].hooks) && H.hooks[ev][0].hooks.length === 1, ev + ': ' + ((H.hooks[ev] || [])[0] || {}).hooks?.length + ' handlers');
+    }
 
     // PreToolUse: the matcher names BOTH tools that write to a file. One alone leaves the
     // other unwatched, which is the whole of job 1 for half the ways a file changes.
@@ -1742,6 +1749,12 @@ const SEC = String.fromCharCode(0xa7);
       ok('the skill’s "/docket ' + v + '" is a subcommand the core answers', new RegExp("['\"]?" + v + "['\"]?\\s*[:,]").test(table) || new RegExp('\\b' + v + '\\b').test(table), v + ' not in the dispatch table');
     }
     ok('the skill does not advertise a verb this phase has not built', !/\/docket diff\b/.test(sk), 'names /docket diff');
+    // The loop above only sees verbs the file mentions, so a verb deleted from the skill is invisible
+    // to it, and `status` — offered without an argument, so never written as "/docket status" — is
+    // invisible by construction. Name the three this phase ships, each on its own.
+    for (const v of ['status', 'query', 'governs']) {
+      ok('the skill still offers "' + v + '", which this phase built', new RegExp('\\b' + v + '\\b').test(sk), v + ' missing from the skill');
+    }
   }
 }
 

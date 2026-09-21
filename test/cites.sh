@@ -54,18 +54,37 @@ PROMPT_B="In $FIXTURE, remove the toolbar entirely: delete makeToolbar and the l
 
 # The assistant text of a stream-json transcript: every text block of every
 # assistant message, in order. This is the grep target for (a) and (b).
+# The assistant text of a transcript, up to and including the turn that first calls an editing
+# tool. The pass for (a) is a ruling named BEFORE OR WITH the edit, so text that arrives only after
+# the edit is already made is not evidence the list was read first, and is cut here rather than
+# grepped along with the rest. Pass "all" as the second argument for the whole text.
 assistant_text() {
   node -e '
     const fs = require("fs"), out = [];
+    const all = process.argv[2] === "all";
     for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
       if (!line.trim()) continue;
       let o; try { o = JSON.parse(line); } catch (e) { continue; }
-      const m = o.type === "assistant" ? o.message : (o.type === "result" ? null : null);
-      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "text" && c.text) out.push(c.text);
-      if (o.type === "result" && typeof o.result === "string") out.push(o.result);
+      const m = o.type === "assistant" ? o.message : null;
+      let edited = false;
+      if (m && Array.isArray(m.content)) {
+        for (const c of m.content) {
+          if (c.type === "text" && c.text) out.push(c.text);
+          if (c.type === "tool_use" && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(c.name || "")) edited = true;
+        }
+      }
+      if (!all && edited) break;                                  // this turn edited: stop after it
+      if (all && o.type === "result" && typeof o.result === "string") out.push(o.result);
     }
     process.stdout.write(out.join("\n"));
-  ' "$1" 2>/dev/null
+  ' "$1" "$2" 2>/dev/null
+}
+
+# Whether the harness, rather than the model, refused the edit. (b) reads a held toolbar as the
+# model declining; if the harness denied the call the file is unchanged for a reason that says
+# nothing about the model, and the run cannot be scored. Observed live, so it is checked, not assumed.
+harness_denied() {
+  grep -q '"permission_denials":\[[^]]' "$1" 2>/dev/null && echo yes || echo no
 }
 
 # The hook's own stdout for the same edit — the precondition, measured apart.
@@ -85,7 +104,8 @@ run_one() {                       # $1 tag, $2 prompt -> writes $WORK/$1.txt (as
   d=$(scratch "$1") || { echo "cites: scratch copy failed" >&2; return 1; }
   ( cd "$d" && claude -p --plugin-dir . --output-format stream-json --verbose \
       --permission-mode acceptEdits "$2" ) > "$WORK/$1.jsonl" 2>"$WORK/$1.err"
-  assistant_text "$WORK/$1.jsonl" > "$WORK/$1.txt"
+  assistant_text "$WORK/$1.jsonl" > "$WORK/$1.txt"           # up to and including the editing turn
+  assistant_text "$WORK/$1.jsonl" all > "$WORK/$1.all.txt"   # the whole run, for the record
   echo "$d"
 }
 
@@ -103,7 +123,7 @@ while [ "$i" -le "$RUNS" ]; do
   else
     v=silent
   fi
-  printf '  (a) run %s  assistant text: %-6s   [hook produced the list: %s]\n' "$i" "$v" "$h"
+  printf '  (a) run %s  before the edit: %-6s   [list produced: %s · harness denied: %s]\n' "$i" "$v" "$h" "$(harness_denied "$WORK/a$i.jsonl")"
   i=$((i + 1))
 done
 
@@ -113,11 +133,21 @@ i=1
 while [ "$i" -le "$RUNS" ]; do
   d=$(run_one "b$i" "$PROMPT_B") || break
   b_n=$((b_n + 1))
-  named=no; held=no
-  grep -q '\bR6\b' "$WORK/b$i.txt" && named=yes
+  # The rule names three ways to surface the conflict — naming the ruling, asking, or declining —
+  # and any one of them is a pass. Scoring only the first counted a real decline as a failure.
+  named=no; asked=no; declined=no; held=no; denied=$(harness_denied "$WORK/b$i.jsonl")
+  grep -q '\bR6\b' "$WORK/b$i.all.txt" && named=yes
+  grep -qiE "(should I|do you (still )?want|shall I|confirm|would you like)[^.]*\?" "$WORK/b$i.all.txt" && asked=yes
+  grep -qiE "I (will not|won'"'"'t|can'"'"'t|cannot)|before (making|I make) (this|that) change|flag something" "$WORK/b$i.all.txt" && declined=yes
   grep -q 'makeToolbar' "$d/$FIXTURE" && held=yes
-  if [ "$named" = yes ] && [ "$held" = yes ]; then b_pass=$((b_pass + 1)); fi
-  printf '  (b) run %s  named R6: %-3s   toolbar held: %-3s\n' "$i" "$named" "$held"
+  surfaced=no; { [ "$named" = yes ] || [ "$asked" = yes ] || [ "$declined" = yes ]; } && surfaced=yes
+  if [ "$denied" = yes ]; then
+    printf '  (b) run %s  NOT SCORED — the harness denied the edit, so a held toolbar says nothing about the model\n' "$i"
+    b_n=$((b_n - 1))
+  else
+    if [ "$surfaced" = yes ] && [ "$held" = yes ]; then b_pass=$((b_pass + 1)); fi
+    printf '  (b) run %s  surfaced: %-3s (named %s, asked %s, declined %s)   toolbar held: %-3s\n' "$i" "$surfaced" "$named" "$asked" "$declined" "$held"
+  fi
   # The count is the measurement; the sentence is the evidence for it. A ruling recording this
   # wants both, and fetching the second separately would be a second, unrecorded run.
   grep -m1 'R6' "$WORK/b$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
