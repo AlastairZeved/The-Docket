@@ -1088,16 +1088,29 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and append --baseline lists it beside app.js, after which check passes', r.code === 0 && /^<!-- docket: bare-cites app\.js=3 second\.js=1 -->$/m.test(r.out) && /check: ok/.test(r.out), r.out + r.err);
   // three appends at once: each writes its own entry with its own id — before the lock, one was silently carried away
   // while every caller was told "check: ok" (D4: a record that can be rewritten proves nothing about what was tried)
-  const race = tempRepo(), raceCwd = path.join(race, 'test', 'fixture');
-  const raceSh = cp.spawnSync('bash', ['-c',
-    'pids=""; for n in 1 2 3; do node "$1" append --title "Racer $n" --issue "6$n" --principle "Zero cognitive tax" --body "Reason: r$n." >/dev/null 2>&1 & pids="$pids $!"; done; for p in $pids; do wait $p; echo "exit=$?"; done',
-    'x', CORE], { cwd: raceCwd, encoding: 'utf8' });
-  const raceCodes = raceSh.stdout.split('\n').filter(Boolean).map(l => Number(l.replace('exit=', '')));
-  const raceIdx = JSON.parse(docket(['index'], { cwd: raceCwd }).out);
-  const raceTitles = raceIdx.rulings.filter(r => /^Racer /.test(r.title)).map(r => r.title).sort().join(',');
-  ok('three appends at once all succeed, and all three entries are in the ledger with distinct ids — none carried away', raceCodes.join(',') === '0,0,0' && raceIdx.rulings.length === 12 && raceTitles === 'Racer 1,Racer 2,Racer 3' && new Set(raceIdx.rulings.map(r => r.id)).size === 12, JSON.stringify([raceCodes, raceTitles, raceIdx.rulings.length]));
-  ok('…and the lock file is gone when they are done', !fs.existsSync(path.join(raceCwd, 'DECISIONS.md.lock')), raceCwd);
-  r = docket(['check'], { cwd: race });
+  // Six at once, three rounds: one round of three let the loss through about one run in six, because the
+  // caller that loses is the one whose lock a *finishing* append unlinked, and that ordering is not every run's.
+  const RACERS = 6, ROUNDS = 3;
+  let raceWhy = '', raceOk = true, raceLast = null;
+  for (let round = 1; round <= ROUNDS && raceOk; round++) {
+    const race1 = tempRepo(), race1Cwd = path.join(race1, 'test', 'fixture');
+    raceLast = race1;
+    const raceSh = cp.spawnSync('bash', ['-c',
+      'pids=""; for n in $(seq 1 ' + RACERS + '); do node "$1" append --title "Racer $n" --issue "6$n" --principle "Zero cognitive tax" --body "Reason: r$n." >/dev/null 2>&1 & pids="$pids $!"; done; for p in $pids; do wait $p; echo "exit=$?"; done',
+      'x', CORE], { cwd: race1Cwd, encoding: 'utf8' });
+    const raceCodes = raceSh.stdout.split('\n').filter(Boolean).map(l => Number(l.replace('exit=', '')));
+    const raceIdx = JSON.parse(docket(['index'], { cwd: race1Cwd }).out);
+    const raceTitles = raceIdx.rulings.filter(r => /^Racer /.test(r.title)).map(r => r.title).sort().join(',');
+    const want = Array.from({ length: RACERS }, (_, k) => 'Racer ' + (k + 1)).sort().join(',');
+    const lockLeft = fs.readdirSync(race1Cwd).filter(f => /\.lock$/.test(f));
+    if (!(raceCodes.length === RACERS && raceCodes.every(c => c === 0) && raceIdx.rulings.length === 9 + RACERS
+          && raceTitles === want && new Set(raceIdx.rulings.map(x => x.id)).size === 9 + RACERS && !lockLeft.length)) {
+      raceOk = false;
+      raceWhy = 'round ' + round + ': ' + JSON.stringify([raceCodes, raceTitles, raceIdx.rulings.length, lockLeft]);
+    }
+  }
+  ok('six appends at once, three rounds: every one succeeds, every entry is in the ledger with its own id, and no lock is left behind — none carried away', raceOk, raceWhy);
+  r = docket(['check'], { cwd: raceLast });
   ok('…and the ledger they wrote together passes check', r.code === 0 && /check: ok/.test(r.out), r.out + r.err);
   // --edge writes the slash-joined form the grammar reads (FORMAT.md 5)
   const sl2 = tempRepo(), sl2Cwd = path.join(sl2, 'test', 'fixture');
@@ -1256,6 +1269,41 @@ const SEC = String.fromCharCode(0xa7);
   fs.writeFileSync(stFile, JSON.stringify({ last: { session: 'sess-A', verdict: 'FAIL', at: 'x', failures: 1 }, sessions: { 'sess-A': { blocks: 6, surfaced: true } } }));
   r = docket(['status'], { cwd: path.join(stDir, 'test', 'fixture') });
   ok('…and a state file that does record the session says the stretch is surfaced', r.code === 0 && /SURFACED/.test(r.out), r.out);
+  const twiceB = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(q, read(q).replace('<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=3 app.js=999 -->')); });
+  r = docket(['check'], { cwd: twiceB });
+  ok('check 4: a file listed twice in the baseline is a fault, not a silent last-wins allowance', r.code === 1 && /check 4: bare-cites baseline: app\.js is listed twice; a file carries one allowance/.test(r.out), r.out);
+  // check 7 compares the two versions line for line, not byte for byte: a checkout that changed only the
+  // line endings is not an amendment (FORMAT.md 1, 13). Every other line-ending test commits the converted
+  // file, so the working tree and the committed version are in one style and this comparison never runs.
+  const eolC = tempRepo();
+  const eolLedger = path.join(eolC, 'test', 'fixture', 'DECISIONS.md');
+  fs.writeFileSync(eolLedger, read(eolLedger).replace(/\n/g, '\r\n'));
+  r = docket(['check'], { cwd: eolC });
+  ok('check 7: a ledger the checkout rewrote to CRLF is not an amendment of the version committed with LF', r.code === 0 && !/check 7: /.test(r.out), r.out);
+  fs.appendFileSync(eolLedger, '\r\n### R9. Appended under CRLF (issue #76)\r\nPrinciple: Capture precedes structure.\r\nAppended, not amended. Reason: r.\r\n');
+  r = docket(['check'], { cwd: eolC });
+  ok('…and an entry appended to that CRLF working copy is an append, not a change to what came before', r.code === 0 && !/check 7: /.test(r.out), r.out);
+  fs.writeFileSync(eolLedger, read(eolLedger).replace('The toolbar replaces the long-press menu', 'The toolbar replaced the long-press menu'));
+  r = docket(['check'], { cwd: eolC });
+  ok('…while a heading edited in that same CRLF copy is still caught: the line endings are normalised, the words are not', r.code === 1 && /check 7: R6: heading changed/.test(r.out), r.out);
+  // index's whole shape, as every other subcommand's --json shape is pinned: an extra or renamed top-level
+  // field is a change to the parse the core hands out, and is said here rather than found by a reader later.
+  const ixShape = JSON.parse(docket(['index'], { cwd: FIX }).out);
+  ok('index prints the whole parse and nothing else: the ledger, its prefixes, the two preamble directives, rulings, sections, specs', Object.keys(ixShape).join(',') === 'ledger,prefixes,contractFrom,baseline,rulings,sections,specs', Object.keys(ixShape).join(','));
+  ok('…and index takes --json like every other subcommand, printing the same object', docket(['index', '--json'], { cwd: FIX }).out === docket(['index'], { cwd: FIX }).out, docket(['index', '--json'], { cwd: FIX }).err);
+  // the table's row names replace_all false, and the payload a host sends always carries the field
+  const raFalse = docket(['near'], { cwd: FIX, input: nearInput(APP, "  el.classList.add('note');", { replace_all: false }) });
+  ok('near: many matches with replace_all given as false is silent, exactly as omitting it is', raFalse.code === 0 && raFalse.out === '' && raFalse.err === '' && docket(['near'], { cwd: FIX, input: nearInput(APP, "  el.classList.add('note');") }).out === '', raFalse.out + '|' + raFalse.err);
+  // D2 reasons from the fixture's density and its addendum records what the fixture yields: the numbers are
+  // measured here, so the fixture cannot drift away from the ruling the window and the cap rest on.
+  const denLines = read(APP).split('\n'), denN = denLines.length;
+  const denIds = new Set(JSON.parse(docket(['index'], { cwd: FIX }).out).rulings.map(x => x.id));
+  const denCited = l => (l.match(/\b[A-Za-z]+[1-9][0-9]*\b/g) || []).filter(x => denIds.has(x));
+  const denCiting = denLines.map((l, k) => [k + 1, denCited(l)]).filter(([, c]) => c.length);
+  const denWindow = a => { const seen = new Set(); for (let k = Math.max(1, a - 20); k <= Math.min(denN, a + 20); k++) for (const id of denCited(denLines[k - 1])) seen.add(id); return seen.size; };
+  const denAnchored = denCiting.map(([a]) => denWindow(a)), denEvery = denLines.map((_, k) => denWindow(k + 1));
+  const denMean = xs => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 100) / 100;
+  ok('the fixture is built at the density D2 reasons from, and at the one its addendum records: one citing line per 13, never six rulings in a window and never the cap', denCiting.length === 20 && Math.round(denN / denCiting.length) === 13 && Math.max(...denEvery) === 5 && Math.min(...denEvery) === 0 && Math.max(...denAnchored) === 5 && Math.min(...denAnchored) === 2 && denMean(denAnchored) === 3.5 && denMean(denEvery) === 2.67, JSON.stringify([denN, denCiting.length, Math.min(...denAnchored), Math.max(...denAnchored), denMean(denAnchored), denMean(denEvery)]));
   // the core requires Node built-ins only (dependency-free)
   const reqs = Array.from(read(CORE).matchAll(/require\((['"])([^'"]+)\1\)/g)).map(m => m[2]);
   ok('the core loads nothing by a name it computes: every require names a literal', !/require\(\s*[^'")]/.test(read(CORE)) && !/\bimport\s*\(/.test(read(CORE)), 'computed require or dynamic import');

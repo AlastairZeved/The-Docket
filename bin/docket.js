@@ -297,7 +297,10 @@ function parseLedger(text, ledgerPath) {
       hasBaseline = true; firstAt.bareCites = li + 1;
       for (const kv of m[1].trim().split(/\s+/).filter(Boolean)) {
         const eq = kv.lastIndexOf('=');
-        if (eq > 0 && /^\d+$/.test(kv.slice(eq + 1))) baseline[kv.slice(0, eq)] = Number(kv.slice(eq + 1));
+        // One file, one allowance: a repeated key would let the later number raise a reviewed allowance
+        // in silence, as a second baseline comment or a second contract line would (FORMAT.md 9, 11).
+        if (eq > 0 && Object.prototype.hasOwnProperty.call(baseline, kv.slice(0, eq))) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: ' + kv.slice(0, eq) + ' is listed twice; a file carries one allowance (FORMAT.md 9)' });
+        else if (eq > 0 && /^\d+$/.test(kv.slice(eq + 1))) baseline[kv.slice(0, eq)] = Number(kv.slice(eq + 1));
         else directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: "' + kv + '" is not <file>=<count> (FORMAT.md 9)' });   // a pair that is not a count is no allowance, and check says so
       }
     }
@@ -922,16 +925,25 @@ const LOCK_WAIT_MS = 5000;
 function lockedLedger(argv) {
   const scoped = ledgerFromCwd(argv);
   const lockPath = scoped.ledger.path + '.lock';
+  const mine = 'docket ' + process.pid + '\n';
   let fd = null, waited = 0;
   while (fd === null) {
-    try { fd = fs.openSync(lockPath, 'wx'); }
+    try { fd = fs.openSync(lockPath, 'wx'); fs.writeSync(fd, mine); }   // the holder names itself, so a release frees its own lock and no other
     catch (e) {
       if (e.code !== 'EEXIST') throw e;
       if (waited >= LOCK_WAIT_MS) die('append: ' + rel(scoped.root, scoped.ledger.path) + ' is held by another append that has not finished; if none is running, remove ' + rel(scoped.root, lockPath), 2);
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); waited += 25;   // a plain sleep, no dependency
     }
   }
-  const release = () => { try { fs.closeSync(fd); } catch (e) {} try { fs.unlinkSync(lockPath); } catch (e) {} };
+  // Released once, and only while it is still ours: a second release at exit, after another append has
+  // taken the lock, would unlink that one's and let two writers read the same last id.
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    try { fs.closeSync(fd); } catch (e) {}
+    try { if (fs.readFileSync(lockPath, 'utf8') === mine) fs.unlinkSync(lockPath); } catch (e) {}
+  };
   process.on('exit', release);                                        // die() exits, so the lock never outlives the command
   return { root: scoped.root, ledger: loadLedger(scoped.ledger.path), release };
 }
