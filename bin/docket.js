@@ -462,7 +462,13 @@ function codeCites(ctx, ledger) {
   const cites = [];
   for (const e of ctx.files) {
     if (e.ledger !== ledger.path || isLedgerDoc(e.path)) continue;
-    const seen = new Set();                                           // one line, one cite: the same id twice on a line is one reliance, as near and status read it
+    // One line, one cite, HERE: the same id twice on a line is one reliance for the code-cite
+    // lists — what governs prints and what "cited nowhere" counts. near does not share this
+    // rule: its count is per occurrence and is the first key of two of its three orders
+    // (FORMAT.md 15, which says two matches on one line are one anchor, and says nothing
+    // about two cites on one line). The two readings differ on purpose; neither speaks for
+    // the other.
+    const seen = new Set();
     for (const c of citesIn(fileText(e), ledger)) if (c.exists && !seen.has(c.id + ':' + c.line)) { seen.add(c.id + ':' + c.line); cites.push(Object.assign({ file: e.path, rel: e.rel }, c)); }
   }
   return cites;
@@ -1226,6 +1232,11 @@ function parseArgv(args) {
     const a = raw[i];
     if (BARE_FLAGS.has(a)) continue;
     if (TAKES_VALUE.has(a)) {
+      // Given twice, one value is the one meant and the other is not, and the tool cannot know which.
+      // flag() reads the first; a ruling written from the wrong one could never be unwritten (D4), so
+      // the ambiguity is refused before the write rather than resolved by position. --edge repeats by
+      // design (FORMAT.md 4: the same edge twice is one edge) and is the one exception.
+      if (a !== '--edge' && raw.indexOf(a) !== i) die('docket: ' + a + ' is given more than once, with different values — name it once', 2);
       // A value is missing, or is the next flag's own name — the shell dropped an empty variable.
       // Writing "--issue" into a ruling's title would be permanent, so this is a usage error, not a value.
       if (i + 1 >= raw.length) die('docket: ' + a + ' needs a value', 2);

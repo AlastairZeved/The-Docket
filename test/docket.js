@@ -20,6 +20,12 @@ function docket(args, opts) {
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
 function read(p) { return fs.readFileSync(p, 'utf8'); }
+function firstDiff(a, b) {
+  const x = a.split('\n'), y = b.split('\n');
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if (x[i] !== y[i]) return 'line ' + (i + 1) + ': ' + JSON.stringify(x[i]) + ' vs ' + JSON.stringify(y[i]);
+  return 'none';
+}
+
 function expected(name) { return read(path.join(FIX, 'expected', name)); }
 // A temp repository laid out like this one (test/fixture/…) so paths in outputs match byte for byte.
 function tempRepo(mutate) {
@@ -1464,7 +1470,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('the core requires only Node built-ins', reqs.length >= 4 && reqs.every(m => ['fs', 'path', 'os', 'child_process', 'crypto'].includes(m)), reqs.join(','));
 }
 
-// ── what batch 5 showed the blind reader could not see ──────────────────────
+// ── an order's first key, plain output, and the cases a tie cannot reach ────
 // A tie-break test holds the earlier key constant by construction, so it can never show
 // that the earlier key is the wrong one. These build the case where the keys DISAGREE.
 {
@@ -1577,6 +1583,93 @@ const SEC = String.fromCharCode(0xa7);
     ok(f + ': a workflow that runs the docket fetches the whole history, so check 7 can compare against a parent rather than skip', /fetch-depth:\s*0\b/.test(y), depth);
     ok(f + ': …and it does not ask for a shallow one, which would make that skip permanent', !/fetch-depth:\s*[1-9]/.test(y), depth);
   }
+}
+
+// ── the usage text is a claim about behaviour, so it is checked against behaviour ─
+// Every line of --help that names an exit code is a promise. Nothing compared those
+// promises to each other or to what the tool does, so a usage line could contradict the
+// contract eleven lines below it and every test would still pass.
+{
+  const help = docket(['--help']);
+  ok('--help prints the usage and exits 0', help.code === 0 && /Exit codes:/.test(help.out), help.code + '|' + help.out.slice(0, 80));
+  const summary = help.out.match(/Exit codes:\s*(.+)/);
+  ok('--help states the exit-code contract in one place', !!summary, help.out);
+  const contract = summary ? summary[1] : '';
+  const failedCheckCode = (contract.match(/(\d+)\s+a failed check/) || [])[1];
+  const usageErrCode = (contract.match(/(\d+)\s+usage error/) || [])[1];
+  ok('…naming the code for a failed check and the code for a usage error', failedCheckCode === '1' && usageErrCode === '2', contract);
+
+  // Every per-subcommand "exit N on a failure" must be the code the contract assigns.
+  const perCommand = Array.from(help.out.matchAll(/^\s{2}docket (\S+)[^\n]*?\(exit (\d+) on a failure\)/gm));
+  ok('at least one subcommand line states its own exit code', perCommand.length >= 1, help.out);
+  for (const m of perCommand) {
+    ok('--help: "' + m[1] + ' … exit ' + m[2] + ' on a failure" agrees with the contract line below it', m[2] === failedCheckCode, m[0] + ' vs contract ' + contract);
+  }
+
+  // …and the code the text promises is the code the tool returns.
+  const failing = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 1; // R97\n'));
+  const r = docket(['check'], { cwd: failing });
+  ok('check on a planted failure exits with the code the usage text promises for a failed check', String(r.code) === failedCheckCode, r.code + ' vs ' + failedCheckCode + '|' + r.out);
+  const clean = docket(['check'], { cwd: tempRepo() });
+  ok('…and exits 0 when nothing fails', clean.code === 0, clean.code + '|' + clean.out);
+  const bad = docket(['nosuchsubcommand']);
+  ok('…while an unknown subcommand exits with the code the usage text promises for a usage error', String(bad.code) === usageErrCode, bad.code + ' vs ' + usageErrCode);
+}
+
+// ── the frozen copies are compared whole, not by their headings ──────────────────
+// history/DECISIONS.v1.md and v2.md are specified exactly: v1 is the current ledger minus
+// R8 and R2's addendum, v2 is the current ledger with one heading changed. Comparing only
+// heading lines let a word inside a body drift without anything noticing.
+{
+  const cur = read(path.join(FIX, 'DECISIONS.md'));
+  const v1 = read(path.join(FIX, 'history', 'DECISIONS.v1.md'));
+  const v2 = read(path.join(FIX, 'history', 'DECISIONS.v2.md'));
+  // Derive v1 from current by the two changes its description names, and compare every byte.
+  const entryOf = (t, id) => { const i = t.indexOf('\n### ' + id + '.'); if (i < 0) return null; const j = t.indexOf('\n### ', i + 1); return t.slice(i, j < 0 ? t.length : j); };
+  const r8 = entryOf(cur, 'R8');
+  ok('the current fixture ledger holds R8, the entry v1 is said to predate', !!r8, 'R8 missing');
+  const derived = cur.replace(r8, '').split('\n').filter(l => !/^> Addendum /.test(l)).join('\n');
+  ok('history/DECISIONS.v1.md is the current ledger minus R8 and the addendum, byte for byte, and nothing else drifts', derived.trim() === v1.trim(), 'first difference: ' + firstDiff(derived.trim(), v1.trim()));
+  // v2 differs from current by exactly one line, and it is a heading.
+  const cl = cur.trim().split('\n'), v2l = v2.trim().split('\n');
+  const diffAt = cl.length === v2l.length ? cl.map((l, i) => l === v2l[i] ? -1 : i).filter(i => i >= 0) : null;
+  ok('history/DECISIONS.v2.md differs from the current ledger on exactly one line', diffAt !== null && diffAt.length === 1, diffAt === null ? 'line counts differ' : diffAt.join(','));
+  ok('…and that line is a heading, as its description says', diffAt && diffAt.length === 1 && /^### /.test(cl[diffAt[0]]) && /^### /.test(v2l[diffAt[0]]), diffAt && diffAt.length === 1 ? cl[diffAt[0]] : '');
+}
+
+// ── the last ordering key, in the two modes the earlier pass left out ────────────
+// The column key was added to all three comparators but built only for single-match mode.
+// Drop it from `many` or `whole` today and nothing fails.
+{
+  const HEAD2 = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n'
+    + '### R1. First ruling\nPrinciple: One.\nReason: r.\n\n'
+    + '### R2. Second ruling\nPrinciple: One.\nReason: r.\n';
+  const repo = (shared) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docket-col-'));
+    fs.writeFileSync(path.join(dir, 'DECISIONS.md'), HEAD2);
+    const L = [];
+    for (let i = 1; i <= 40; i++) L.push(i === 10 || i === 30 ? 'ANCHOR();' : (i === 20 ? shared : 'const x' + i + ' = ' + i + ';'));
+    fs.writeFileSync(path.join(dir, 'app.js'), L.join('\n') + '\n');
+    sh('git', ['init', '-q', '-b', 'main'], dir);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], dir);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'col'], dir);
+    return dir;
+  };
+  const order = (dir, extra) => {
+    const r = docket(['near'], { cwd: dir, input: nearInput(path.join(dir, 'app.js'), 'ANCHOR();', extra) });
+    return (r.out.match(/^ {2}(R\d+)/gm) || []).map(x => x.trim()).join(',');
+  };
+  // many: two anchors, both rulings cited once on one shared line equidistant from the first anchor.
+  ok('near many: two rulings on one line, tied on count, distance and line, list by the earlier on that line', order(repo('// R1 and R2 share this line'), { replace_all: true }) === 'R1,R2', order(repo('// R1 and R2 share this line'), { replace_all: true }));
+  ok('…and reversing them in the line reverses the listing', order(repo('// R2 and R1 share this line'), { replace_all: true }) === 'R2,R1', order(repo('// R2 and R1 share this line'), { replace_all: true }));
+  // whole file: a Write, both cited once on the same line.
+  const wholeOrder = shared => {
+    const dir = repo(shared);
+    const r = docket(['near'], { cwd: dir, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path.join(dir, 'app.js'), content: 'x' } }) });
+    return (r.out.match(/^ {2}(R\d+)/gm) || []).map(x => x.trim()).join(',');
+  };
+  ok('near whole: the same last key decides a Write of the whole file', wholeOrder('// R1 and R2 share this line') === 'R1,R2', wholeOrder('// R1 and R2 share this line'));
+  ok('…in both directions', wholeOrder('// R2 and R1 share this line') === 'R2,R1', wholeOrder('// R2 and R1 share this line'));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
