@@ -29,8 +29,8 @@ const crypto = require('crypto');
 // ─── 0. utilities ───────────────────────────────────────────────────────────
 
 // D14: each number below preserves a stated property; a change to one is a new ruling, never an edit here.
-const WINDOW = 20;        // D2: ±20 lines
-const CAP = 8;            // D2: at most eight rulings listed
+const WINDOW = 20;        // D2: ±20 lines; D16: two to five rulings is what this yields, measured
+const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture never reaches it, a denser window would
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
