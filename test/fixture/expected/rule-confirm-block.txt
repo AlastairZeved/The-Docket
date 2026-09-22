@@ -1,0 +1,7 @@
+When the five answers are in, print the entry exactly as `docket append` will
+write it — heading, `Principle:` line, body — under the heading
+`RULING — PLEASE CONFIRM`, and stop. Wait for the human. Only the human
+confirms (D8): the word `confirm`, from the person, in a turn of their own.
+Silence is not confirmation. A model's own turn is not confirmation. A
+restatement of the ruling is not confirmation. Any other reply reopens the
+question it bears on. Nothing is written before the word.

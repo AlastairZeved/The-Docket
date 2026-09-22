@@ -18,6 +18,9 @@
 // 9  append               entry, addendum, baseline (D4, D8)
 // 10  status               the docket
 // 11  cli
+// 12  diff                 what changed in the law between two readings
+// 13  vendor               the witness copied to where the law lives (D9)
+// 14  constitute           a spine before the first line (D9, D13)
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
 
@@ -34,6 +37,7 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
+const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
   'keeps', 're-tunes', 'refines', 'replaces', 'corrects', 'revises'];
@@ -440,15 +444,31 @@ function loadContext(root, opts) {
   if (opts.includeUntracked) files = files.concat(untrackedFiles(root));
   const ledgers = new Map();
   const entries = [];
+  const vendored = [];
   for (const f of uniq(files)) {
     if (!isFile(f) || !isTextFile(f)) continue;
+    if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
     const lp = findLedger(f, root);
     if (!lp) continue;
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
     entries.push({ path: f, ledger: lp, rel: rel(root, f) });
   }
   seedLedgerText(entries, ledgers);                                   // one read per file, so one version per run
-  return { root, ledgers, files: entries };
+  return { root, ledgers, files: entries, vendored };
+}
+// A file whose text is this program's own, at another path, is the witness `vendor` copied there (D9). Its
+// comments cite this plugin's rulings and the fixture's examples, which resolve to nothing under the ledger it
+// serves, so it is not read as a governed file: not for cites, not for the bare-§ count, not by near. Identity
+// is the text itself, line endings normalised, which a marker line could not forge; a copy that has drifted
+// from the running core is not exempt, and its cites failing is the sign to vendor again.
+let selfText = null;
+function isSelfCopy(filePath) {
+  if (path.basename(filePath) !== 'docket.js') return false;
+  // The program itself: governed when it is the core at bin/docket.js, which its own repository's ledger
+  // governs (D6); the witness when it runs from anywhere else, which is where vendor put it.
+  if (path.resolve(filePath) === path.resolve(__filename)) return path.basename(path.dirname(__filename)) !== 'bin';
+  if (selfText === null) selfText = normEol(readText(__filename));
+  try { return normEol(readText(filePath)) === selfText; } catch (e) { return false; }
 }
 function fileText(entry) { if (entry.text === undefined) entry.text = readText(entry.path); return entry.text; }
 // A ledger is read once, as the ledger. Where it is also one of the files a check walks, it carries that same text, so
@@ -535,6 +555,7 @@ function near(argv) {
   const lp = findLedger(file, pr || path.parse(path.resolve(startDir)).root);
   if (!lp) return 0;                                                   // ungoverned tree: silent
   if (isLedgerDoc(file)) return 0;                                     // FORMAT.md 8: the ledger is amended through append; a direct edit is check 7's business
+  if (isSelfCopy(file)) return 0;                                      // D9: the vendored witness cites another ledger; a list from it would be wrong, so there is none
   if (!isFile(file)) return 0;                                         // D7: a Write of a new file is silent
   if (!isTextFile(file)) return 0;                                     // FORMAT.md 1, 15: a governed file is a text file; a binary one check never sees is never reported as governed
   const ledger = loadLedger(lp);
@@ -750,6 +771,7 @@ function runCheck(root, opts) {
   const ctx = opts.ctx || loadContext(root);
   const failures = [], info = [];
   const fail = (file, line, k, message) => failures.push({ file: rel(root, file), line, k, message });
+  for (const v of ctx.vendored || []) info.push(v + ': the vendored witness, a copy of this program — not read as a governed file (D9)');
   for (const [lp, ledger] of ctx.ledgers) {
     const files = ctx.files.filter(e => e.ledger === lp);
     const sp = ledgerSpecs(ledger);
@@ -1043,6 +1065,15 @@ function parseEdgeArg(s) {
 }
 function appendEntry(argv) {
   const { root, ledger, release } = lockedLedger(argv);
+  const entry = buildEntry(argv, root, ledger);
+  const text = ensureNl(ledger.text) + '\n' + entry;
+  writeLedger(ledger, text);
+  release();
+  return afterWrite(argv, root, ledger, entry);
+}
+// Everything append refuses, it refuses here, before any write; constitute builds its first entry through
+// this same function so a constitution cannot carry what a ruling could not.
+function buildEntry(argv, root, ledger) {
   const title = flag(argv, '--title'), issue = flag(argv, '--issue'), principle = flag(argv, '--principle'), body = flag(argv, '--body');
   const edges = flags(argv, '--edge');
   if (!title || !title.trim()) die('append: --title is required (one line, the ruling in a phrase)', 2);
@@ -1094,11 +1125,7 @@ function appendEntry(argv) {
   }
   const grounding = /^#?\d+$/.test(issue.trim()) ? 'issue #' + issue.trim().replace('#', '') : issue.trim();
   const metaParts = [grounding].concat(parsedEdges.map(e => (e.adverb ? e.adverb + ' ' : '') + e.verb + ' ' + e.tos.join('/') + (e.qualifier ? ' (' + e.qualifier + ')' : '')));   // one clause, the targets joined as the grammar reads them (5)
-  const entry = '### ' + prefix + n + '. ' + title.trim() + ' (' + metaParts.join('; ') + ')\n' + 'Principle: ' + pr.name + '.\n' + body.trim() + '\n';
-  const text = ensureNl(ledger.text) + '\n' + entry;
-  writeLedger(ledger, text);
-  release();
-  return afterWrite(argv, root, ledger, entry);
+  return '### ' + prefix + n + '. ' + title.trim() + ' (' + metaParts.join('; ') + ')\n' + 'Principle: ' + pr.name + '.\n' + body.trim() + '\n';
 }
 function afterWrite(argv, root, ledger, printed) {
   const res = runCheck(root);
@@ -1205,6 +1232,253 @@ function status(argv) {
   return 0;
 }
 
+// ─── 12. diff: what changed in the law ──────────────────────────────────────
+
+// Two readings of one ledger, compared entry by entry with the seventh check's own comparison, so
+// `diff` and `check` cannot disagree about what "changed" means. Loud first: an existing heading or
+// body that differs, or an entry gone, is the thing the ledger exists to make impossible (D4), and is
+// listed before anything added. Exit 1 when such a change is listed, as a failed check exits 1; exit 2
+// when a revision or file cannot be read (FORMAT.md 13).
+function ledgerAtRev(root, ledgerPath, rev) {
+  const p = rel(root, ledgerPath);
+  const r = sh('git', ['show', rev + ':' + p], root);
+  if (r.status !== 0) die('diff: cannot read ' + p + ' at ' + rev + (r.stderr && r.stderr.trim() ? ' — ' + r.stderr.trim().split('\n')[0] : ''), 2);
+  return parseLedger(r.stdout, ledgerPath);
+}
+function ledgerFromFile(given) {
+  const full = path.resolve(process.cwd(), given);
+  if (!isFile(full)) die('diff: cannot read ' + given, 2);
+  return parseLedger(readText(full), full);
+}
+function diffLedgers(a, b) {
+  const changed = [], added = [], edges = [], addenda = [];
+  for (const o of a.rulings) {
+    const cur = b.byId.get(o.id);
+    if (!cur) { changed.push({ id: o.id, kind: 'removed', line: o.line }); continue; }
+    if (cur.heading !== o.heading) changed.push({ id: o.id, kind: 'heading', from: o.heading, to: cur.heading, line: cur.line });
+    if (!bodyOnlyAppended(o.bodyLines, cur.bodyLines)) changed.push({ id: o.id, kind: 'body', line: cur.line });
+    const had = new Set(o.addenda.map(x => x.date + '|' + x.text));
+    for (const x of cur.addenda) if (!had.has(x.date + '|' + x.text)) addenda.push({ id: o.id, date: x.date, text: x.text, line: x.line });
+  }
+  const oldEdges = new Set();
+  for (const r of a.rulings) for (const e of r.edges) oldEdges.add(edgeKey(e));
+  for (const r of b.rulings) {
+    if (!a.byId.has(r.id)) added.push(r);
+    for (const e of r.edges) if (!oldEdges.has(edgeKey(e))) edges.push(e);   // an added ruling's edges are edges added: what governs what has changed
+  }
+  return { changed, added, edges, addenda };
+}
+function diff(argv) {
+  const a = argv._[1], b = argv._[2];
+  if (!a || !b) die('diff: two revisions, or two files with --files\n\n  docket diff <revA> <revB>\n  docket diff --files <a> <b>', 2);
+  let A, B, label;
+  if (has(argv, '--files')) { A = ledgerFromFile(a); B = ledgerFromFile(b); label = a + ' → ' + b; }
+  else {
+    const s = scope(argv);
+    if (!s.ledger) die(noLedgerMessage(s.cwd, s.root), 2);
+    const root = gitRoot(path.dirname(s.ledger));                        // a revision is git's: the repository that holds the ledger
+    if (!root) die('diff: ' + rel(s.root, s.ledger) + ' is not in a git repository; compare two files with --files', 2);
+    A = ledgerAtRev(root, s.ledger, a); B = ledgerAtRev(root, s.ledger, b);
+    label = rel(root, s.ledger) + '  ' + a + ' → ' + b;
+  }
+  const d = diffLedgers(A, B);
+  if (argv.json) {
+    out(JSON.stringify({ from: a, to: b, ok: d.changed.length === 0, changed: d.changed,
+      added: d.added.map(r => ({ id: r.id, title: r.title, meta: r.meta, line: r.line })),
+      edges: d.edges.map(e => ({ from: e.from, adverb: e.adverb, verb: e.verb, to: e.to, qualifier: e.qualifier })), addenda: d.addenda }, null, 2));
+    return d.changed.length ? 1 : 0;
+  }
+  const L = [label];
+  if (d.changed.length) {
+    L.push('CHANGED — an existing entry differs, which the ledger forbids (append only):');
+    for (const c of d.changed) {
+      if (c.kind === 'removed') L.push('  ' + c.id + ' was removed');
+      else if (c.kind === 'heading') L.push('  ' + c.id + ': heading changed: "' + c.from + '" → "' + c.to + '"');
+      else L.push('  ' + c.id + ': body changed other than by appended addendum lines');
+    }
+  }
+  L.push('Rulings added (' + d.added.length + '):');
+  for (const r of d.added) L.push('  ' + r.id + '. ' + r.title + (r.meta ? ' (' + r.meta + ')' : ''));
+  L.push('Edges added (' + d.edges.length + '):');
+  for (const e of d.edges) L.push('  ' + renderEdge(e));
+  L.push('Addenda added (' + d.addenda.length + '):');
+  for (const x of d.addenda) L.push('  ' + x.id + '  ' + x.date + ': ' + x.text);
+  if (!d.changed.length && !d.added.length && !d.edges.length && !d.addenda.length) L.push('nothing changed');
+  out(L.join('\n'));
+  return d.changed.length ? 1 : 0;
+}
+
+// ─── 13. vendor: the witness where the law lives (D9) ───────────────────────
+
+// The core is one file with no dependencies, so the witness a repository runs in CI is this file,
+// copied; the plugin need not be installed where the law is checked. The copy runs bare as the
+// witness and answers every read subcommand; it does not carry templates/, so it cannot constitute.
+const CI_STEP = [
+  '      - uses: actions/checkout@v4',
+  '        with:',
+  '          fetch-depth: 0          # the seventh check compares with the committed ledger; a shallow clone has none to compare',
+  '      - uses: actions/setup-node@v4',
+  '        with:',
+  '          node-version: 20',
+  '      - name: The witness',
+  '        run: node test/docket.js',
+].join('\n');
+function vendorInto(dir) {
+  const dest = path.join(dir, 'test', 'docket.js');
+  const replaced = isFile(dest);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(__filename, dest);
+  return { dest, replaced };
+}
+function vendor(argv) {
+  const target = argv._[1];
+  if (!target) die('vendor: a directory is required\n\n  docket vendor <dir>', 2);
+  const dir = path.resolve(process.cwd(), target);
+  if (!isDir(dir)) die('vendor: ' + target + ' is not a directory', 2);
+  const v = vendorInto(dir);
+  if (argv.json) { out(JSON.stringify({ written: rel(dir, v.dest), replaced: v.replaced, ciStep: CI_STEP }, null, 2)); return 0; }
+  out((v.replaced ? 'replaced ' : 'wrote ') + rel(process.cwd(), v.dest) + ' — the witness: one file, no dependencies (D9). Run it bare: node test/docket.js\n\nThe CI step:\n' + CI_STEP);
+  return 0;
+}
+
+// ─── 14. constitute: a spine before the first line (D9, D13) ────────────────
+
+// The mechanical half of /constitute. The intake (intake/CONSTITUTE.md) refuses what only a reader can
+// tell — a category, a feature; this refuses what a shape check can tell, each by the field's name,
+// and then fills the templates, writes the first entry through append's own validation, vendors the
+// witness, prints the CI step and the agent-instructions section, and runs check. Nothing here names a
+// host: the section is "for the repository's agent-instructions file", and the host's skill says which.
+function sentenceCount(s) {
+  const t = s.trim();
+  if (!t) return 0;
+  let n = 0;
+  const re = /[.!?]+(?=\s+[A-Z"'(À-Þ]|\s*$)/g;               // a stop that ends a sentence: followed by a capital, or last
+  while (re.exec(t)) n++;
+  return Math.max(1, n);                                               // a line with no stop is one sentence, unfinished
+}
+function invalidRole(role) {
+  const strip = t => t.replace(/^(a|an|the)\s+/, '');
+  const raw = role.toLowerCase().replace(/[.]+$/, '').trim(), forms = [raw, strip(raw)];
+  for (const bad of INVALID_ROLES) {
+    for (const b of [bad, strip(bad)]) for (const f of forms) if (f === b || f.startsWith(b + ' ') || f.startsWith(b + ',')) return bad;
+  }
+  return null;
+}
+function readAnswers(argv) {
+  const given = flag(argv, '--answers');
+  if (!given) die('constitute: --answers <file> is required — the answers as JSON, in the shape intake/CONSTITUTE.md gives', 2);
+  let o;
+  try { o = JSON.parse(readText(path.resolve(process.cwd(), given))); } catch (e) { die('constitute: --answers ' + given + ' is not readable JSON — ' + e.message, 2); }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) die('constitute: --answers must hold a JSON object', 2);
+  const bad = (field, why) => die('constitute: ' + field + ' ' + why, 2);
+  const str = v => (typeof v === 'string' ? v.trim() : '');
+  const oneLine = (field, v) => { if (/[\r\n]/.test(v)) bad(field, 'is one line'); if (/\*/.test(v)) bad(field, 'may not contain "*" — it is set in a bold phrase a ruling cites by name'); };
+  const what = str(o.what);
+  if (!what) bad('what', 'is required: one sentence naming the object and the verb');
+  if (/[\r\n]/.test(what)) bad('what', 'is one sentence, on one line');
+  if (sentenceCount(what) !== 1) bad('what', 'is one sentence; this reads as ' + sentenceCount(what));
+  const who = o.who && typeof o.who === 'object' && !Array.isArray(o.who) ? o.who : null;
+  if (!who) bad('who', 'is required: {"role": …, "knows": …, "doesntKnow": …}');
+  const role = str(who.role), knows = str(who.knows), doesntKnow = str(who.doesntKnow);
+  if (!role) bad('who.role', 'is required: the person this is for, as a role');
+  const crowd = invalidRole(role);
+  if (crowd) bad('who.role', '"' + role + '" is refused — a role names a person, not a crowd; "' + crowd + '" is one of: ' + INVALID_ROLES.join(', '));
+  if (!knows) bad('who.knows', 'is required: one thing that person knows');
+  if (!doesntKnow) bad('who.doesntKnow', 'is required: one thing that person does not know');
+  const feeling = str(o.feeling);
+  if (!feeling) bad('feeling', 'is required: one phrase, the feeling every iteration keeps — no default is offered');
+  oneLine('feeling', feeling);
+  if (/[.!?]$/.test(feeling) || sentenceCount(feeling) > 1) bad('feeling', 'is a phrase, not a sentence');
+  if (!Array.isArray(o.refuses)) bad('refuses', 'is required: at least ' + REFUSALS_MIN + ' verb phrases, as a JSON array');
+  const refuses = o.refuses.map(str);
+  refuses.forEach((r, i) => { if (!r) bad('refuses[' + i + ']', 'is empty'); oneLine('refuses[' + i + ']', r); });
+  if (refuses.length < REFUSALS_MIN) bad('refuses', 'needs at least ' + REFUSALS_MIN + '; this has ' + refuses.length);
+  const lower = refuses.map(r => r.toLowerCase().replace(/\.$/, ''));
+  const dup = lower.find((r, i) => lower.indexOf(r) !== i);
+  if (dup) bad('refuses', 'repeats "' + dup + '"');
+  const prefix = o.prefix === undefined ? 'R' : str(o.prefix);
+  if (!/^[A-Za-z]+$/.test(prefix)) bad('prefix', 'must be letters (FORMAT.md 12)');
+  if (prefix === 'D') bad('prefix', 'D is refused: the vendored witness carries this plugin\'s own D-cites in its comments, which a D ledger would read as dangling — choose another letter');
+  const name = o.name === undefined ? null : str(o.name);
+  if (name !== null) { if (!name) bad('name', 'is one line, or omitted to name the project after its directory'); oneLine('name', name); }
+  return { what, role, knows, doesntKnow, feeling, refuses, prefix, name };
+}
+function fillTemplate(file, vars) {
+  const p = path.join(__dirname, '..', 'templates', file);
+  if (!isFile(p)) die('constitute: templates/' + file + ' is not beside this file\'s bin/ — constitute runs from the plugin; the vendored witness at test/docket.js is the witness and carries no templates', 2);
+  return readText(p).replace(/\{\{(\w+)\}\}/g, (m, k) => {
+    if (!Object.prototype.hasOwnProperty.call(vars, k)) die('constitute: templates/' + file + ' names {{' + k + '}}, which constitute does not fill', 2);
+    return vars[k];
+  });
+}
+function constitute(argv) {
+  const a = readAnswers(argv);
+  const target = flag(argv, '--target');
+  const dir = path.resolve(process.cwd(), target || '.');
+  if (!isDir(dir)) die('constitute: --target ' + target + ' is not a directory', 2);
+  const docs = path.join(dir, 'docs');
+  for (const f of ['DECISIONS.md', 'PRD.md', 'UIUX.md']) {
+    if (isFile(path.join(docs, f))) die('constitute: docs/' + f + ' already exists — a constitution is written once; the ledger is append only (D4), so what comes after is docket append, not a second constitution', 2);
+  }
+  const name = a.name || path.basename(dir);
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const principles = ['- **' + cap(a.feeling) + '.** The feeling every iteration must keep; a change that loses it fails whatever else it does.']
+    .concat(a.refuses.map(r => '- **Will not ' + r.replace(/\.$/, '') + '.** Refused at constitution; a ruling that needs otherwise supersedes this one by name.'))
+    .join('\n');
+  const reader = cap(a.role) + ': knows ' + a.knows.replace(/\.$/, '') + ', and does not know ' + a.doesntKnow.replace(/\.$/, '') + '.';
+  const date = today();
+  const vars = { name, what: a.what, principles, reader, date, prefix: a.prefix };
+  const filled = { 'PRD.md': fillTemplate('PRD.md', vars), 'UIUX.md': fillTemplate('UIUX.md', vars), 'DECISIONS.md': fillTemplate('DECISIONS.md', vars) };
+  // Written whole or not at all: a refusal after this point (a cite in the answers naming a ruling that
+  // does not exist, say) removes what was written, so a half-constitution never stands.
+  const written = [];
+  let complete = false;
+  process.on('exit', () => { if (!complete) for (const f of written) { try { fs.unlinkSync(f); } catch (e) { /* already gone */ } } });
+  fs.mkdirSync(docs, { recursive: true });
+  for (const [f, text] of Object.entries(filled)) { const p = path.join(docs, f); fs.writeFileSync(p, text); written.push(p); }
+  const ledgerPath = path.join(docs, 'DECISIONS.md');
+  const body = [
+    'What: ' + a.what,
+    'For: ' + a.role + ' — knows ' + a.knows.replace(/\.$/, '') + '; does not know ' + a.doesntKnow.replace(/\.$/, '') + '.',
+    'Must keep: ' + a.feeling + '.',
+    'Will not: ' + a.refuses.map(r => r.replace(/\.$/, '')).join('; ') + '.',
+    'Reason: every later ruling resolves against these answers by name — a ruling that serves none of them is a preference, and a change that loses the feeling fails whatever else it does.',
+  ].join('\n');
+  const entryArgv = { raw: ['--ledger', ledgerPath, '--title', 'The constitution', '--issue', 'constituted ' + date, '--principle', a.feeling, '--body', body, '--prefix', a.prefix], _: ['append'], json: false };
+  const { root, ledger, release } = lockedLedger(entryArgv);
+  const entry = buildEntry(entryArgv, root, ledger);
+  writeLedger(ledger, ensureNl(ledger.text) + '\n' + entry);
+  release();
+  const v = vendorInto(dir);
+  written.push(v.dest);
+  const res = runCheck(enumerationRoot(dir));
+  complete = true;
+  const section = [
+    '## The docket',
+    'This repository is governed by docs/DECISIONS.md: a ledger of rulings, appended and never edited.',
+    'Before changing behaviour, read what governs it — `node test/docket.js query <term>`, then',
+    '`node test/docket.js governs <id>` for each ruling that comes back. A decision is recorded as a new',
+    'entry, never as an edit to an old one. Run `node test/docket.js` before you stop: it is the witness,',
+    'and CI runs the same command.',
+  ].join('\n');
+  if (argv.json) {
+    out(JSON.stringify({ name, dir: rel(process.cwd(), dir) || '.', prefix: a.prefix, written: written.map(f => rel(dir, f)), entry: entry.trimEnd(), ciStep: CI_STEP, agentSection: section, ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2));
+    return res.failures.length ? 1 : 0;
+  }
+  const L = ['constituted ' + name + ' in ' + (rel(process.cwd(), dir) || '.') + ' (prefix ' + a.prefix + ')',
+    '  docs/PRD.md        the principles (' + (1 + a.refuses.length) + ') and the reader',
+    '  docs/UIUX.md       the token tables, empty until a value is stated, and the minimum',
+    '  docs/DECISIONS.md  ' + entry.split('\n')[0].replace(/^### /, ''),
+    '  test/docket.js     the witness (D9) — run it bare: node test/docket.js',
+    '', 'The CI step:', CI_STEP,
+    '', 'For the repository\'s agent-instructions file — the host names it; add this yourself:', section, ''];
+  for (const f of res.failures) L.push(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
+  for (const i of res.info) L.push('info  ' + i);
+  L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : 'check: ok');
+  out(L.join('\n'));
+  return res.failures.length ? 1 : 0;
+}
+
 // ─── 11. cli ────────────────────────────────────────────────────────────────
 
 const USAGE = [
@@ -1222,6 +1496,10 @@ const USAGE = [
   '  docket append --title --issue --principle [--edge "<verb> <id>"]... --body   a new entry, checked',
   '  docket append --addendum <id> --text "..."   a dated addendum under an entry',
   '  docket append --baseline            rewrite the bare-cite baseline',
+  '  docket diff <revA> <revB>           what changed in the law: rulings, edges and addenda added; any existing entry changed, listed first (exit 1)',
+  '  docket diff --files <a> <b>         the same, between two ledger files',
+  '  docket vendor <dir>                 copy the witness to <dir>/test/docket.js and print the CI step',
+  '  docket constitute --answers <json>  a new project\'s PRD, UIUX and DECISIONS from the four answers, the witness vendored, check run (--target <dir>)',
   '',
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
@@ -1275,7 +1553,7 @@ function main() {
   const argv = parseArgv(process.argv.slice(2));
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
-  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status };
+  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute };
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);

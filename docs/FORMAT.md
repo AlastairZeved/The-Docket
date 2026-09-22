@@ -252,6 +252,17 @@ depth the heading grammar allows (7); it must resolve to a spec heading
 document name; it is counted per file, and the count is ratcheted against the
 baseline (9). Spec documents themselves are exempt from the bare-cite count.
 
+The core at `bin/docket.js` is governed by the ledger of the repository it
+belongs to (D6). The same text anywhere else — at another path, or running
+from a directory other than `bin/` — is the witness that `docket vendor` copied
+there (D9), and is not a governed file: its
+comments cite the plugin's own ledger and its fixture's examples, which resolve
+to nothing under the ledger it serves, so no check reads it for cites or for
+the bare-§ count, `near` prints nothing for an edit to it, and `check` says so
+in an info line. Identity is the text itself, line endings normalised, which no
+marker could forge; a copy that has drifted from the running core is not
+exempt, and its cites failing is the sign to vendor again.
+
 ## 9. The bare-cite baseline
 
 The ledger preamble may carry one comment
@@ -353,7 +364,10 @@ names exactly two tokens or fails, and whose ratio is recomputed from the two
 hexes to two decimals (b): the stated ratio is rounded half-up on its written
 digits, the recomputed one on its value, and the two are compared in hundredths. `governs <id>` names the ledger it searched and
 exits 2 when `<id>` is not one of its entries; `query <term>` prints that nothing
-matches and exits 0; `diff` exits 2 when a revision or file cannot be read.
+matches and exits 0; `diff` exits 2 when a revision or file cannot be read,
+and 1 when an existing entry's heading or body differs between the two readings
+— the comparison is check 7's own, so the two cannot disagree — and lists that
+first, before what was added.
 
 ## 14. A worked example
 
