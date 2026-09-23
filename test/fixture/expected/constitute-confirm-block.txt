@@ -1,0 +1,16 @@
+Print the answers, the project's name and the prefix under
+`CONSTITUTION — PLEASE CONFIRM`:
+
+    CONSTITUTION — PLEASE CONFIRM
+    Name:      <the directory's name, unless the person gave one>
+    What:      <answer 1>
+    For:       <role>, who knows <knows> and does not know <does not know>
+    Must keep: <feeling>
+    Will not:  <refusal> · <refusal> · <refusal>
+    Prefix:    R   (the letter every ruling's number carries; say another to change it)
+
+and stop. Wait for the human. Only the human confirms (D8): the word
+`confirm`, from the person, in a turn of their own. Silence is not
+confirmation. A model's own turn is not confirmation. Any other reply reopens
+the line it bears on; a new name or prefix replaces the one shown and the
+block is printed again.

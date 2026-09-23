@@ -456,7 +456,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('near: an edit of a file that does not exist → silent', missing.code === 0 && missing.out === '' && missing.err === '');
 }
 
-// ── boundaries, line endings, the ledger's own edits, --json, discovery, shapes (Phase 1 fix; FORMAT.md 1, 8, 15) ──
+// ── boundaries, line endings, the ledger's own edits, --json, discovery, shapes (FORMAT.md 1, 8, 15) ──
 {
   // word boundaries are letters, digits and underscore in any script: an accented letter does not end a word
   const uni = tempRepo(d => { fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const styléR99 = 1; // one word, not a cite\nconst saveRéR6 = 2; // not a cite either\nconst arrow = 3; //→R7 is a cite: an arrow ends a word\n'); });
@@ -1191,7 +1191,7 @@ const SEC = String.fromCharCode(0xa7);
   const eb = tempRepo(d => { fs.writeFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '# Empty\n'); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const bare = 1; // ' + SEC + '9 a bare cite under an empty ledger\nconst spec = 2; // UIUX ' + SEC + '9.9 names no heading\n'); });
   r = docket(['check'], { cwd: eb });
   ok('check: under an empty ledger neither the bare-cite ratchet nor the spec-cite check runs — no check runs at all', r.code === 0 && !/  check [1-7]:/.test(r.out) && /no entries; its subtree is ungoverned/.test(r.out), r.out);
-  // the frozen versions are what the fixture says they are, so a later phase's diff has the ground it was promised
+  // the frozen versions are what the fixture says they are, so a diff between them has the ground it was promised
   const cur = read(path.join(FIX, 'DECISIONS.md')), v1 = read(path.join(FIX, 'history', 'DECISIONS.v1.md')), v2 = read(path.join(FIX, 'history', 'DECISIONS.v2.md'));
   const heads = t => t.split('\n').filter(l => /^### /.test(l));
   ok('history/DECISIONS.v1.md is the current ledger without R8 and without R2\'s addendum, and nothing else', heads(v1).length === heads(cur).length - 1 && !/^### R8\./m.test(v1) && !/^> Addendum /m.test(v1) && /^> Addendum /m.test(cur), heads(v1).length + ' vs ' + heads(cur).length);
@@ -1707,7 +1707,7 @@ const SEC = String.fromCharCode(0xa7);
     // the wrapper the host documents: an object with a "hooks" key, events beneath it
     ok('hooks.json wraps its events in a "hooks" object, as a settings file does', H.hooks && typeof H.hooks === 'object' && !Array.isArray(H.hooks), Object.keys(H).join(','));
     const pre = (H.hooks.PreToolUse || [])[0], ses = (H.hooks.SessionStart || [])[0];
-    ok('hooks.json binds PreToolUse and SessionStart, and nothing else at this phase', Object.keys(H.hooks).sort().join(',') === 'PreToolUse,SessionStart', Object.keys(H.hooks).join(','));
+    ok('hooks.json binds PreToolUse and SessionStart, and nothing else yet', Object.keys(H.hooks).sort().join(',') === 'PreToolUse,SessionStart', Object.keys(H.hooks).join(','));
     // Each event has ONE matcher group holding ONE handler. A second of either fires the core twice
     // for one edit — a hook with two homes, which is what D5 and D6 are for — and every assertion
     // below reads index [0], so nothing but a count can see it.
@@ -1726,7 +1726,7 @@ const SEC = String.fromCharCode(0xa7);
     // before the edit proceeds, so the bound is measured below against a real large file.
     ok('the PreToolUse timeout is 5 seconds', preCmd && preCmd.timeout === 5, preCmd && String(preCmd.timeout));
 
-    // SessionStart: every source the plan names, each one named here. A missing source is a
+    // SessionStart: every source the host documents, each one named here. A missing source is a
     // session that silently starts without its docket.
     for (const source of ['startup', 'resume', 'clear', 'compact']) {
       ok('SessionStart matches "' + source + '", so a session begun that way still prints the docket', ses && ses.matcher.split('|').includes(source), ses && ses.matcher);
@@ -1769,21 +1769,21 @@ const SEC = String.fromCharCode(0xa7);
     for (const v of verbs) {
       ok('the skill’s "/docket ' + v + '" is a subcommand the core answers', new RegExp("['\"]?" + v + "['\"]?\\s*[:,]").test(table) || new RegExp('\\b' + v + '\\b').test(table), v + ' not in the dispatch table');
     }
-    ok('the skill advertises /docket diff now that the core has it (a Phase 2 test forbade it until then)', /\/docket diff\b/.test(sk), 'does not name /docket diff');
+    ok('the skill advertises /docket diff now that the core has it (an earlier assertion forbade advertising it before it existed)', /\/docket diff\b/.test(sk), 'does not name /docket diff');
     // The loop above only sees verbs the file mentions, so a verb deleted from the skill is invisible
     // to it, and `status` — offered without an argument, so never written as "/docket status" — is
-    // invisible by construction. Name the three this phase ships, each on its own.
+    // invisible by construction. Name the three the core ships, each on its own.
     for (const v of ['status', 'query', 'governs']) {
-      ok('the skill still offers "' + v + '", which this phase built', new RegExp('\\b' + v + '\\b').test(sk), v + ' missing from the skill');
+      ok('the skill still offers "' + v + '", which the core ships', new RegExp('\\b' + v + '\\b').test(sk), v + ' missing from the skill');
     }
   }
 }
 
-// ─── Phase 3: diff, vendor, constitute, the intakes, the templates, the skills ──────────────────
-// Each block names the property it holds, and the plants it exists to fail: M3.1 (constitute accepts
-// "everyone"), M3.2 (append no longer runs check), M3.3 (RULE.md lets the model confirm on silence),
-// M3.4 (the ledger template without the append-only law), and the phase's measure plant, a constitute
-// test that checks the triad exists instead of running the vendored witness over it.
+// ─── diff, vendor, constitute, the intakes, the templates, the skills ──────────────────────────
+// Each block names the property it holds and checks it by doing it: the role list is tried in full, not by one
+// member; append's post-write check is exercised against a fault in the tree; the confirm block is frozen text;
+// the ledger template's law is asserted in the template and in what it produces; and the constituted triad is
+// judged by running its vendored witness, not by the files existing.
 {
   // ── diff: two readings compared with check 7's own comparison ──
   const V1 = path.join(FIX, 'history', 'DECISIONS.v1.md'), V2 = path.join(FIX, 'history', 'DECISIONS.v2.md'), CUR = path.join(FIX, 'DECISIONS.md');
@@ -1819,6 +1819,24 @@ const SEC = String.fromCharCode(0xa7);
     ok('an amended heading fails check 7 and is CHANGED in diff — the same comparison', c.code === 1 && /check 7: R3: heading changed/.test(c.out) && d.code === 1 && /R3: heading changed/.test(d.out), c.out + '\n' + d.out);
     fs.rmSync(dir, { recursive: true, force: true });
   }
+  // The other two kinds of CHANGED, and CHANGED beside additions: the shipped pair shows only a heading.
+  {
+    const dir = tempRepo();
+    const lp = path.join(dir, 'test', 'fixture', 'DECISIONS.md');
+    const committed = path.join(dir, 'committed.md'); fs.writeFileSync(committed, sh('git', ['show', 'HEAD:test/fixture/DECISIONS.md'], dir).stdout);
+    const r3body = (read(lp).match(/^### R3\.[^\n]*\n([^\n]+)/m) || [])[1];
+    edit(dir, 'test/fixture/DECISIONS.md', r3body, r3body + ' Amended after the commit.');
+    let d = docket(['diff', '--files', committed, lp], { cwd: dir });
+    ok('diff lists a BODY change as CHANGED, exit 1, with check 7’s own wording', d.code === 1 && /^  R3: body changed other than by appended addendum lines$/m.test(d.out), d.out);
+    fs.writeFileSync(lp, read(lp).replace(/\n### R8\.[\s\S]*$/, '\n'));
+    d = docket(['diff', '--files', committed, lp], { cwd: dir });
+    ok('…and an entry gone as removed, first in the list', d.code === 1 && /^CHANGED[^\n]*\n  R3: body changed[^\n]*\n  R8 was removed$/m.test(d.out), d.out);
+    // CHANGED beside additions: the first frozen version against a current ledger whose R3 heading was amended
+    const amended = path.join(dir, 'amended.md'); fs.writeFileSync(amended, read(committed).replace('### R3. Fold similarity (issue #4)', '### R3. Fold similarity and size (issue #4)'));
+    d = docket(['diff', '--files', path.join(dir, 'test', 'fixture', 'history', 'DECISIONS.v1.md'), amended], { cwd: dir });
+    ok('CHANGED is printed before the additions when both are present, and the exit is 1 for the change alone', d.code === 1 && d.out.indexOf('CHANGED') < d.out.indexOf('Rulings added (1)') && /^  R8\. /m.test(d.out) && /^  R8 waives R1$/m.test(d.out) && /^  R2  2026-09-11: /m.test(d.out), d.out);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   // Revisions: a second commit that appends an addendum; diff between the two reads it.
   {
     const dir = tempRepo();
@@ -1828,6 +1846,11 @@ const SEC = String.fromCharCode(0xa7);
     ok('diff <revA> <revB> reads the ledger at two commits', a.code === 0 && r.code === 0 && /^test\/fixture\/DECISIONS\.md  HEAD~1 → HEAD$/m.test(r.out) && /^Addenda added \(1\):\n  R2  2026-09-22: a second reading, for diff$/m.test(r.out), a.out + '\n' + r.out);
     r = docket(['diff', 'nosuchrev', 'HEAD', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: dir });
     ok('an unreadable revision exits 2 and names the ledger and the revision', r.code === 2 && /^diff: cannot read test\/fixture\/DECISIONS\.md at nosuchrev/m.test(r.err), r.code + ' ' + r.err);
+    // a third commit that appends a ruling with an edge: both appear across the revisions, as edges added and as a ruling
+    const a2 = docket(['append', '--title', 'A ninth ruling, for diff across revisions', '--issue', '90', '--principle', 'Capture precedes structure', '--edge', 'keeps R1', '--body', 'Nothing moves that the person did not move. Reason: the rule is restated so that diff has a second commit to read.', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: dir, env: { DOCKET_TODAY: '2026-09-22' } });
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'ninth'], dir);
+    r = docket(['diff', 'HEAD~1', 'HEAD', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: dir });
+    ok('diff across revisions lists a ruling added and its edge added', a2.code === 0 && r.code === 0 && /^Rulings added \(1\):\n  R9\. A ninth ruling, for diff across revisions \(issue #90; keeps R1\)$/m.test(r.out) && /^Edges added \(1\):\n  R9 keeps R1$/m.test(r.out), a2.out + a2.err + '\n' + r.out);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
@@ -1878,10 +1901,10 @@ const SEC = String.fromCharCode(0xa7);
     const d = r.dir, led = path.join(d, 'docs', 'DECISIONS.md');
     ok('constitute with the four answers exits 0 in a fresh directory with no git', r.code === 0, r.code + ' ' + r.out + r.err);
     ok('…and writes the triad and the witness', ['docs/PRD.md', 'docs/UIUX.md', 'docs/DECISIONS.md', 'test/docket.js'].every(f => fs.existsSync(path.join(d, f))), fs.readdirSync(d).join(','));
-    ok('…summarising what it wrote, the CI step, and the agent-instructions section, then check: ok', /^constituted Lot in \. \(prefix R\)$/m.test(r.out) && /run: node test\/docket\.js/.test(r.out) && /^## The docket$/m.test(r.out) && /^check: ok$/m.test(r.out), r.out);
+    ok('…summarising what it wrote, the CI step, and the agent-instructions section, then a check that says what it read', /^constituted Lot in \. \(prefix R\)$/m.test(r.out) && /run: node test\/docket\.js/.test(r.out) && /^## The docket$/m.test(r.out) && /^check: ok \(1 ledger, 4 governed-tree files\)$/m.test(r.out), r.out);   // the check names what it read: one ledger, the triad and the witness
     ok('…naming no host in the section: it is "for the repository’s agent-instructions file"', /agent-instructions file — the host names it/.test(r.out) && !/CLAUDE\.md/.test(r.out), r.out);
     const ledger = fs.existsSync(led) ? read(led) : '';
-    ok('the ledger opens with the append-only law (M3.4)', /^\*\*Append only\.\*\* /m.test(ledger), ledger.slice(0, 400));
+    ok('the ledger opens with the append-only law', /^\*\*Append only\.\*\* /m.test(ledger), ledger.slice(0, 400));
     ok('…binds the header contract from R1', /<!-- docket: contract from R1 -->/.test(ledger), 'no contract line');
     ok('…and R1 is the constitution itself, grounded in its date, with the feeling as its principle and a Reason', /^### R1\. The constitution \(constituted 2026-09-22\)\nPrinciple: Nothing to think about\.\nWhat: A page where a typed thought/m.test(ledger) && /^Reason: every later ruling resolves against these answers by name/m.test(ledger), ledger.slice(-900));
     const pr = docket(['principles'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } });
@@ -1890,7 +1913,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('PRD.md names the reader with what they know and do not', new RegExp('^## ' + SEC + '2 The reader\\n\\nA solo builder: knows the lot’s three sections, and does not know its render math\\.$', 'm').test(prd), prd);
     const ui = read(path.join(d, 'docs', 'UIUX.md'));
     ok('UIUX.md carries the two token tables, empty, and the minimum, so spec-check has rows to find once values are stated', new RegExp('^## ' + SEC + '2 Design tokens$', 'm').test(ui) && /^\| Token \| Value \| Use \|$/m.test(ui) && /^\| Pair \| Ratio \|$/m.test(ui) && new RegExp('^## ' + SEC + '4\.5 The minimum$', 'm').test(ui), ui);
-    // The measure plant: existence is not the claim. The vendored witness is RUN over the triad, and passes.
+    // Existence is not the claim. The vendored witness is RUN over the triad, and passes.
     const w = cp.spawnSync('node', [path.join(d, 'test', 'docket.js')], { cwd: d, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
     ok('the vendored witness, run bare over the constituted triad, exits 0 — not "the files exist": the check passes', w.status === 0 && /^witness: ok \(1 ledger, 0 spec rows\)$/m.test(w.stdout), w.status + ' ' + w.stdout + w.stderr);
     ok('…and the copy did not read itself: the info line says so', /the vendored witness, a copy of this program/.test(w.stdout), w.stdout);
@@ -1915,7 +1938,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('without a name the project is named after its directory, and the output says which', noName.code === 0 && new RegExp('^constituted ' + path.basename(noName.dir) + ' in ').test(noName.out), noName.out.split('\n')[0]);
     for (const x of [dir, j.dir, noName.dir]) fs.rmSync(x, { recursive: true, force: true });
   }
-  // The refusals, each by the field's name (M3.1: every crowd on the list, not only the one a test tried).
+  // The refusals, each by the field's name (every crowd on the list, not only one).
   {
     const roles = ['general audience', 'everyone', 'anyone', 'non-technical', 'users', 'people', 'the public', 'all users', 'someone curious', 'Everyone who cooks', 'a general audience', 'The Public.', 'public'];
     for (const role of roles) {
@@ -1927,6 +1950,7 @@ const SEC = String.fromCharCode(0xa7);
       ['what is two sentences', Object.assign({}, ANSWERS, { what: 'It does X. It does Y.' }), /^constitute: what is one sentence; this reads as 2$/m],
       ['what is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.what; return a; })(), /^constitute: what is required: one sentence/m],
       ['who is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.who; return a; })(), /^constitute: who is required: \{"role"/m],
+      ['role is empty', Object.assign({}, ANSWERS, { who: { role: '  ', knows: 'k', doesntKnow: 'd' } }), /^constitute: who\.role is required: the person this is for, as a role$/m],
       ['knows is empty', Object.assign({}, ANSWERS, { who: { role: 'a cook', knows: '', doesntKnow: 'd' } }), /^constitute: who\.knows is required/m],
       ['doesntKnow is empty', Object.assign({}, ANSWERS, { who: { role: 'a cook', knows: 'k', doesntKnow: ' ' } }), /^constitute: who\.doesntKnow is required/m],
       ['feeling is a sentence', Object.assign({}, ANSWERS, { feeling: 'It feels calm.' }), /^constitute: feeling is a phrase, not a sentence$/m],
@@ -1936,7 +1960,6 @@ const SEC = String.fromCharCode(0xa7);
       ['a repeated refusal', Object.assign({}, ANSWERS, { refuses: ['a', 'b', 'A.'] }), /^constitute: refuses repeats "a"$/m],
       ['an empty refusal', Object.assign({}, ANSWERS, { refuses: ['a', '', 'c'] }), /^constitute: refuses\[1\] is empty$/m],
       ['refuses is not an array', Object.assign({}, ANSWERS, { refuses: 'a, b, c' }), /^constitute: refuses is required: at least 3 verb phrases, as a JSON array$/m],
-      ['prefix D', Object.assign({}, ANSWERS, { prefix: 'D' }), /^constitute: prefix D is refused: the vendored witness carries this plugin’s own D-cites/m],
       ['prefix with a digit', Object.assign({}, ANSWERS, { prefix: 'R1' }), /^constitute: prefix must be letters \(FORMAT\.md 12\)$/m],
       ['name on two lines', Object.assign({}, ANSWERS, { name: 'Lot\nII' }), /^constitute: name is one line$/m],
       ['not JSON', 'nope', /^constitute: --answers .* is not readable JSON/m],
@@ -1950,6 +1973,8 @@ const SEC = String.fromCharCode(0xa7);
     const dir = freshDir();
     const r = docket(['constitute'], { cwd: dir });
     ok('constitute without --answers is a usage error, exit 2, pointing at the intake’s shape', r.code === 2 && /^constitute: --answers <file> is required/m.test(r.err) && /intake\/CONSTITUTE\.md/.test(r.err), r.err);
+    const nt = constitute(ANSWERS, { dir, args: ['--target', 'nosuch'] });
+    ok('--target naming a non-directory is refused, exit 2, and nothing is written', nt.code === 2 && /^constitute: --target nosuch is not a directory$/m.test(nt.err) && !fs.existsSync(path.join(dir, 'docs')) && !fs.existsSync(path.join(dir, 'nosuch')), nt.code + ' ' + nt.err);
     fs.rmSync(dir, { recursive: true, force: true });
   }
   {
@@ -1969,7 +1994,176 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // ── append runs check (M3.2) ──
+  // ── the two headless measurements, driven by a stand-in host so their mechanics are checked without a model ──
+  // A reader ran cites.sh and found it could not complete a run: an argument its extractor required and its caller
+  // never passed, fatal under set -u. Nothing here had run the script. Now a stub `claude` on PATH prints one
+  // transcript, and the scripts must complete, score as their sentences say, and leave stderr clean.
+  {
+    const stubDir = tmpDir('host-');
+    const stub = (name, lines) => { const p = path.join(stubDir, name); fs.writeFileSync(p, '#!/bin/sh\n' + lines.map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(p, 0o755); return p; };
+    const turn = (text, tool) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }].concat(tool ? [{ type: 'tool_use', name: tool, input: { file_path: 'test/fixture/app.js' } }] : []) } });
+    const result = (denials) => JSON.stringify({ type: 'result', result: 'done', permission_denials: denials || [] });
+    const runScript = (script, hostLines, env) => {
+      fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\n' + hostLines.map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+      return cp.spawnSync('sh', [path.join(ROOT, 'test', script)], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1', CONSTITUTE_RUNS: '1' }, env || {}) });
+    };
+    void stub;
+    // cites.sh: a host that names R6 and edits → (a) cited, (b) surfaced by naming; the script completes, exit 0, stderr clean
+    let r = runScript('cites.sh', [turn('This region is governed by R6, so I will rename carefully.', 'Edit'), result()]);
+    ok('cites.sh completes a run against a stand-in host and scores both measures as its sentences say', r.status === 0 && /\(a\) citing   1 of 1/.test(r.stdout) && /\(b\) obeying  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    ok('…with nothing on stderr: no unset parameter, no unmatched paren, no command not found', r.stderr.trim() === '', r.stderr);
+    // a host that edits without naming a ruling → (a) silent 0 of 1; (b) not surfaced, and the toolbar is untouched by a stub, so (b) fails on surfaced
+    r = runScript('cites.sh', [turn('Renaming now.', 'Edit'), result()]);
+    ok('cites.sh scores a host that edits without naming a ruling as silent: (a) 0 of 1', r.status === 0 && /\(a\) citing   0 of 1/.test(r.stdout) && /before the edit: silent/.test(r.stdout), r.stdout);
+    ok('…and (b) 0 of 1: nothing surfaced, whatever the file did', /\(b\) obeying  0 of 1/.test(r.stdout) && /surfaced: no /.test(r.stdout), r.stdout);
+    // a host that declines in words without the token: (b) surfaced through the disjunction's third arm
+    r = runScript('cites.sh', [turn("I won't delete the toolbar: a note in the file marks it as governed, so I will flag something first."), result()]);
+    ok('cites.sh reads a decline in words as surfacing the conflict, the rule’s third arm, with no R-token', /\(b\) obeying  1 of 1/.test(r.stdout) && /surfaced: yes \(named no, asked no, declined yes\)/.test(r.stdout), r.stdout + r.stderr);
+    // a harness denial: the run is NOT SCORED and the count excludes it
+    r = runScript('cites.sh', [turn('Governed by R6; editing.', 'Edit'), result([{ tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js' } }])]);
+    ok('cites.sh does not score a run the harness interfered with, and says so', /NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(b\) obeying  0 of 0/.test(r.stdout), r.stdout);
+    // constitute.sh: (c) a host that prints the block's exact heading and touches nothing; the skill's text is in the transcript
+    const skillLine = JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' });
+    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
+    ok('constitute.sh scores a host that reaches the block and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
+    ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
+    ok('…and stderr is clean for both scripts', r.stderr.trim() === '', r.stderr);
+    // a host that runs the mechanical half before the word: (c) fails on "core invoked"
+    r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM' }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
+    ok('constitute.sh fails (c) for a host that invokes the core before the word, even with the heading printed', /\(c\) halting   0 of 1/.test(r.stdout) && /core invoked before the word: yes/.test(r.stdout), r.stdout);
+  }
+
+  // ── what readers of the build found: each fixed, each done here rather than read ──
+  {
+    const A = { name: 'Lot', what: 'A page where a typed thought becomes a framed note the instant it is typed.', who: { role: 'a solo builder', knows: 'k', doesntKnow: 'd' }, feeling: 'calm', refuses: ['a', 'b', 'c'] };
+    const LED = 'test/fixture/DECISIONS.md';
+    const git = (dir, args) => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(args), dir);
+    // vendor never writes over a file that is not a docket core; an older core copy is replaced
+    {
+      const dir = tempRepo(d => { fs.mkdirSync(path.join(d, 'test'), { recursive: true }); fs.writeFileSync(path.join(d, 'test', 'docket.js'), 'console.log("my real tests");\n'); });
+      let r = docket(['vendor', '.'], { cwd: dir });
+      ok('vendor refuses to overwrite a test/docket.js that is not a copy of the core, exit 2, naming it', r.code === 2 && /^vendor: test\/docket\.js exists and is not a copy of the docket’s core/m.test(r.err.replace(/'/g, '’')) && read(path.join(dir, 'test', 'docket.js')) === 'console.log("my real tests");\n', r.code + ' ' + r.err);
+      fs.writeFileSync(path.join(dir, 'test', 'docket.js'), read(CORE).slice(0, 3000));   // an older, shorter core: opens as this one does
+      r = docket(['vendor', '.'], { cwd: dir });
+      ok('…and replaces a copy of an older core, which opens as this file opens', r.code === 0 && /^replaced test\/docket\.js/m.test(r.out) && read(path.join(dir, 'test', 'docket.js')) === read(CORE), r.out + r.err);
+      r = docket(['vendor', '.'], { cwd: ROOT });
+      ok('vendor into this repository refuses: its test/docket.js is the suite, not the core', r.code === 2 && /is not a copy of the docket/.test(r.err), r.code + ' ' + r.err);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // an unclosed fence: refused by append, failed by check at the line that opened it
+    {
+      const dir = tempRepo();
+      let r = docket(['append', '--title', 'Opens a fence', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Reason: r.\n```', '--ledger', LED], { cwd: dir });
+      ok('append refuses a body that opens a fence it does not close, exit 2', r.code === 2 && /^append: --body opens a fence it does not close/m.test(r.err), r.code + ' ' + r.err);
+      fs.appendFileSync(path.join(dir, LED), '\n### R9. Hand (issue #9)\nReason: r.\n```\nsee R99\n');
+      r = docket(['check'], { cwd: dir });
+      const opener = read(path.join(dir, LED)).split('\n').findIndex(l => /^\s*```/.test(l)) + 1;
+      ok('check 2 fails an unclosed fence at the line that opened it, so R99 behind it is not silently quoted', r.code === 1 && new RegExp('^test/fixture/DECISIONS\\.md:' + opener + '  check 2: a fence opened here is never closed', 'm').test(r.out), r.out);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // check 7 reads the ledger from the repository root, whatever directory the host names
+    {
+      const dir = tmpDir('sub-'); fs.mkdirSync(path.join(dir, 'proj', 'docs'), { recursive: true }); fs.copyFileSync(path.join(FIX, 'DECISIONS.md'), path.join(dir, 'proj', 'docs', 'DECISIONS.md'));
+      git(dir, ['init', '-q']); git(dir, ['add', '-A']); git(dir, ['commit', '-qm', 'one']);
+      fs.appendFileSync(path.join(dir, 'proj', 'docs', 'DECISIONS.md'), '\n'); git(dir, ['commit', '-qam', 'two']);
+      edit(dir, 'proj/docs/DECISIONS.md', '### R3. Fold similarity (issue #4)', '### R3. Fold similarity, rewritten (issue #4)');
+      const r = docket(['check'], { cwd: path.join(dir, 'proj'), env: { CLAUDE_PROJECT_DIR: path.join(dir, 'proj') } });
+      ok('check 7 catches an amended heading when CLAUDE_PROJECT_DIR is a subdirectory of the repository: the path is resolved from the git root', r.code === 1 && /check 7: R3: heading changed/.test(r.out) && !/check 7 skipped/.test(r.out), r.out);
+    }
+    // DOCKET_BASE: an amendment inside a pushed range is compared, not only the tip's parent; an unreadable base falls back
+    {
+      const dir = tempRepo();
+      const before = sh('git', ['rev-parse', 'HEAD'], dir).stdout.trim();
+      edit(dir, LED, '### R3. Fold similarity (issue #4)', '### R3. Fold similarity, rewritten (issue #4)'); git(dir, ['commit', '-qam', 'amend']);
+      const a = docket(['append', '--title', 'Appended after the amendment', '--issue', '9', '--principle', 'Capture precedes structure', '--body', 'Reason: r.', '--ledger', LED], { cwd: dir, env: { DOCKET_TODAY: '2026-09-23' } }); git(dir, ['commit', '-qam', 'append']);
+      const tip = docket(['check'], { cwd: dir }), based = docket(['check'], { cwd: dir, env: { DOCKET_BASE: before } }), zero = docket(['check'], { cwd: dir, env: { DOCKET_BASE: '0000000000000000000000000000000000000000' } });
+      ok('a two-commit push that amends and then appends passes at the tip alone', a.code === 0 && tip.code === 0 && /^check: ok/m.test(tip.out), a.out + a.err + tip.out);
+      ok('…and is caught when DOCKET_BASE names the commit before the push', based.code === 1 && /check 7: R3: heading changed/.test(based.out), based.out);
+      ok('…while an unreadable base (a branch’s first push) falls back to the tip rule', zero.code === 0 && /^check: ok/m.test(zero.out), zero.out);
+      const wf = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
+      ok('ci.yml names DOCKET_BASE from the push’s before or the pull request’s base', /DOCKET_BASE:\s*\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(wf), wf);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // a committed ledger deleted from the tree: check 7 fails, status says so
+    {
+      const dir = tempRepo(); fs.unlinkSync(path.join(dir, LED));
+      const c = docket(['check'], { cwd: dir }), st = docket(['status'], { cwd: dir });
+      ok('deleting the committed ledger fails check 7 as removed, naming the revision that has it', c.code === 1 && /^test\/fixture\/DECISIONS\.md:1  check 7: the ledger is gone from the working tree \(append only\); HEAD has it$/m.test(c.out), c.out);
+      ok('…and status names the ledger that is gone rather than falling silent', st.code === 0 && /^Docket — the committed ledger test\/fixture\/DECISIONS\.md is gone from the working tree; check 7 says so \(D4\)$/m.test(st.out), st.out);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // append's guards: what the entry path refuses, the addendum path refuses; controls, bidi, line separators, a second Principle line
+    {
+      const dir = tempRepo();
+      const ap = args => docket(['append'].concat(args, ['--ledger', LED]), { cwd: dir, env: { DOCKET_TODAY: '2026-09-23' } });
+      let r = ap(['--addendum', 'R5', '--text', 'see R99 for the new count.']);
+      ok('an addendum naming a ruling that does not exist is refused before it is written', r.code === 2 && /^append: --text names R99, which is not in test\/fixture\/DECISIONS\.md$/m.test(r.err), r.code + ' ' + r.err);
+      r = ap(['--addendum', 'R5', '--text', 'colour it \u001b[31mred']);
+      ok('an addendum carrying a control character is refused, naming the code point', r.code === 2 && /^append: --text carries U\+001B, a control or bidi character/m.test(r.err), r.err);
+      r = ap(['--title', 'A title with \u001b[2J inside', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Reason: r.']);
+      ok('a title carrying a control character is refused, not written and failed for ever', r.code === 2 && /^append: --title carries U\+001B/m.test(r.err), r.err);
+      r = ap(['--title', 'Right ‮ to left', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Reason: r.']);
+      ok('a title carrying a bidi override is refused the same way', r.code === 2 && /^append: --title carries U\+202E/m.test(r.err), r.err);
+      r = ap(['--title', 'Frames wrap at the sheet edge', '--issue', '50', '--principle', 'Capture precedes structure', '--body', 'Reason: r.']);
+      ok('a title carrying U+2028 is refused as a second line, which to the grammar it is', r.code === 2 && /^append: --title is one line/m.test(r.err), r.err);
+      r = ap(['--title', 'Two principles', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Principle: Zero cognitive tax.\nReason: r.']);
+      ok('a body carrying its own Principle: line is refused; the tool writes that line', r.code === 2 && /^append: --body may not carry a Principle: line/m.test(r.err), r.err);
+      fs.appendFileSync(path.join(dir, LED), '\n### R9. Hand written (issue #9)\nPrinciple: Capture precedes structure.\nReason: r.\n');
+      const ix = JSON.parse(docket(['index', '--ledger', LED], { cwd: dir }).out);
+      ok('a hand-written heading carrying U+2028 is read as a heading, not swallowed into the entry before it', ix.rulings.length === 10 && ix.rulings[9].id === 'R9', ix.rulings.map(x => x.id).join(','));
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // near: a multi-line old_string's window spans its lines; rulings cited inside the replaced text are listed
+    {
+      const lines = read(APP).split('\n'); const needle = lines.slice(40, 100).join('\n');
+      const r = docket(['near'], { input: nearInput(APP, needle) });
+      ok('a 60-line old_string gets a window around the whole span, and the header names it first–last', /^Governed here \(test\/fixture\/DECISIONS\.md, ±20 lines of app\.js:41–100\):$/m.test(r.out), r.out.split('\n')[0]);
+      ok('…and lists the rulings cited inside the replaced text, which a first-line window omitted', /^  R7  /m.test(r.out) && /^  R3  /m.test(r.out) && /^  R8  /m.test(r.out) && /^  R6  /m.test(r.out), r.out);
+      const j = JSON.parse(docket(['near', '--json'], { input: nearInput(APP, needle) }).out);
+      // every ruling cited inside the span is at distance 0, so they rank by line — R6 (41) to R8 (100) — and R2, cited above the span, last
+      ok('…with the rulings inside the span ranked by their line, all at distance 0, and the one cited above the span last', j.rulings.map(x => x.id).join(',') === 'R6,R4,R7,R3,R8,R2', j.rulings.map(x => x.id + '@' + x.line).join(','));
+      ok('a one-line old_string is unchanged by the span rule: near-41.txt byte for byte', docket(['near'], { input: nearInput(APP, 'makeToolbar(') }).out === expected('near-41.txt'), 'differs');
+    }
+    // spec-check (a): one matching declaration is a match; a second value is reported, not failed; a comment is not a declaration
+    {
+      const dir = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'styles.css'), '\n@media (prefers-color-scheme: dark) { :root { --paper: #1b1b1b; } }\n/* legacy: --ink: #ffffff was the old ink */\n'));
+      const r = docket(['spec-check'], { cwd: path.join(dir, 'test', 'fixture') });
+      ok('a theme override of a token whose spec value is also declared does not fail spec-check; it is reported as a second value', !/--paper is #f4efe6 in the spec but/.test(r.out) && /info  test\/fixture\/UIUX\.md:\d+: --paper is #f4efe6 in the spec and one declaration matches; #1b1b1b at test\/fixture\/styles\.css:\d+ is a second value/.test(r.out), r.out);
+      ok('…a value inside a CSS comment is not a declaration', !/--ink/.test(r.out.replace(/info[^\n]*/g, '')), r.out);
+      ok('…and the fixture’s planted mismatch still fails, since no declaration of --line matches', r.code === 1 && /--line is #7a8fa6 in the spec but #7a8fa7 at test\/fixture\/styles\.css:5/.test(r.out), r.out);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // options: one a subcommand does not read is a usage error, exit 2, naming the ones it does
+    {
+      let r = docket(['check', '--text-only']);
+      ok('an option the subcommand does not read is a usage error naming its options, exit 2', r.code === 2 && /^check: --text-only is not an option of check; its options are --json$/m.test(r.err) && r.out === '', r.code + ' ' + r.err);
+      r = docket(['status', '--session', 'abc']);
+      ok('…for a flag that takes a value too', r.code === 2 && /^status: --session is not an option of status; its options are --json, --ledger$/m.test(r.err), r.err);
+      r = docket(['governs', 'D8', '--ledger', 'docs/DECISIONS.md']);
+      ok('…while a subcommand’s own options pass', r.code === 0 && /^D8  /m.test(r.out), r.err);
+    }
+    // a failed constitution leaves nothing behind, the directories included
+    {
+      const d = tmpDir('const-'); fs.writeFileSync(path.join(d, 'a.json'), JSON.stringify(Object.assign({}, A, { what: 'A thing that reads R2 and does one thing.' })));
+      const r = docket(['constitute', '--answers', 'a.json'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } });
+      ok('a refused constitution leaves no docs/ or test/ directory behind, only the answers file', r.code === 2 && fs.readdirSync(d).join(',') === 'a.json', r.code + ' ' + fs.readdirSync(d).join(','));
+    }
+    // an empty ledger opens with its first entry, not with blank lines
+    {
+      const d = tmpDir('empty-'); fs.writeFileSync(path.join(d, 'DECISIONS.md'), ''); fs.writeFileSync(path.join(d, 'PRD.md'), '# PRD\n\n## ' + SEC + '1 Principles\n\n- **One.** x\n');
+      const r = docket(['append', '--title', 'First', '--issue', '1', '--principle', 'One', '--body', 'Reason: r.', '--prefix', 'Q', '--ledger', 'DECISIONS.md'], { cwd: d, env: { DOCKET_TODAY: '2026-09-23', CLAUDE_PROJECT_DIR: '' } });
+      ok('append into a 0-byte ledger writes the entry from the first byte', r.code === 0 && read(path.join(d, 'DECISIONS.md')).startsWith('### Q1. First (issue #1)\n'), JSON.stringify(read(path.join(d, 'DECISIONS.md')).slice(0, 40)));
+    }
+    // the intake skills splice their intake at load, so no file need be read from any install layout
+    {
+      const rule = read(path.join(ROOT, 'skills', 'rule', 'SKILL.md')), con = read(path.join(ROOT, 'skills', 'constitute', 'SKILL.md'));
+      ok('skills/rule splices intake/RULE.md at load with a ! command, so the intake is in context without a Read', /^!`cat \$\{CLAUDE_PLUGIN_ROOT\}\/intake\/RULE\.md`$/m.test(rule), rule);
+      ok('skills/constitute splices intake/CONSTITUTE.md the same way', /^!`cat \$\{CLAUDE_PLUGIN_ROOT\}\/intake\/CONSTITUTE\.md`$/m.test(con), con);
+    }
+  }
+
+  // ── append runs check ──
   {
     const dir = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'stray.js'), 'const z = 0; // R99: a ruling that is not there\n'));
     const r = docket(['append', '--title', 'A ruling written into a faulted tree', '--issue', '77', '--principle', 'Capture precedes structure', '--body', 'The entry is valid. Reason: append must still run check, so the fault beside it is reported by the same run.', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: dir, env: { DOCKET_TODAY: '2026-09-22' } });
@@ -1985,14 +2179,23 @@ const SEC = String.fromCharCode(0xa7);
     const T = path.join(ROOT, 'templates');
     for (const f of ['PRD.md', 'UIUX.md', 'DECISIONS.md']) ok('templates/' + f + ' ships', fs.existsSync(path.join(T, f)), f);
     const led = read(path.join(T, 'DECISIONS.md'));
-    ok('the ledger template carries the append-only law (M3.4)', /^\*\*Append only\.\*\* A ruling is superseded, refined, waived or reversed by a later\nruling that names it with a verb; it is never edited away\./m.test(led), led.slice(0, 600));
+    ok('the ledger template carries the append-only law', /^\*\*Append only\.\*\* A ruling is superseded, refined, waived or reversed by a later\nruling that names it with a verb; it is never edited away\./m.test(led), led.slice(0, 600));
     ok('…the header contract bound from the first entry, and the rulings section, by placeholder', /<!-- docket: contract from \{\{prefix\}\}1 -->/.test(led) && /^## \{\{prefix\}\}\. Rulings$/m.test(led) && /<!-- docket: bare-cites -->/.test(led), led);
     ok('the PRD template holds the two sections the core and the reader look for', new RegExp('^## ' + SEC + '1 Principles$', 'm').test(read(path.join(T, 'PRD.md'))) && new RegExp('^## ' + SEC + '2 The reader$', 'm').test(read(path.join(T, 'PRD.md'))), 'sections missing');
     ok('the UIUX template holds the token tables and the minimum', new RegExp('^## ' + SEC + '2 Design tokens$', 'm').test(read(path.join(T, 'UIUX.md'))) && new RegExp('^## ' + SEC + '4\.5 The minimum$', 'm').test(read(path.join(T, 'UIUX.md'))), 'sections missing');
     const used = new Set(); for (const f of fs.readdirSync(T)) for (const m of read(path.join(T, f)).matchAll(/\{\{(\w+)\}\}/g)) used.add(m[1]);
     const filled = new Set(['name', 'what', 'principles', 'reader', 'date', 'prefix']);   // the vars constitute builds
     ok('every placeholder the templates use is one constitute fills: ' + Array.from(used).sort().join(','), Array.from(used).every(k => filled.has(k)), Array.from(used).filter(k => !filled.has(k)).join(','));
-    ok('…and the core refuses a placeholder it does not fill rather than shipping it', /names \{\{' \+ k \+ '\}\}, which constitute does not fill/.test(read(CORE)), 'no refusal for an unfilled placeholder');
+    {
+      // A placeholder constitute does not fill is refused before anything ships — done, not read from the source: a copy
+      // of the plugin whose PRD template carries {{bogus}} refuses by name and writes nothing.
+      const plug = tmpDir('plug-');
+      fs.cpSync(ROOT, plug, { recursive: true, filter: src => !/[\\/]\.git(?:[\\/]|$)/.test(src) && !/[\\/]node_modules(?:[\\/]|$)/.test(src) });
+      fs.appendFileSync(path.join(plug, 'templates', 'PRD.md'), '\n{{bogus}}\n');
+      const d = tmpDir('const-'); fs.writeFileSync(path.join(d, 'a.json'), JSON.stringify(ANSWERS));
+      const pr = cp.spawnSync('node', [path.join(plug, 'bin', 'docket.js'), 'constitute', '--answers', 'a.json'], { cwd: d, encoding: 'utf8', env: Object.assign({}, process.env, { DOCKET_TODAY: '2026-09-22', CLAUDE_PROJECT_DIR: '' }) });
+      ok('a placeholder constitute does not fill is refused by name, exit 2, and nothing is written — run, not read', pr.status === 2 && /^constitute: templates\/PRD\.md names \{\{bogus\}\}, which constitute does not fill$/m.test(pr.stderr) && !fs.existsSync(path.join(d, 'docs')), pr.status + ' ' + pr.stderr + ' ' + fs.readdirSync(d).join(','));
+    }
     const c = docket(['check', '--json']);
     let o = null; try { o = JSON.parse(c.out); } catch (e) { /* */ }
     ok('the template ledger has no entries, and check says its subtree is ungoverned rather than passing it silently', o && o.info.some(i => /^templates\/DECISIONS\.md: no entries; its subtree is ungoverned and no check runs on its 2 files$/.test(i)), c.out.slice(0, 500));
@@ -2003,7 +2206,7 @@ const SEC = String.fromCharCode(0xa7);
     const RULE = read(path.join(ROOT, 'intake', 'RULE.md')), CONST = read(path.join(ROOT, 'intake', 'CONSTITUTE.md'));
     ok('both intakes cite the ruling that shapes them and the one that keeps them host-agnostic', /D18/.test(RULE) && /D13/.test(RULE) && /D18/.test(CONST) && /D13/.test(CONST), 'D18 or D13 missing');
     ok('neither intake names a host, a model or a vendor', !/claude|anthropic|openai|gpt|gemini|copilot/i.test(RULE + CONST), 'a host or model is named');
-    // M3.3: the confirm block is frozen text. A sentence added inside it — one letting the model confirm on
+    // The confirm block is frozen text. A sentence added inside it — one letting the model confirm on
     // silence, say — fails here whatever its wording, which a grep for wordings could not promise.
     const block = (RULE.match(/^## The confirm block\n([\s\S]*?)(?=^## )/m) || [])[1];
     ok('RULE.md’s confirm block is exactly the frozen text, sentence for sentence', block !== undefined && block.trim() + '\n' === expected('rule-confirm-block.txt'), block && firstDiff(block.trim() + '\n', expected('rule-confirm-block.txt')));
@@ -2014,6 +2217,11 @@ const SEC = String.fromCharCode(0xa7);
     ok('RULE.md sends the reader to docket query for the rulings the change touches, and to docket append on confirmation', /docket query <the nouns of the answer>/.test(RULE) && /^    docket append --title/m.test(RULE), 'query or append not named');
     ok('CONSTITUTE.md asks the four gated questions with their refusals, and offers no default feeling', /^1\. \*\*What is this\?\*\*/m.test(CONST) && /^2\. \*\*Who is it for\?\*\*/m.test(CONST) && /^3\. \*\*What feeling must survive every iteration\?\*\*/m.test(CONST) && /^4\. \*\*What will it refuse to do\?\*\*/m.test(CONST) && /No default\n\s*is offered/.test(CONST) && /"general\n\s*audience", "everyone"/.test(CONST), 'a question, a refusal or the no-default sentence is missing');
     ok('CONSTITUTE.md’s confirm block shows the prefix and the name, and says only the human confirms', /^    CONSTITUTION — PLEASE CONFIRM$/m.test(CONST) && /^    Prefix:    R/m.test(CONST) && /^    Name:      /m.test(CONST) && /Only the human confirms \(D8\)/.test(CONST) && /Silence is not\nconfirmation/.test(CONST), 'the block is not as stated');
+    const cblock = (CONST.match(/^## The confirm block\n([\s\S]*?)(?=^## )/m) || [])[1];
+    ok('CONSTITUTE.md’s confirm block is exactly the frozen text too, sentence for sentence', cblock !== undefined && cblock.trim() + '\n' === expected('constitute-confirm-block.txt'), cblock && firstDiff(cblock.trim() + '\n', expected('constitute-confirm-block.txt')));
+    ok('CONSTITUTE.md’s own escalation says the three steps, not only that it cites D18', /^## Escalation \(D18\)/m.test(CONST) && /exactly one clarification/.test(CONST) && /restated as a checklist/.test(CONST) && /There\s+is no third attempt/.test(CONST), 'an escalation step is missing from CONSTITUTE.md');
+    ok('RULE.md’s questions 2–4 each carry their refusal rule', /^2\. \*\*The issue or context\*\*[\s\S]*?Refused: "cleanup", "misc", "various"\./m.test(RULE) && /^3\. \*\*The principle\*\*[\s\S]*?Refused: a principle not on\s+the list, or none\./m.test(RULE) && /^4\. \*\*Every ruling it touches, with a verb\*\*[\s\S]*?Refused: a ruling the query surfaced that the answer neither\s+names\s+nor dismisses with a reason\./m.test(RULE), 'a refusal rule is missing');
+    ok('RULE.md sends an addendum and a baseline rewrite through the same block', /docket append --addendum <id> --text/.test(RULE) && /docket append --baseline/.test(RULE) && /follow the same path behind the same block\./.test(RULE), 'the sentence is missing');
     const keys = ['"name"', '"what"', '"who"', '"role"', '"knows"', '"doesntKnow"', '"feeling"', '"refuses"', '"prefix"'];
     ok('CONSTITUTE.md gives the JSON shape with every key constitute reads: ' + keys.join(' '), keys.every(k => CONST.includes(k)) && /docket constitute --answers <that file>/.test(CONST), keys.filter(k => !CONST.includes(k)).join(','));
     const core = read(CORE);
@@ -2024,18 +2232,23 @@ const SEC = String.fromCharCode(0xa7);
   {
     const rule = read(path.join(ROOT, 'skills', 'rule', 'SKILL.md')), con = read(path.join(ROOT, 'skills', 'constitute', 'SKILL.md')), dk = read(path.join(ROOT, 'skills', 'docket', 'SKILL.md'));
     ok('skills/rule names itself, limits its tools to the core, follows intake/RULE.md, and splices the principles', /^name:\s*rule$/m.test(rule) && /^allowed-tools:\s*Bash\(node \*docket\.js \*\)$/m.test(rule) && /intake\/RULE\.md/.test(rule) && /!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js principles`/.test(rule), rule);
-    ok('…and stops at the confirm block for the person', /Stop at the confirm\nblock and wait for the person/.test(rule), rule);
+    ok('…and stops at the confirm block for the person, and only then runs append', /Stop at the confirm\nblock and wait for the person\. On their `confirm`, run `append`/.test(rule), rule);
     ok('skills/constitute names itself, cannot be invoked by the model, limits its tools, and follows intake/CONSTITUTE.md', /^name:\s*constitute$/m.test(con) && /^disable-model-invocation:\s*true$/m.test(con) && /^allowed-tools:\s*Bash\(node \*docket\.js \*\)$/m.test(con) && /intake\/CONSTITUTE\.md/.test(con) && /constitute --answers <file>/.test(con), con);
     ok('…and it is the binding that names CLAUDE.md, not the core', /CLAUDE\.md/.test(con) && !/CLAUDE\.md/.test(read(CORE).replace(/CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT/g, '')), 'the host file is named in the wrong layer');
-    ok('skills/docket now advertises /docket diff, which this phase built', /\/docket diff <a> <b>/.test(dk) && /docket\.js diff <a> <b>/.test(dk), 'diff not advertised');
+    ok('skills/docket now advertises /docket diff, which the core has', /\/docket diff <a> <b>/.test(dk) && /docket\.js diff <a> <b>/.test(dk), 'diff not advertised');
     ok('the intake and template directories are named in D13’s list of host-agnostic files', /`packs\/`, `intake\/`, `templates\/`/.test(read(path.join(ROOT, 'docs', 'DECISIONS.md'))), 'D13 does not name them');
   }
 
   // ── D18, and what cites it ──
   {
     const g = docket(['governs', 'D18']);
-    ok('D18 is in the ledger, extends D8, and is cited by both intakes', g.code === 0 && /^Out-edges[\s\S]*?D18 extends D8/m.test(g.out) && /intake\/RULE\.md:\d+/.test(g.out) && /intake\/CONSTITUTE\.md:\d+/.test(g.out), g.out);
-    ok('USAGE lists the three subcommands this phase built', ['docket diff <revA> <revB>', 'docket diff --files <a> <b>', 'docket vendor <dir>', 'docket constitute --answers <json>'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
+    // The match is bounded to the Out-edges section: the Code-cites section below it quotes this test's own line,
+    // which carries the words "D18 extends D8" whether or not the edge exists.
+    const outEdges = (g.out.match(/^Out-edges[^\n]*\n([\s\S]*?)(?=^In-edges)/m) || [])[1] || '';
+    ok('D18 is in the ledger, extends D8 (in the Out-edges section, not anywhere), and is cited by both intakes', g.code === 0 && /^\s+D18 extends D8/m.test(outEdges) && /intake\/RULE\.md:\d+/.test(g.out) && /intake\/CONSTITUTE\.md:\d+/.test(g.out), g.out);
+    const gj = JSON.parse(docket(['governs', 'D18', '--json']).out);
+    ok('D18’s body states the escalation and the confirm rule the intakes follow', /one clarification/.test(gj.ruling.body) && /restated as a checklist/.test(gj.ruling.body) && /no third attempt/.test(gj.ruling.body) && /Silence is not confirmation/.test(gj.ruling.body) && /\bReason: /.test(gj.ruling.body), gj.ruling.body.slice(0, 300));
+    ok('USAGE lists the three subcommands', ['docket diff <revA> <revB>', 'docket diff --files <a> <b>', 'docket vendor <dir>', 'docket constitute --answers <json>'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
     ok('the section map names 12 diff, 13 vendor, 14 constitute', /^\/\/ 12  diff/m.test(read(CORE)) && /^\/\/ 13  vendor/m.test(read(CORE)) && /^\/\/ 14  constitute/m.test(read(CORE)), 'section map incomplete');
   }
 }

@@ -7,6 +7,10 @@ on:
 jobs:
   witness:
     runs-on: ubuntu-latest
+    env:
+      # the commit before the push (or the base of the pull request): check 7 compares with it, so an amendment inside
+      # a range of pushed commits is seen, not only the tip's parent
+      DOCKET_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:

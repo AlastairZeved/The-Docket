@@ -18,10 +18,11 @@ equivalent and runs the commands it names.
    the list, or none. A ruling that serves no stated principle is a preference.
 4. **Every ruling it touches, with a verb** — after question 1, run
    `docket query <the nouns of the answer>` and read what comes back. For each
-   ruling the change bears on, a verb from the ledger's list and the id:
-   supersedes, partially supersedes, refines, waives, reverses, keeps,
-   extends. Refused: a ruling the query surfaced that the answer neither names
-   nor dismisses with a reason.
+   ruling the change bears on, a verb from the grammar's list and the id —
+   supersedes, overrides, retires, reverses, waives, extends, keeps, re-tunes,
+   refines, replaces, corrects, revises; an adverb (partially, partly, in part)
+   may qualify one. Refused: a ruling the query surfaced that the answer neither
+   names nor dismisses with a reason.
 5. **The ruling, in prose, with its reason** — what is now so, and why, the
    why as a sentence beginning `Reason:`. Refused: a body without `Reason:`, or
    a reason that restates the ruling in other words.

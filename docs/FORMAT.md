@@ -111,6 +111,11 @@ the bare-cite baseline (9) or null when the comment is absent, `specs` an object
 with a `UIUX` and a `PRD` key, each the document's headings (7) or null when the
 document is absent.
 
+A heading is one line to this reader and to any other: `docket append` refuses a
+title, a grounding or an edge carrying U+2028 or U+2029, the line separators
+that a host may write and a reader may not see, and reads one written by hand
+as content of the heading rather than as the end of it.
+
 ## 3. The title rule (D7)
 
 The title is the heading text after the id, in three steps and in this order:
@@ -200,6 +205,17 @@ docket (`docket status`) lists pending addenda. `docket append --addendum <id>
 `append` refuses a `--body` that carries an addendum line, so an addendum is
 dated by the tool and never by hand.
 
+An addendum written under an entry that already has an in-edge is not pending
+and never was: the later ruling it would call for exists. The ledger preamble's
+order — the addendum first, the superseding ruling second — is the order for an
+entry no later ruling has yet named; for one already named, the addendum is a
+note under a ruling the law has moved past, and the docket does not ask for a
+second superseding ruling on its account.
+
+The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
+environment names a date, replaces it: a hook for a test that must be repeatable,
+not a way to write a ruling into the past.
+
 ## 7. Sections and spec headings
 
 In a ledger, a **section** is a line `## <X>. <title>` where `<X>` is one or more
@@ -262,6 +278,11 @@ the bare-§ count, `near` prints nothing for an edit to it, and `check` says so
 in an info line. Identity is the text itself, line endings normalised, which no
 marker could forge; a copy that has drifted from the running core is not
 exempt, and its cites failing is the sign to vendor again.
+
+A fence is closed before the entry ends. One that is not quotes every line to
+the end of the ledger, cites included, and `docket append` refuses a body that
+opens one without closing it; a fence left open by hand is check 2's failure,
+named at the line that opened it.
 
 ## 9. The bare-cite baseline
 
@@ -344,7 +365,7 @@ cite, heading or edge, never only the file.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), both read with the normalisation of 1; skipped when no such version exists — a ledger not yet committed, or a clean tree whose `HEAD` has no parent — and an info line names the ledger whose check 7 was skipped, so a skip is never mistaken for a pass |
+| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is the one at the revision `DOCKET_BASE` names when the environment names one (CI names the commit before the push, so an amendment inside a range of commits is compared, not only the tip's parent), else `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), all read from the repository root whatever directory the host names and with the normalisation of 1; a ledger the compared revision has and the working tree lacks fails as removed; skipped when no such version exists — a ledger not yet committed, or a clean tree whose `HEAD` has no parent — and an info line names the ledger whose check 7 was skipped, so a skip is never mistaken for a pass |
 
 Check 7's reference point — the first parent when the ledger is unchanged since
 `HEAD` — is a rule of this repository's ledger, stated with its reason in the preamble of
@@ -358,7 +379,9 @@ ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
 ledger nearest the working directory (a fixture ledger under `test/` is reached
 from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a
 **token row**, whose first two cells are a `--token` and a hex colour of 3, 4,
-6 or 8 digits, checked against every CSS declaration of that token (a); and a
+6 or 8 digits, matched by one CSS declaration of that token (a) — a second
+declaration of another value beside it is a theme's and is reported, not failed;
+a value inside a CSS comment is not a declaration; and a
 **contrast row**, a table row holding token names and an `N:1` value, which
 names exactly two tokens or fails, and whose ratio is recomputed from the two
 hexes to two decimals (b): the stated ratio is rounded half-up on its written
@@ -446,3 +469,8 @@ inside `{"hookSpecificOutput":{"hookEventName":<that>,"additionalContext":<text>
 so a host that reads that shape can inject it; otherwise the text is printed
 bare. Silent means nothing is printed at all — no wrapper with an empty context —
 and the exit code is 0, with or without a `hook_event_name`.
+
+An `old_string` of more than one line covers the lines from its first to its last;
+the window is ±20 around the whole of it, the header names the span as
+`file:first–last`, and a line inside the span is at distance 0 — the rulings
+cited in the text being replaced are what the edit most needs to know.

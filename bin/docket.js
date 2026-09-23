@@ -152,7 +152,7 @@ function specDocs(ledgerPath) {
 // ─── 2. parse ───────────────────────────────────────────────────────────────
 
 const NUMERAL_MAX_DIGITS = 15;                                        // FORMAT.md 2: fifteen keeps the number exact
-const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+(.*?)[ \t]*$/;   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
+const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+(.*?)[ \t]*$/s;   // s: a U+2028/U+2029 inside a heading is content to this reader, as it is to splitLines   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
 const SECTION_RE = /^## ([A-Za-z]+)\.\s+(.*?)\s*$/;
 const ADDENDUM_RE = /^> Addendum (\d{4}-\d{2}-\d{2}): (.*?)\s*$/;
 const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+)*)\s+(.*?)\s*$/;
@@ -561,7 +561,7 @@ function near(argv) {
   const ledger = loadLedger(lp);
   const text = normEol(readText(file)), lines = splitLines(text), N = lines.length, fenced = fencedLines(lines);   // one reading for the match and the lines (1)
   const fileRel = rel(ledger.home, file), ledgerRel = ledgerLabel(pr, lp);
-  let windows, anchors, mode;
+  let windows, anchors, mode, span = 0;                                 // span: the lines an old_string covers beyond its first
   if (tool === 'Write') { windows = [[1, N]]; anchors = []; mode = 'whole'; }
   else if (tool === 'Edit') {
     const needle = ti.old_string;
@@ -570,7 +570,8 @@ function near(argv) {
     if (matches.length === 0) return 0;                                 // zero: silent
     if (matches.length > 1 && ti.replace_all !== true) return 0;        // D7 (1): the tool will reject; silent
     anchors = uniq(matches);                                            // two matches on one line are one anchor: the line is named once
-    windows = anchors.map(l => [Math.max(1, l - WINDOW), Math.min(N, l + WINDOW)]);
+    span = normEol(needle).split('\n').length - 1;                     // the edit covers these lines too; the window is ±WINDOW around the whole of it
+    windows = anchors.map(l => [Math.max(1, l - WINDOW), Math.min(N, l + span + WINDOW)]);
     mode = matches.length === 1 ? 'one' : 'many';
   } else return 0;
   // collect
@@ -582,7 +583,7 @@ function near(argv) {
   windows.forEach((w, wi) => {
     const anchor = anchors[wi];
     for (let ln = w[0]; ln <= w[1]; ln++) {
-      const d = anchor === undefined ? ln : Math.abs(ln - anchor);
+      const d = anchor === undefined ? ln : (ln < anchor ? anchor - ln : ln > anchor + span ? ln - (anchor + span) : 0);   // inside the edited span, distance is 0
       if (!nearest.has(ln) || d < nearest.get(ln)) nearest.set(ln, d);
     }
   });
@@ -591,7 +592,7 @@ function near(argv) {
     const l = lines[ln - 1], d = nearest.get(ln);
     for (const c of citesInLine(l, ledger)) {
       if (!c.exists) continue;
-      const d0 = anchors.length ? Math.abs(ln - anchors[0]) : ln;
+      const d0 = anchors.length ? (ln < anchors[0] ? anchors[0] - ln : ln > anchors[0] + span ? ln - (anchors[0] + span) : 0) : ln;
       const cur = byId.get(c.id);
       if (!cur) byId.set(c.id, { id: c.id, count: 1, dist: d, dist0: d0, first: ln, col: c.col });
       // first is the earliest cite by line and then by column: FORMAT.md 15's last level is a key here, not an order of visits.
@@ -601,7 +602,7 @@ function near(argv) {
     while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) specs.push({ doc: m[1], num: m[2], line: ln });
   }
   const where = mode === 'whole' ? 'whole file ' + fileRel
-    : '±' + WINDOW + ' lines of ' + fileRel + ':' + (anchors.length <= CAP ? anchors.join(', ') : anchors.slice(0, CAP).join(', ') + ' +' + (anchors.length - CAP) + ' more');
+    : '±' + WINDOW + ' lines of ' + fileRel + ':' + (anchors.length <= CAP ? anchors.map(a => span ? a + '–' + (a + span) : a).join(', ') : anchors.slice(0, CAP).map(a => span ? a + '–' + (a + span) : a).join(', ') + ' +' + (anchors.length - CAP) + ' more');
   const outLines = [];
   const obj = { ledger: ledgerRel, file: fileRel, mode, anchors, region: where, rulings: [], more: 0, edges: [], addenda: [], specCites: [], notice: null };
   if (byId.size === 0) {
@@ -857,6 +858,10 @@ function runCheck(root, opts) {
       if (!r.hasReason) fail(lp, r.line, 6, r.id + ': body has no "Reason:"');   // quoted in code, it is not stated (FORMAT.md 5)
     }
     // 7. append only: existing headings and bodies unchanged vs the committed ledger
+    // FORMAT.md 8: a fence quotes everything to the next fence line; one never closed quotes the rest of the ledger,
+    // cites included, and check 1, 3 and 4 would read none of it. The fault is the fence, and it is named.
+    const fenceAt = ledger.lines.map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
+    if (fenceAt.length % 2 === 1) fail(lp, fenceAt[fenceAt.length - 1], 2, 'a fence opened here is never closed; every line after it is read as code, cites included (FORMAT.md 8)');
     const committed = committedText(root, lp, ledger.text);
     if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no committed version to compare (a ledger not yet committed, or a clean tree whose HEAD has no parent)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
@@ -867,6 +872,18 @@ function runCheck(root, opts) {
         if (cur.heading !== o.heading) fail(lp, cur.line, 7, o.id + ': heading changed (append only): "' + o.heading + '" → "' + cur.heading + '"');
         if (!bodyOnlyAppended(o.bodyLines, cur.bodyLines)) fail(lp, cur.line, 7, o.id + ': body changed other than by appended addendum lines (append only)');
       }
+    }
+  }
+  // A ledger the compared revision has and the working tree lacks is the most complete amendment there is (D4).
+  const groot = gitRoot(root);
+  if (groot) {
+    const base = baseRevision();
+    const rev = base && sh('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], groot).status === 0 ? base : 'HEAD';
+    const ls = sh('git', ['ls-tree', '-r', '--name-only', rev], groot);
+    if (ls.status === 0) for (const p of ls.stdout.split('\n')) {
+      if (!/(^|\/)DECISIONS\.md$/.test(p)) continue;
+      const full = path.join(groot, p);
+      if (isWithin(full, path.resolve(root)) && !isFile(full)) fail(full, 1, 7, 'the ledger is gone from the working tree (append only); ' + rev + ' has it');
     }
   }
   return { failures, info, ctx };
@@ -883,14 +900,24 @@ function bodyOnlyAppended(oldLines, newLines) {
 // equals HEAD's, so a check run on a fresh commit (as in CI) judges the commit it was given; null when no
 // such version exists, and then the check is skipped.
 function normEol(s) { return s.replace(/\r\n/g, '\n'); }
+// DOCKET_BASE, when the environment names a revision (CI names the commit before the push), is the version compared
+// with: an amendment in the middle of a pushed range is then seen, where a tip-only comparison would miss it. Unset
+// or unreadable, the rule is HEAD's, or HEAD's parent's when the tree already equals HEAD.
+function baseRevision() {
+  const b = process.env.DOCKET_BASE;
+  return b && /^[A-Za-z0-9_./~^-]{1,64}$/.test(b) && !/^0+$/.test(b) ? b : null;
+}
 function committedText(root, filePath, workingText) {
-  const p = rel(root, filePath);
-  const head = sh('git', ['show', 'HEAD:' + p], root);
+  const groot = gitRoot(path.dirname(filePath)) || root;               // git resolves <rev>:<path> from the repository root, whatever the enumeration root is
+  const p = rel(groot, filePath);
+  const base = baseRevision();
+  if (base) { const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout; }
+  const head = sh('git', ['show', 'HEAD:' + p], groot);
   if (head.status !== 0) return null;
   let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
   if (working === undefined) { try { working = readText(filePath); } catch (e) { return head.stdout; } }
   if (normEol(working) !== normEol(head.stdout)) return head.stdout;  // FORMAT.md 1: both sides normalised
-  const parent = sh('git', ['show', 'HEAD~1:' + p], root);
+  const parent = sh('git', ['show', 'HEAD~1:' + p], groot);
   return parent.status === 0 ? parent.stdout : null;
 }
 function check(argv) {
@@ -955,7 +982,7 @@ function runSpecCheck(root, ctx, onlyLedger) {
     const specLines = splitLines(readText(docs.uiux));
     const cssFiles = ctx.files.filter(e => e.ledger === lp && /\.css$/i.test(e.path));
     const decls = new Map(); // token -> [{value, file, line}]
-    for (const e of cssFiles) splitLines(fileText(e)).forEach((l, i) => {
+    for (const e of cssFiles) splitLines(fileText(e).replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))).forEach((l, i) => {   // a comment is not a declaration; blanked, so line numbers hold
       const re = new RegExp('(--[A-Za-z0-9_-]+)\\s*:\\s*(' + HEX + ')', 'g'); let m;
       while ((m = re.exec(l)) !== null) { if (!decls.has(m[1])) decls.set(m[1], []); decls.get(m[1]).push({ value: m[2].toLowerCase(), file: e.path, line: i + 1 }); }
     });
@@ -972,7 +999,8 @@ function runSpecCheck(root, ctx, onlyLedger) {
       specValue.set(token, hex);
       const d = decls.get(token);
       if (!d) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but is declared in no CSS file that resolves to ' + rel(root, lp) });
-      else for (const x of d) if (x.value !== hex) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but ' + x.value + ' at ' + rel(root, x.file) + ':' + x.line });
+      else if (!d.some(x => x.value === hex)) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but ' + d.map(x => x.value + ' at ' + rel(root, x.file) + ':' + x.line).join(', ') });
+      else for (const x of d) if (x.value !== hex) info.push(rel(root, docs.uiux) + ':' + (i + 1) + ': ' + token + ' is ' + hex + ' in the spec and one declaration matches; ' + x.value + ' at ' + rel(root, x.file) + ':' + x.line + ' is a second value (a theme, or a stray)');
     });
     const valueOf = t => specValue.get(t) || (decls.get(t) ? decls.get(t)[0].value : null);
     specLines.forEach((l, i) => {
@@ -1066,7 +1094,7 @@ function parseEdgeArg(s) {
 function appendEntry(argv) {
   const { root, ledger, release } = lockedLedger(argv);
   const entry = buildEntry(argv, root, ledger);
-  const text = ensureNl(ledger.text) + '\n' + entry;
+  const text = (ledger.text.trim() ? ensureNl(ledger.text) + '\n' : '') + entry;   // an empty ledger opens with its entry, not with blank lines
   writeLedger(ledger, text);
   release();
   return afterWrite(argv, root, ledger, entry);
@@ -1077,11 +1105,11 @@ function buildEntry(argv, root, ledger) {
   const title = flag(argv, '--title'), issue = flag(argv, '--issue'), principle = flag(argv, '--principle'), body = flag(argv, '--body');
   const edges = flags(argv, '--edge');
   if (!title || !title.trim()) die('append: --title is required (one line, the ruling in a phrase)', 2);
-  if (/[\r\n]/.test(title)) die('append: --title is one line — a line break would open a second heading (FORMAT.md 2, 3)', 2);
+  if (/[\r\n\u2028\u2029]/.test(title)) die('append: --title is one line — a line break would open a second heading (FORMAT.md 2, 3)', 2);
   if (!stripMarks(title.trim()).trim()) die('append: --title renders empty — marks alone are no title; give the ruling in words (FORMAT.md 3)', 2);
   if (metaStart(title) >= 0) die('append: --title may not contain " (" outside a code span — the title rule would cut it there; put the parenthetical in the body', 2);   // the same reader as the title rule
   if (!issue || !issue.trim()) die('append: --issue is required (an issue number, or a phrase naming the context the ruling answers)', 2);
-  if (/[\r\n]/.test(issue)) die('append: --issue is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
+  if (/[\r\n\u2028\u2029]/.test(issue)) die('append: --issue is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
   if (/[;()]/.test(issue)) die('append: --issue may not contain ";", "(" or ")" — the meta is one parenthetical whose clauses are split on ";" (FORMAT.md 4)', 2);
   if (!principle || !principle.trim()) die('append: --principle is required (one of `docket principles`)', 2);
   const prin = principlesOf(ledger);
@@ -1089,12 +1117,19 @@ function buildEntry(argv, root, ledger) {
   const pr = principleNamed(prin.list, principle);
   if (!pr) die('append: principle "' + principle + '" is not one of: ' + prin.list.map(p => p.name).join(' · '), 2);
   if (!body || !body.trim()) die('append: --body is required (the ruling in prose, with its Reason:)', 2);
+  for (const [name, v] of [['--title', title], ['--issue', issue], ['--principle', principle], ['--body', body]].concat(edges.map(e => ['--edge', e]))) {
+    const um = UNSAFE_RE.exec(v);                                      // check 2 would fail the entry for ever; it is refused before it is written
+    if (um) die('append: ' + name + ' carries U+' + um[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control or bidi character the ledger refuses (check 2); once written it could never be unwritten', 2);
+  }
+  if ((splitLines(body).filter(l => /^\s*```/.test(l)).length % 2) === 1) die('append: --body opens a fence it does not close; every line after it, in this entry and the next, would be read as code (FORMAT.md 8)', 2);
+
   if (!assertsReason(splitLines(body))) die('append: --body must state the reason as a sentence beginning "Reason:" (outside code spans and fenced blocks)', 2);
   if (splitLines(body).some(l => ADDENDUM_RE.test(l))) die('append: --body may not carry an addendum line; an addendum is written by append --addendum and dated by the tool (FORMAT.md 6)', 2);
   if (splitLines(body).some(isBoundary)) die('append: --body may not carry an entry or section heading line — a body opens no entry; the heading is the tool\'s to write (FORMAT.md 2, 7, 11)', 2);
+  { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && /^Principle:\s/.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }
   const parsedEdges = [], edgeKeys = new Set();
   for (const e of edges) {
-    if (/[\r\n]/.test(e)) die('append: --edge "' + e.replace(/[\r\n]+/g, ' ') + '" is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
+    if (/[\r\n\u2028\u2029]/.test(e)) die('append: --edge "' + e.replace(/[\r\n]+/g, ' ') + '" is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
     const p = parseEdgeArg(e);
     if (!p) die('append: --edge "' + e + '" is not "<verb> <id>" with a verb from: ' + VERBS.join(', '), 2);
     if (/;/.test(p.qualifier)) die('append: --edge "' + e + '": a qualifier may not contain ";" — the meta\'s clauses are split on it (FORMAT.md 4)', 2);
@@ -1141,6 +1176,9 @@ function appendAddendum(argv) {
   const r = ledger.byId.get(id);
   if (!r) die('append: --addendum ' + id + ' names no ruling in ' + rel(root, ledger.path), 2);
   if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);
+  const um = UNSAFE_RE.exec(text);
+  if (um) die('append: --text carries U+' + um[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control or bidi character the ledger refuses (check 2); once written it could never be unwritten', 2);
+  for (const c of citesIn(text, ledger)) if (!c.exists) die('append: --text names ' + c.id + ', which is not in ' + rel(root, ledger.path), 2);
   const lines = ledger.lines.slice();
   let end = r.endLine;                       // index of the next heading line (exclusive end of the entry)
   while (end > r.line && lines[end - 1].trim() === '') end--;
@@ -1199,6 +1237,14 @@ function status(argv) {
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
   if (!lp) {                                                          // no ledger governs the working directory
     const below = ledgersBelow(cwd, root);                            // a walk goes up: a ledger below is named, not found
+    const groot = gitRoot(cwd);
+    const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', 'HEAD'], groot) : null;
+    const gone = ls && ls.status === 0 ? ls.stdout.split('\n').filter(p => /(^|\/)DECISIONS\.md$/.test(p) && !isFile(path.join(groot, p))) : [];
+    if (gone.length) {                                                 // the committed ledger is gone: not an ungoverned project, an amended one
+      if (argv.json) { out(JSON.stringify({ ledger: null, gone, below }, null, 2)); return 0; }
+      out('Docket — the committed ledger ' + gone.join(', ') + ' is gone from the working tree; check 7 says so (D4)');
+      return 0;
+    }
     if (!below.length) return 0;                                      // ungoverned project: the docket is silent
     if (argv.json) { out(JSON.stringify({ ledger: null, below }, null, 2)); return 0; }
     out('Docket — no ledger governs ' + rel(root, cwd) + ' (under ' + root + '); below it: ' + below.join(', ') + ' — pass --ledger <path>, or run from inside');
@@ -1213,7 +1259,7 @@ function status(argv) {
   const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show; a verdict naming a session the file never recorded is not surfaced
   const check_ = runCheck(root, { ctx });
   const spec_ = runSpecCheck(root, ctx, lp);
-  const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, failures: check_.failures.concat(spec_.failures) };
+  const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, ledgers: check_.ctx.ledgers.size, failures: check_.failures.concat(spec_.failures) };
   if (argv.json) {
     out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, witness }, null, 2));
     return 0;
@@ -1226,7 +1272,7 @@ function status(argv) {
   L.push('Addenda pending: ' + (pend.length ? '' : 'none'));
   for (const a of pend) L.push('  ' + a.id + ' (' + a.date + '): ' + a.text);
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
-  L.push('Witness: ' + (witness.ok ? 'ok' : 'FAIL (' + witness.failures.length + ')'));
+  L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
   out(L.join('\n'));
   return 0;
@@ -1326,6 +1372,14 @@ const CI_STEP = [
 function vendorInto(dir) {
   const dest = path.join(dir, 'test', 'docket.js');
   const replaced = isFile(dest);
+  // What sits there is replaced only when it is a docket core of some version — it opens as this file opens and names
+  // the docket in its head — so a project's own test file, or this repository's suite, is never written over.
+  if (replaced) {
+    const theirs = normEol(readText(dest)), mine = normEol(readText(__filename));
+    const opens = t => t.split('\n', 3).join('\n');
+    if (opens(theirs) !== opens(mine) || !/docket/.test(theirs.slice(0, 4000))) die('vendor: ' + rel(process.cwd(), dest) + ' exists and is not a copy of the docket\'s core — move it aside first; the witness goes to test/docket.js', 2);
+  }
+  if (exists(path.dirname(dest)) && !isDir(path.dirname(dest))) die('vendor: ' + rel(process.cwd(), path.dirname(dest)) + ' exists and is not a directory; the witness goes to test/docket.js', 2);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(__filename, dest);
   return { dest, replaced };
@@ -1348,19 +1402,27 @@ function vendor(argv) {
 // and then fills the templates, writes the first entry through append's own validation, vendors the
 // witness, prints the CI step and the agent-instructions section, and runs check. Nothing here names a
 // host: the section is "for the repository's agent-instructions file", and the host's skill says which.
+const ABBREVIATIONS = ['dr', 'mr', 'mrs', 'ms', 'prof', 'st', 'e.g', 'i.e', 'etc', 'vs', 'cf', 'no', 'jr', 'sr'];   // a stop after one of these ends no sentence — a list, stated
 function sentenceCount(s) {
-  const t = s.trim();
+  let t = s.trim();
   if (!t) return 0;
+  for (const a of ABBREVIATIONS) t = t.replace(new RegExp('\\b' + a.replace('.', '\\.') + '\\.', 'gi'), a.replace('.', ''));
   let n = 0;
   const re = /[.!?]+(?=\s+[A-Z"'(À-Þ]|\s*$)/g;               // a stop that ends a sentence: followed by a capital, or last
   while (re.exec(t)) n++;
   return Math.max(1, n);                                               // a line with no stop is one sentence, unfinished
 }
+// A crowd is refused when the role IS one, article or not, or one followed by a relative clause ("everyone who
+// cooks"). A role that merely opens with a crowd's word — "a people manager", "users researcher", "the public
+// defender" — names a person and is not this shape check's to refuse; the semantic line is the intake's (D13).
 function invalidRole(role) {
   const strip = t => t.replace(/^(a|an|the)\s+/, '');
   const raw = role.toLowerCase().replace(/[.]+$/, '').trim(), forms = [raw, strip(raw)];
   for (const bad of INVALID_ROLES) {
-    for (const b of [bad, strip(bad)]) for (const f of forms) if (f === b || f.startsWith(b + ' ') || f.startsWith(b + ',')) return bad;
+    for (const b of [bad, strip(bad)]) for (const f of forms) {
+      if (f === b || f.startsWith(b + ',')) return bad;
+      if (f.startsWith(b + ' ') && /^(who|that|which|whom|whose)\b/.test(f.slice(b.length + 1))) return bad;
+    }
   }
   return null;
 }
@@ -1398,7 +1460,6 @@ function readAnswers(argv) {
   if (dup) bad('refuses', 'repeats "' + dup + '"');
   const prefix = o.prefix === undefined ? 'R' : str(o.prefix);
   if (!/^[A-Za-z]+$/.test(prefix)) bad('prefix', 'must be letters (FORMAT.md 12)');
-  if (prefix === 'D') bad('prefix', 'D is refused: the vendored witness carries this plugin\'s own D-cites in its comments, which a D ledger would read as dangling — choose another letter');
   const name = o.name === undefined ? null : str(o.name);
   if (name !== null) { if (!name) bad('name', 'is one line, or omitted to name the project after its directory'); oneLine('name', name); }
   return { what, role, knows, doesntKnow, feeling, refuses, prefix, name };
@@ -1417,6 +1478,8 @@ function constitute(argv) {
   const dir = path.resolve(process.cwd(), target || '.');
   if (!isDir(dir)) die('constitute: --target ' + target + ' is not a directory', 2);
   const docs = path.join(dir, 'docs');
+  if (exists(docs) && !isDir(docs)) die('constitute: docs exists and is not a directory; the three documents go under docs/', 2);
+  if (exists(path.join(dir, 'test')) && !isDir(path.join(dir, 'test'))) die('constitute: test exists and is not a directory; the witness goes to test/docket.js', 2);
   for (const f of ['DECISIONS.md', 'PRD.md', 'UIUX.md']) {
     if (isFile(path.join(docs, f))) die('constitute: docs/' + f + ' already exists — a constitution is written once; the ledger is append only (D4), so what comes after is docket append, not a second constitution', 2);
   }
@@ -1433,7 +1496,14 @@ function constitute(argv) {
   // does not exist, say) removes what was written, so a half-constitution never stands.
   const written = [];
   let complete = false;
-  process.on('exit', () => { if (!complete) for (const f of written) { try { fs.unlinkSync(f); } catch (e) { /* already gone */ } } });
+  process.on('exit', () => {
+    if (complete) return;
+    for (const f of written) { try { fs.unlinkSync(f); } catch (e) { /* already gone */ } }
+    // The append lock is ours while the refusal fires — it names this pid — and a foreign one is never touched.
+    const lock = path.join(docs, 'DECISIONS.md.lock');
+    try { if (readText(lock).trim() === 'docket ' + process.pid) fs.unlinkSync(lock); } catch (e) { /* no lock, or not ours */ }
+    for (const d of [docs, path.join(dir, 'test')]) { try { fs.rmdirSync(d); } catch (e) { /* held something else, or absent */ } }
+  });
   fs.mkdirSync(docs, { recursive: true });
   for (const [f, text] of Object.entries(filled)) { const p = path.join(docs, f); fs.writeFileSync(p, text); written.push(p); }
   const ledgerPath = path.join(docs, 'DECISIONS.md');
@@ -1451,7 +1521,11 @@ function constitute(argv) {
   release();
   const v = vendorInto(dir);
   written.push(v.dest);
-  const res = runCheck(enumerationRoot(dir));
+  // What was just written is not yet tracked, and the context reads tracked files where there is a repository; the
+  // check here includes untracked files so that it reads the constitution it is meant to check, and says how many
+  // ledgers it read, so a check over nothing is never mistaken for a check.
+  const croot = enumerationRoot(dir);
+  const res = runCheck(croot, { ctx: loadContext(croot, { includeUntracked: true }) });
   complete = true;
   const section = [
     '## The docket',
@@ -1459,7 +1533,8 @@ function constitute(argv) {
     'Before changing behaviour, read what governs it — `node test/docket.js query <term>`, then',
     '`node test/docket.js governs <id>` for each ruling that comes back. A decision is recorded as a new',
     'entry, never as an edit to an old one. Run `node test/docket.js` before you stop: it is the witness,',
-    'and CI runs the same command.',
+    'and CI runs the same command. The witness reads tracked files: add and commit docs/ and test/ first, or it',
+    'reads nothing and says so.',
   ].join('\n');
   if (argv.json) {
     out(JSON.stringify({ name, dir: rel(process.cwd(), dir) || '.', prefix: a.prefix, written: written.map(f => rel(dir, f)), entry: entry.trimEnd(), ciStep: CI_STEP, agentSection: section, ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2));
@@ -1474,7 +1549,8 @@ function constitute(argv) {
     '', 'For the repository\'s agent-instructions file — the host names it; add this yourself:', section, ''];
   for (const f of res.failures) L.push(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const i of res.info) L.push('info  ' + i);
-  L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : 'check: ok');
+  const nl = res.ctx.ledgers.size, nf = res.ctx.files.length;
+  L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : 'check: ok (' + nl + ' ledger' + (nl === 1 ? '' : 's') + ', ' + nf + ' governed-tree file' + (nf === 1 ? '' : 's') + ')');
   out(L.join('\n'));
   return res.failures.length ? 1 : 0;
 }
@@ -1506,6 +1582,14 @@ const USAGE = [
 ].join('\n');
 const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target']);
 const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help']);
+// The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
+// ignored would let a reader believe it had an effect.
+const OPTIONS = {
+  near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
+  append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
+  query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
+  diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'],
+};
 function parseArgv(args) {
   const raw = args.slice();
   const _ = [];
@@ -1546,6 +1630,7 @@ function witness(argv) {
   for (const f of c.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const f of s.failures) out(f.file + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
   for (const i of c.info) out('info  ' + i);
+  for (const i of s.info || []) out('info  ' + i);
   out(n ? 'witness: ' + n + ' failure' + (n === 1 ? '' : 's') : 'witness: ok (' + c.ctx.ledgers.size + ' ledger' + (c.ctx.ledgers.size === 1 ? '' : 's') + ', ' + s.rows + ' spec rows)');
   return n ? 1 : 0;
 }
@@ -1557,6 +1642,13 @@ function main() {
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);
+  const allowed = OPTIONS[sub] || [];
+  for (let i = 0; i < argv.raw.length; i++) {
+    const a = argv.raw[i];
+    if (sub === 'check' && a === '--ledger') { i++; continue; }          // check refuses --ledger itself, naming the subcommands that take it
+    if (a.startsWith('--') && a !== '--help' && !allowed.includes(a)) die(sub + ': ' + a + ' is not an option of ' + sub + '; its options are ' + (allowed.join(', ') || 'none'), 2);
+    if (TAKES_VALUE.has(a)) i++;                                        // the value after a flag is a value, whatever it looks like
+  }
   return table[sub](argv);
 }
 if (require.main === module) process.exitCode = main();   // exitCode, not exit(): a piped stdout must flush first

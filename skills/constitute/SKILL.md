@@ -7,9 +7,14 @@ allowed-tools: Bash(node *docket.js *)
 
 # /constitute
 
-Follow `${CLAUDE_PLUGIN_ROOT}/intake/CONSTITUTE.md` to the letter: the four
-gated questions, their refusal rules, the escalation, the confirm block. Stop
-at the block and wait for the person. On their `confirm`, write the answers to
+Follow the intake below to the letter: the four gated questions, their
+refusal rules, the escalation, the confirm block. It is `intake/CONSTITUTE.md`,
+spliced here at load so that no file need be read from wherever the plugin is
+installed:
+
+!`cat ${CLAUDE_PLUGIN_ROOT}/intake/CONSTITUTE.md`
+
+Stop at the block and wait for the person. On their `confirm`, write the answers to
 a temporary JSON file and run
 
 ```
