@@ -375,6 +375,10 @@ Check 7's reference point — the first parent when the ledger is unchanged sinc
 `docket` is the witness: `check` over the tree and `spec-check` for the nearest
 ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
 `<dir>/test/docket.js`, so a repository runs that witness without the plugin.
+`docket intake rule|constitute` prints an intake file for a skill to splice at
+load — a host runs a splice under the skill's own allow-list, which names the
+core and nothing else — and the vendored copy, with no `intake/` beside it,
+says so rather than printing nothing.
 `docket check` covers every ledger in the tree; `docket spec-check` covers the
 ledger nearest the working directory (a fixture ledger under `test/` is reached
 from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a

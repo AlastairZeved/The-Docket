@@ -8,9 +8,10 @@ allowed-tools: Bash(node *docket.js *)
 
 Follow the intake below to the letter: the five questions, the refusal
 rules, the escalation, the confirm block. It is `intake/RULE.md`, spliced here
-at load so that no file need be read from wherever the plugin is installed:
+at load through the core, the one command this skill may run, so that no file
+need be read from wherever the plugin is installed:
 
-!`cat ${CLAUDE_PLUGIN_ROOT}/intake/RULE.md`
+!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js intake rule`
 
 The principles to choose from, spliced now from the ledger's own reading:
 

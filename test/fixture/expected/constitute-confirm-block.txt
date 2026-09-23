@@ -14,3 +14,19 @@ and stop. Wait for the human. Only the human confirms (D8): the word
 confirmation. A model's own turn is not confirmation. Any other reply reopens
 the line it bears on; a new name or prefix replaces the one shown and the
 block is printed again.
+
+## On confirmation
+
+Write the answers to a temporary JSON file:
+
+    {"name": "…", "what": "…",
+     "who": {"role": "…", "knows": "…", "doesntKnow": "…"},
+     "feeling": "…", "refuses": ["…", "…", "…"], "prefix": "R"}
+
+and run `docket constitute --answers <that file>` from the project's root. It
+checks each answer's shape and refuses a malformed one by name; fills the
+templates into `docs/PRD.md`, `docs/UIUX.md` and `docs/DECISIONS.md`, the
+first ruling being the constitution itself; vendors the witness to
+`test/docket.js` (D9); prints the CI step and a section for the repository's
+agent-instructions file; and runs `check`. Report its output as printed, then
+delete the temporary file.

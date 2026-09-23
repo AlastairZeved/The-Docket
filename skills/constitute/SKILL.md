@@ -9,10 +9,10 @@ allowed-tools: Bash(node *docket.js *)
 
 Follow the intake below to the letter: the four gated questions, their
 refusal rules, the escalation, the confirm block. It is `intake/CONSTITUTE.md`,
-spliced here at load so that no file need be read from wherever the plugin is
-installed:
+spliced here at load through the core, the one command this skill may run, so
+that no file need be read from wherever the plugin is installed:
 
-!`cat ${CLAUDE_PLUGIN_ROOT}/intake/CONSTITUTE.md`
+!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js intake constitute`
 
 Stop at the block and wait for the person. On their `confirm`, write the answers to
 a temporary JSON file and run

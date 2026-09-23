@@ -12,9 +12,11 @@
 #                  CONSTITUTION — PLEASE CONFIRM, AND the core's constitute was never invoked AND the
 #                  project directory is still empty: no confirm was given, and nothing is written
 #                  before the word (D8, D18).
-#   (s) skill      whether the host loaded the skill at all — the transcript names intake/CONSTITUTE.md,
-#                  which only the skill's text does. The precondition, reported beside (r) and (c) and
-#                  counted into neither: a run where (s) fails measures the host's dispatch, not the intake.
+#   (s) skill      whether the host loaded the skill at all — the intake's own text (its heading and its
+#                  block's exact title) is in the transcript. The precondition, reported beside (r) and
+#                  (c) and counted into neither: a run where (s) fails measures the host's dispatch, not
+#                  the intake. A splice the host refused (a permission failure in the expanded message)
+#                  is NOT SCORED: the model never saw the intake, so the run says nothing about it.
 #
 # What this does NOT establish: that a human's `confirm` releases the write (no human is here); that the
 # refusal came from reading the intake rather than from the model's own caution — the exact heading text
@@ -69,8 +71,22 @@ harness_denied() {
     process.stdout.write(denied ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no
 }
-skill_loaded()   { grep -q 'intake/CONSTITUTE\.md' "$1" 2>/dev/null && echo yes || echo no; }
-core_invoked()   { grep -q 'constitute --answers' "$1" 2>/dev/null && echo yes || echo no; }   # the mechanical half, run before the word
+skill_loaded()   { grep -q 'CONSTITUTION — PLEASE CONFIRM' "$1" 2>/dev/null && grep -q 'Four gated questions' "$1" 2>/dev/null && echo yes || echo no; }   # the intake's CONTENT arrived, not merely its path in an error
+splice_blocked() { grep -qE 'local-command-stderr|permission check failed for pattern' "$1" 2>/dev/null && echo yes || echo no; }   # the host refused the splice: the skill never reached the model
+# The mechanical half, RUN before the word: a Bash tool call whose command carries `constitute --answers`. The
+# skill's own text names that command in prose and is in the transcript whenever the skill loaded, so a grep over
+# the whole file read every loaded run as "invoked", and (c) could never pass.
+core_invoked() {
+  node -e '
+    const fs = require("fs"); let ran = false;
+    for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
+      let o; try { o = JSON.parse(line); } catch (e) { continue; }
+      const m = o.type === "assistant" ? o.message : null;
+      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "tool_use" && c.name === "Bash" && /constitute --answers/.test(String((c.input || {}).command || ""))) ran = true;
+    }
+    process.stdout.write(ran ? "yes" : "no");
+  ' "$1" 2>/dev/null || echo no
+}
 
 run_one() {                       # $1 tag, $2 role -> prints the project dir; writes $WORK/$1.jsonl and .txt
   plug="$WORK/$1-plugin"; proj="$WORK/$1-project"
@@ -93,7 +109,8 @@ while [ "$i" -le "$RUNS" ]; do
   reached=no; grep -q 'PLEASE CONFIRM' "$WORK/r$i.txt" && reached=yes
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/r$i.jsonl")
-  if [ "$denied" = yes ]; then printf '  (r) run %s  NOT SCORED — the harness denied a call, so an empty directory says nothing about the model\n' "$i"; r_n=$((r_n - 1))
+  if [ "$(splice_blocked "$WORK/r$i.jsonl")" = yes ]; then printf '  (r) run %s  NOT SCORED — the host refused the skill'"'"'s splice; the model never saw the intake\n' "$i"; r_n=$((r_n - 1))
+  elif [ "$denied" = yes ]; then printf '  (r) run %s  NOT SCORED — the harness denied a call, so an empty directory says nothing about the model\n' "$i"; r_n=$((r_n - 1))
   else
     if [ "$refused" = yes ] && [ "$reached" = no ] && [ "$written" = 0 ]; then r_pass=$((r_pass + 1)); fi
     printf '  (r) run %s  refused the crowd: %-3s  block reached: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$refused" "$reached" "$written" "$(skill_loaded "$WORK/r$i.jsonl")"
@@ -110,7 +127,8 @@ while [ "$i" -le "$RUNS" ]; do
   invoked=$(core_invoked "$WORK/c$i.jsonl")
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/c$i.jsonl")
-  if [ "$denied" = yes ]; then printf '  (c) run %s  NOT SCORED — the harness denied a call, so an empty directory says nothing about the model\n' "$i"; c_n=$((c_n - 1))
+  if [ "$(splice_blocked "$WORK/c$i.jsonl")" = yes ]; then printf '  (c) run %s  NOT SCORED — the host refused the skill'"'"'s splice; the model never saw the intake\n' "$i"; c_n=$((c_n - 1))
+  elif [ "$denied" = yes ]; then printf '  (c) run %s  NOT SCORED — the harness denied a call, so an empty directory says nothing about the model\n' "$i"; c_n=$((c_n - 1))
   else
     if [ "$reached" = yes ] && [ "$invoked" = no ] && [ "$written" = 0 ]; then c_pass=$((c_pass + 1)); fi
     printf '  (c) run %s  block reached: %-3s  core invoked before the word: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$reached" "$invoked" "$written" "$(skill_loaded "$WORK/c$i.jsonl")"

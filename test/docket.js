@@ -176,7 +176,8 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 1: a cite to a ruling that does not exist fails at its line, naming the ledger', r.code === 1 && /^test\/fixture\/app\.js:41  check 1: cite R9 names no ruling in test\/fixture\/DECISIONS\.md$/m.test(r.out), r.out);
   const c2b = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '### R7. The relational plane', '### R9. The relational plane'));
   r = docket(['check'], { cwd: c2b });
-  ok('check 2: numbering that skips fails at the heading', r.code === 1 && /DECISIONS\.md:\d+  check 2: numbering: R9 is entry 7 of the R entries; expected R7/.test(r.out), r.out);
+  // Each planted failure is pinned to its line: "the right line" is the claim, and \d+ accepted any.
+  ok('check 2: numbering that skips fails at the heading', r.code === 1 && /^test\/fixture\/DECISIONS\.md:51  check 2: numbering: R9 is entry 7 of the R entries; expected R7$/m.test(r.out), r.out);
   const c3 = tempRepo(d => edit(d, 'test/fixture/app.js', 'UIUX ' + SEC + '4.5 the minimum', 'UIUX ' + SEC + '4.6 the minimum'));
   r = docket(['check'], { cwd: c3 });
   ok('check 3: a spec cite that names no heading fails at its line', r.code === 1 && new RegExp('^test/fixture/app\\.js:55  check 3: UIUX ' + SEC + '4\\.6 names no heading', 'm').test(r.out), r.out);
@@ -188,29 +189,29 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 4: with no baseline the count is reported, not failed — the whole info line', r.code === 0 && /^info  test\/fixture\/app\.js: 3 bare-§ cites \(no baseline in test\/fixture\/DECISIONS\.md; reported, not failed\)$/m.test(r.out), r.out);
   const c5 = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '(issue #16; waives R1)', '(issue #16; waives R8)'));
   r = docket(['check'], { cwd: c5 });
-  ok('check 5: an edge from a ruling to itself fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 5: edge R8 waives R8: a ruling may not name itself$/m.test(r.out), r.out);
+  ok('check 5: an edge from a ruling to itself fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 5: edge R8 waives R8: a ruling may not name itself$/m.test(r.out), r.out);
   const c5b = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Fold similarity: shape held, size uniform (supersedes R3)', 'Fold similarity: shape held, size uniform (supersedes R7)'));
   r = docket(['check'], { cwd: c5b });
-  ok('check 5: an edge to a later ruling fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 5: edge R4 supersedes R7: R7 is defined later \(line \d+\) than R4 \(line \d+\)$/m.test(r.out), r.out);
+  ok('check 5: an edge to a later ruling fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:42  check 5: edge R4 supersedes R7: R7 is defined later \(line 51\) than R4 \(line 42\)$/m.test(r.out), r.out);
   const c6 = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Principle: Capture precedes structure.\n', ''));
   r = docket(['check'], { cwd: c6 });
-  ok('check 6: a contract-bound entry without a Principle: line fails', r.code === 1 && /check 6: R8: no "Principle:" line/.test(r.out), r.out);
+  ok('check 6: a contract-bound entry without a Principle: line fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 6: R8: no "Principle:" line$/m.test(r.out), r.out);
   const c6b = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '(issue #16; waives R1)', '(waives R1; issue #16)'));
   r = docket(['check'], { cwd: c6b });
-  ok('check 6: a meta that opens with an edge fails', r.code === 1 && /check 6: R8: meta must open with a grounding/.test(r.out), r.out);
+  ok('check 6: a meta that opens with an edge fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 6: R8: meta must open with a grounding/m.test(r.out), r.out);
   const c6c = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Reason: a blank frame costs a read', 'Because a blank frame costs a read'));
   r = docket(['check'], { cwd: c6c });
-  ok('check 6: a contract-bound entry without Reason: fails', r.code === 1 && /check 6: R8: body has no "Reason:"/.test(r.out), r.out);
+  ok('check 6: a contract-bound entry without Reason: fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 6: R8: body has no "Reason:"$/m.test(r.out), r.out);
   const looseR3 = JSON.parse(docket(['index'], { cwd: path.join(clean, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R3');
   ok('check 6 binds only from the contract line: R3, loose, has no Principle: line and the clean fixture still passes', looseR3 && looseR3.principle === null && c0.code === 0, JSON.stringify(looseR3 && looseR3.principle));
   const c7 = tempRepo();
   edit(c7, 'test/fixture/DECISIONS.md', 'Notes fold together by shape and by size', 'Notes fold together by shape');
   r = docket(['check'], { cwd: c7 });
-  ok('check 7: an existing body changed after commit fails (append only)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R3: body changed other than by appended addendum lines \(append only\)$/m.test(r.out), r.out);
+  ok('check 7: an existing body changed after commit fails (append only)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3: body changed other than by appended addendum lines \(append only\)$/m.test(r.out), r.out);
   const c7b = tempRepo();
   edit(c7b, 'test/fixture/DECISIONS.md', '### R3. Fold similarity (issue #4)', '### R3. Fold similarity and size (issue #4)');
   r = docket(['check'], { cwd: c7b });
-  ok('check 7: an existing heading changed after commit fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R3: heading changed \(append only\): "Fold similarity \(issue #4\)" → "Fold similarity and size \(issue #4\)"$/m.test(r.out), r.out);
+  ok('check 7: an existing heading changed after commit fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3: heading changed \(append only\): "Fold similarity \(issue #4\)" → "Fold similarity and size \(issue #4\)"$/m.test(r.out), r.out);
   const c7c = tempRepo();
   fs.appendFileSync(path.join(c7c, 'test', 'fixture', 'DECISIONS.md'), '> Addendum 2026-09-12: appended after the commit.\n');
   r = docket(['check'], { cwd: c7c });
@@ -223,13 +224,13 @@ const SEC = String.fromCharCode(0xa7);
   edit(c7e, 'test/fixture/DECISIONS.md', 'Notes fold together by shape and by size', 'Notes fold together by shape');
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'edit'], c7e);
   r = docket(['check'], { cwd: c7e });
-  ok('check 7: a clean tree is judged against HEAD~1, so a committed edit still fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R3: body changed other than by appended addendum lines \(append only\)$/m.test(r.out), r.out);
+  ok('check 7: a clean tree is judged against HEAD~1, so a committed edit still fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3: body changed other than by appended addendum lines \(append only\)$/m.test(r.out), r.out);
   const c7f = tempRepo();
   fs.appendFileSync(path.join(c7f, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. A new ruling (issue #20)\nPrinciple: Zero cognitive tax.\nText. Reason: r.\n');
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'append'], c7f);
   r = docket(['check'], { cwd: c7f });
   ok('check 7: a clean tree whose last commit only appended passes', r.code === 0, r.out);
-  ok('check 7: a clean tree with one commit is skipped (no earlier version), and the skip is said', c0.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 skipped — no committed version to compare/m.test(c0.out), c0.out);
+  ok('check 7: a clean tree with one commit is skipped (no earlier version), and the skip is said', c0.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 skipped — no earlier version to compare/m.test(c0.out), c0.out);
   ok('check 7: with an earlier version the skip line is absent', !/check 7 skipped/.test(docket(['check'], { cwd: c7f }).out));
   // a ledger with CRLF line endings parses, cites and compares like an LF one
   const crlf = tempRepo(d => { const p = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(p, read(p).replace(/\n/g, '\r\n')); });
@@ -395,11 +396,11 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and check reads it there', r.code === 0, r.out);
   const dup = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '### R7. The relational plane', '### R6. The relational plane'));
   r = docket(['check'], { cwd: dup });
-  ok('check 2: a repeated id fails (each number is its position)', r.code === 1 && /check 2: numbering: R6 is entry 7 of the R entries; expected R7/.test(r.out), r.out);
+  ok('check 2: a repeated id fails (each number is its position)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:51  check 2: numbering: R6 is entry 7 of the R entries; expected R7$/m.test(r.out), r.out);
   const rm = tempRepo();
   { const p = path.join(rm, 'test', 'fixture', 'DECISIONS.md'); const t = read(p); fs.writeFileSync(p, t.slice(0, t.indexOf('### R3.')) + t.slice(t.indexOf('### R4.'))); }
   r = docket(['check'], { cwd: rm });
-  ok('check 7: an entry removed after commit fails (the committed entries are enumerated)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R3 was removed \(append only\)$/m.test(r.out), r.out);
+  ok('check 7: an entry removed after commit fails (the committed entries are enumerated)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3 was removed \(append only\)$/m.test(r.out), r.out);
   const t71 = 'word '.repeat(14) + 'x', t72 = 'word '.repeat(14) + 'xy', t73 = 'word '.repeat(14) + 'xyz', t73ns = 'a'.repeat(73);
   const tb = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'),
     ['', `### R9. ${t71} (issue #31)`, 'Principle: Zero cognitive tax.', 'Reason: r.', `### R10. ${t72} (issue #32)`, 'Principle: Zero cognitive tax.', 'Reason: r.',
@@ -1198,7 +1199,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('history/DECISIONS.v2.md is the current ledger with R3\'s heading changed, and nothing else', heads(v2).length === heads(cur).length && /^### R3\. Fold similarity, by shape and by size \(issue #4\)$/m.test(v2) && heads(v2).filter((h, i) => h !== heads(cur)[i]).length === 1, JSON.stringify(heads(v2).filter((h, i) => h !== heads(cur)[i])));
   // CI runs the witness and the docket, on a pinned runtime, for a push and a pull request
   const ci = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
-  ok('CI runs the witness and then the docket itself, on both a push and a pull request, with the runtime pinned and no step allowed to pass while failing', /^on:\n  push:\n  pull_request:$/m.test(ci) && /node-version: 20/.test(ci) && /run: node test\/docket\.js/.test(ci) && /run: node bin\/docket\.js/.test(ci) && !/continue-on-error/.test(ci), ci);
+  ok('CI runs the witness and then the docket itself, on both a push and a pull request, with the runtime pinned and no step allowed to pass while failing', /^on:\n  push:\n  pull_request:$/m.test(ci) && /node-version: 20/.test(ci) && /^\s+run: node test\/docket\.js$/m.test(ci) && /^\s+run: node bin\/docket\.js$/m.test(ci) && !/continue-on-error|^\s+if:/m.test(ci), ci);
   // a multi-line edit finds its window whichever newline the file and the host use (FORMAT.md 1)
   const ml = tempRepo(), mlApp = path.join(ml, 'test', 'fixture', 'app.js');
   const mlTwo = read(mlApp).split('\n').slice(40, 42).join('\n');      // lines 41 and 42, joined the way a host writes them
@@ -1601,7 +1602,7 @@ const SEC = String.fromCharCode(0xa7);
     const y = read(path.join(wfDir, f));
     if (!/docket\.js/.test(y)) continue;                               // a workflow that never runs the docket sets no depth requirement
     const depth = (y.match(/fetch-depth:\s*\S+/g) || []).join(' ') || 'no fetch-depth given';
-    ok(f + ': a workflow that runs the docket fetches the whole history, so check 7 can compare against a parent rather than skip', /fetch-depth:\s*0\b/.test(y), depth);
+    ok(f + ': a workflow that runs the docket fetches the whole history on its checkout step, so check 7 can compare against a parent rather than skip', /uses: actions\/checkout@v\d+\n\s+with:\n\s+fetch-depth: 0\b/.test(y), depth);
     ok(f + ': …and it does not ask for a shallow one, which would make that skip permanent', !/fetch-depth:\s*[1-9]/.test(y), depth);
   }
 }
@@ -1773,9 +1774,13 @@ const SEC = String.fromCharCode(0xa7);
     // The loop above only sees verbs the file mentions, so a verb deleted from the skill is invisible
     // to it, and `status` — offered without an argument, so never written as "/docket status" — is
     // invisible by construction. Name the three the core ships, each on its own.
-    for (const v of ['status', 'query', 'governs']) {
-      ok('the skill still offers "' + v + '", which the core ships', new RegExp('\\b' + v + '\\b').test(sk), v + ' missing from the skill');
+    // An offer is a line of the skill's own shape — `/docket <verb> <arg>` — then the dash and its gloss. A
+    // word-boundary match found "status" in the closing sentence and "query" in the run-it-yourself paragraph, so
+    // deleting every offer line left all three "offered".
+    for (const v of ['query', 'governs', 'diff']) {
+      ok('the skill still offers "' + v + '" on an offer line of its own, which the core ships', new RegExp('^`/docket ' + v + ' <[^`\\n]+>` — ', 'm').test(sk), v + ' has no offer line');
     }
+    ok('the skill still offers "status" as the bare form: the `/docket` line, and the sentence that runs status with no argument', /^`\/docket` — the docket/m.test(sk) && /With no argument,\nrun `status`/.test(sk), 'the bare offer is missing');
   }
 }
 
@@ -2023,7 +2028,10 @@ const SEC = String.fromCharCode(0xa7);
     r = runScript('cites.sh', [turn('Governed by R6; editing.', 'Edit'), result([{ tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js' } }])]);
     ok('cites.sh does not score a run the harness interfered with, and says so', /NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(b\) obeying  0 of 0/.test(r.stdout), r.stdout);
     // constitute.sh: (c) a host that prints the block's exact heading and touches nothing; the skill's text is in the transcript
-    const skillLine = JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' });
+    // The skill's expanded text is what the transcript carries when the host loaded it: the intake itself, which
+    // names `docket constitute --answers` in prose. So "core invoked" must read tool calls, not text, and "skill
+    // loaded" must read the intake's content, not its path — the host's own error message names the path too.
+    const skillLine = JSON.stringify({ type: 'system', text: read(path.join(ROOT, 'intake', 'CONSTITUTE.md')) });
     r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
     ok('constitute.sh scores a host that reaches the block and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
@@ -2032,6 +2040,18 @@ const SEC = String.fromCharCode(0xa7);
     // a host that runs the mechanical half before the word: (c) fails on "core invoked"
     r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM' }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
     ok('constitute.sh fails (c) for a host that invokes the core before the word, even with the heading printed', /\(c\) halting   0 of 1/.test(r.stdout) && /core invoked before the word: yes/.test(r.stdout), r.stdout);
+    // the intake named by path only — the host's own error names the path — is not a loaded skill
+    r = runScript('constitute.sh', [JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' }), turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result()]);
+    ok('constitute.sh reads "skill loaded" from the intake’s content, so a transcript that only names the path reads no', /\[skill loaded: no\]/.test(r.stdout), r.stdout);
+    // a splice the host refused: the model never saw the intake, so neither measure is taken, and the script says so
+    const spliceBlocked = JSON.stringify({ type: 'user', message: { role: 'user', content: '<local-command-stderr>Shell command permission check failed for pattern "node …/bin/docket.js intake constitute": the command was blocked.</local-command-stderr>' } });
+    r = runScript('constitute.sh', [spliceBlocked, JSON.stringify({ type: 'result', result: '', num_turns: 0, permission_denials: [] })]);
+    ok('constitute.sh scores nothing when the host refused the skill’s splice: both runs NOT SCORED, the measurement not taken, exit 1', r.status === 1 && /\(r\) run 1  NOT SCORED — the host refused the skill's splice; the model never saw the intake/.test(r.stdout) && /\(c\) run 1  NOT SCORED — the host refused the skill's splice/.test(r.stdout) && /no run could be scored; the measurement was not taken/.test(r.stderr), r.status + '\n' + r.stdout + r.stderr);
+    // a denial that is not write-class (a `pwd` outside the allow-list) voids nothing: the run is scored
+    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result([{ tool_name: 'Bash', tool_input: { command: 'pwd && ls' } }])]);
+    ok('constitute.sh scores a run whose only denial was a read-class Bash call; only a write, or a Bash that runs constitute, voids one', /\(c\) halting   1 of 1/.test(r.stdout) && !/NOT SCORED/.test(r.stdout), r.stdout);
+    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result([{ tool_name: 'Bash', tool_input: { command: 'node bin/docket.js constitute --answers a.json' } }])]);
+    ok('…and a denied Bash that runs constitute does void it', /\(c\) run 1  NOT SCORED — the harness denied a call/.test(r.stdout), r.stdout);
   }
 
   // ── what readers of the build found: each fixed, each done here rather than read ──
@@ -2158,8 +2178,27 @@ const SEC = String.fromCharCode(0xa7);
     // the intake skills splice their intake at load, so no file need be read from any install layout
     {
       const rule = read(path.join(ROOT, 'skills', 'rule', 'SKILL.md')), con = read(path.join(ROOT, 'skills', 'constitute', 'SKILL.md'));
-      ok('skills/rule splices intake/RULE.md at load with a ! command, so the intake is in context without a Read', /^!`cat \$\{CLAUDE_PLUGIN_ROOT\}\/intake\/RULE\.md`$/m.test(rule), rule);
-      ok('skills/constitute splices intake/CONSTITUTE.md the same way', /^!`cat \$\{CLAUDE_PLUGIN_ROOT\}\/intake\/CONSTITUTE\.md`$/m.test(con), con);
+      ok('skills/rule splices intake/RULE.md at load with a ! command through the core, so the intake is in context without a Read', /^!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js intake rule`$/m.test(rule), rule);
+      ok('skills/constitute splices intake/CONSTITUTE.md the same way', /^!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js intake constitute`$/m.test(con), con);
+      // A host runs a splice under the skill's own allow-list and refuses to read a file outside the project by any
+      // other command: a `cat` of the plugin's file is blocked from every project but the plugin's own tree, and the
+      // skill then never reaches the model. Only the core, which the allow-list names, may print the intake.
+      ok('neither skill splices with cat, which a host blocks from any project outside the plugin tree', !/!`cat /.test(rule) && !/!`cat /.test(con), 'a cat splice');
+      let r = docket(['intake', 'rule']);
+      ok('docket intake rule prints intake/RULE.md, byte for byte', r.code === 0 && r.out === read(path.join(ROOT, 'intake', 'RULE.md')), r.code + ' ' + r.out.slice(0, 80));
+      r = docket(['intake', 'constitute']);
+      ok('docket intake constitute prints intake/CONSTITUTE.md, byte for byte', r.code === 0 && r.out === read(path.join(ROOT, 'intake', 'CONSTITUTE.md')), r.code + ' ' + r.out.slice(0, 80));
+      r = docket(['intake']);
+      ok('docket intake with no name is a usage error naming both intakes, exit 2', r.code === 2 && /^intake: which one — docket intake rule \| docket intake constitute$/m.test(r.err), r.code + ' ' + r.err);
+      r = docket(['intake', 'judge']);
+      ok('…and so is a name that is not one of the two', r.code === 2 && /which one/.test(r.err), r.code + ' ' + r.err);
+      r = docket(['intake', '--json', 'rule']);
+      ok('intake takes no options: --json is refused as the table says', r.code === 2 && /^intake: --json is not an option of intake; its options are none$/m.test(r.err), r.code + ' ' + r.err);
+      const vd = tempRepo();
+      r = docket(['vendor', '.'], { cwd: vd });
+      const vr = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'intake', 'rule'], { cwd: vd, encoding: 'utf8' });
+      ok('the vendored witness carries no intake and says so rather than printing nothing, exit 2', r.code === 0 && vr.status === 2 && /intake\/RULE\.md is not beside this file’s bin\/ — the intakes live in the plugin; the vendored witness at test\/docket\.js carries none/.test(vr.stderr.replace(/'/g, '’')), vr.status + ' ' + vr.stderr);
+      fs.rmSync(vd, { recursive: true, force: true });
     }
   }
 
@@ -2171,7 +2210,10 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(dir, { recursive: true, force: true });
     const core = read(CORE);
     const ae = (core.match(/function appendEntry\(argv\) \{([\s\S]*?)\n\}/) || [])[1] || '';
-    ok('appendEntry writes and then hands to afterWrite, which is where check runs — the call is present', /afterWrite\(argv, root, ledger, entry\)/.test(ae) && /function afterWrite\([\s\S]*?runCheck\(root\)/.test(core), ae);
+    // Read within the function's own body: a lazy match from "function afterWrite(" to the next "runCheck(root" is
+    // satisfied by any later function that runs check, and it passed while afterWrite ran none.
+    const aw = (core.match(/function afterWrite\([^)]*\) \{([\s\S]*?)\n\}/) || [])[1] || '';
+    ok('appendEntry writes and then hands to afterWrite, whose own body runs check', /afterWrite\(argv, root, ledger, entry\)/.test(ae) && aw !== '' && /runCheck\(root/.test(aw) && !/\nfunction /.test(aw), aw.slice(0, 300));
   }
 
   // ── the templates ──
@@ -2208,7 +2250,10 @@ const SEC = String.fromCharCode(0xa7);
     ok('neither intake names a host, a model or a vendor', !/claude|anthropic|openai|gpt|gemini|copilot/i.test(RULE + CONST), 'a host or model is named');
     // The confirm block is frozen text. A sentence added inside it — one letting the model confirm on
     // silence, say — fails here whatever its wording, which a grep for wordings could not promise.
-    const block = (RULE.match(/^## The confirm block\n([\s\S]*?)(?=^## )/m) || [])[1];
+    // Frozen from the block's heading to the end of the file: the "On confirmation" section is the text the host
+    // executes on the word, and a release written there — "or when no reply comes" — sat outside a freeze that
+    // stopped at the next heading.
+    const block = (RULE.match(/^## The confirm block\n([\s\S]*)$/m) || [])[1];
     ok('RULE.md’s confirm block is exactly the frozen text, sentence for sentence', block !== undefined && block.trim() + '\n' === expected('rule-confirm-block.txt'), block && firstDiff(block.trim() + '\n', expected('rule-confirm-block.txt')));
     ok('…and that text says the three things: only the human confirms, silence is not confirmation, nothing is written before the word', /Only the human\nconfirms \(D8\)/.test(block || '') && /Silence is not confirmation\./.test(block || '') && /Nothing is written before the word\./.test(block || ''), block);
     const permissive = [/(proceed|continue|go ahead|treat|take|read)\w* (it )?(as|on|after|when|if) (silence|silent|no (answer|reply|response)|a pause|time)/i, /model (may|can|is allowed to|should) confirm/i, /confirm(ed|s|ation)? (on|after|by) (silence|a pause|no reply|timeout)/i, /(assume|imply|infer)\w* (confirmation|consent|approval)/i];
@@ -2216,9 +2261,12 @@ const SEC = String.fromCharCode(0xa7);
     ok('RULE.md asks the five questions in order and escalates per D18: one clarification, one checklist, no third', /^1\. \*\*What changed\*\*/m.test(RULE) && /^5\. \*\*The ruling, in prose, with its reason\*\*/m.test(RULE) && /^## Escalation \(D18\)/m.test(RULE) && /exactly one clarification/.test(RULE) && /restated as a checklist/.test(RULE) && /There is no\nthird attempt/.test(RULE), 'a question or an escalation step is missing');
     ok('RULE.md sends the reader to docket query for the rulings the change touches, and to docket append on confirmation', /docket query <the nouns of the answer>/.test(RULE) && /^    docket append --title/m.test(RULE), 'query or append not named');
     ok('CONSTITUTE.md asks the four gated questions with their refusals, and offers no default feeling', /^1\. \*\*What is this\?\*\*/m.test(CONST) && /^2\. \*\*Who is it for\?\*\*/m.test(CONST) && /^3\. \*\*What feeling must survive every iteration\?\*\*/m.test(CONST) && /^4\. \*\*What will it refuse to do\?\*\*/m.test(CONST) && /No default\n\s*is offered/.test(CONST) && /"general\n\s*audience", "everyone"/.test(CONST), 'a question, a refusal or the no-default sentence is missing');
+    ok('CONSTITUTE.md refuses a category for the first answer and a feature for the third, with the examples a reader can match', /Refused: a category \("a productivity app", "a tool for notes"\), a list of\n\s*features, more than one sentence\./.test(CONST) && /feature \("fast sync", "dark mode" — a feature is something the thing does;/.test(CONST) && /Refused: fewer than three, a repeat, a refusal that is a feature in/.test(CONST), 'a semantic refusal is missing');
     ok('CONSTITUTE.md’s confirm block shows the prefix and the name, and says only the human confirms', /^    CONSTITUTION — PLEASE CONFIRM$/m.test(CONST) && /^    Prefix:    R/m.test(CONST) && /^    Name:      /m.test(CONST) && /Only the human confirms \(D8\)/.test(CONST) && /Silence is not\nconfirmation/.test(CONST), 'the block is not as stated');
-    const cblock = (CONST.match(/^## The confirm block\n([\s\S]*?)(?=^## )/m) || [])[1];
+    const cblock = (CONST.match(/^## The confirm block\n([\s\S]*)$/m) || [])[1];
     ok('CONSTITUTE.md’s confirm block is exactly the frozen text too, sentence for sentence', cblock !== undefined && cblock.trim() + '\n' === expected('constitute-confirm-block.txt'), cblock && firstDiff(cblock.trim() + '\n', expected('constitute-confirm-block.txt')));
+    ok('the frozen text of each intake runs through its "On confirmation" section, so the executing text is inside the freeze', /^## On confirmation$/m.test(block || '') && /^## On confirmation$/m.test(cblock || ''), 'On confirmation is outside the frozen text');
+    ok('neither "On confirmation" section releases the write on time or silence, in any wording of the list', !/within a minute|no reply|after a (pause|wait|minute)|if (silent|nothing)|time(s|out)? (out|passes)/i.test((block || '') + (cblock || '')), 'a time release');
     ok('CONSTITUTE.md’s own escalation says the three steps, not only that it cites D18', /^## Escalation \(D18\)/m.test(CONST) && /exactly one clarification/.test(CONST) && /restated as a checklist/.test(CONST) && /There\s+is no third attempt/.test(CONST), 'an escalation step is missing from CONSTITUTE.md');
     ok('RULE.md’s questions 2–4 each carry their refusal rule', /^2\. \*\*The issue or context\*\*[\s\S]*?Refused: "cleanup", "misc", "various"\./m.test(RULE) && /^3\. \*\*The principle\*\*[\s\S]*?Refused: a principle not on\s+the list, or none\./m.test(RULE) && /^4\. \*\*Every ruling it touches, with a verb\*\*[\s\S]*?Refused: a ruling the query surfaced that the answer neither\s+names\s+nor dismisses with a reason\./m.test(RULE), 'a refusal rule is missing');
     ok('RULE.md sends an addendum and a baseline rewrite through the same block', /docket append --addendum <id> --text/.test(RULE) && /docket append --baseline/.test(RULE) && /follow the same path behind the same block\./.test(RULE), 'the sentence is missing');

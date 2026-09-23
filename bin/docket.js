@@ -21,6 +21,7 @@
 // 12  diff                 what changed in the law between two readings
 // 13  vendor               the witness copied to where the law lives (D9)
 // 14  constitute           a spine before the first line (D9, D13)
+// 15  intake               an intake file, printed for a skill to splice
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
 
@@ -863,7 +864,7 @@ function runCheck(root, opts) {
     const fenceAt = ledger.lines.map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
     if (fenceAt.length % 2 === 1) fail(lp, fenceAt[fenceAt.length - 1], 2, 'a fence opened here is never closed; every line after it is read as code, cites included (FORMAT.md 8)');
     const committed = committedText(root, lp, ledger.text);
-    if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no committed version to compare (a ledger not yet committed, or a clean tree whose HEAD has no parent)');   // FORMAT.md 13: the skip is said, not silent
+    if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (a ledger not yet committed, or a clean tree whose HEAD has no parent)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
       const old = parseLedger(committed, lp);
       for (const o of old.rulings) {
@@ -1555,6 +1556,21 @@ function constitute(argv) {
   return res.failures.length ? 1 : 0;
 }
 
+// ─── 15. intake: an intake file, printed ─────────────────────────────────────
+
+// A skill splices its intake at load through this command rather than through `cat`: the host runs a splice under the
+// skill's own allow-list, which names `node … docket.js …` and nothing else, and refuses to read a file outside the
+// project by any other means. The intake text stays in intake/*.md (D13); this only prints it. The vendored witness
+// carries no intake/ and says so.
+function intake(argv) {
+  const which = argv._[1];
+  if (!which || !/^(rule|constitute)$/.test(which)) die('intake: which one — docket intake rule | docket intake constitute', 2);
+  const p = path.join(__dirname, '..', 'intake', which.toUpperCase() + '.md');
+  if (!isFile(p)) die('intake: intake/' + which.toUpperCase() + '.md is not beside this file\'s bin/ — the intakes live in the plugin; the vendored witness at test/docket.js carries none', 2);
+  out(readText(p));
+  return 0;
+}
+
 // ─── 11. cli ────────────────────────────────────────────────────────────────
 
 const USAGE = [
@@ -1576,6 +1592,7 @@ const USAGE = [
   '  docket diff --files <a> <b>         the same, between two ledger files',
   '  docket vendor <dir>                 copy the witness to <dir>/test/docket.js and print the CI step',
   '  docket constitute --answers <json>  a new project\'s PRD, UIUX and DECISIONS from the four answers, the witness vendored, check run (--target <dir>)',
+  '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
   '',
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
@@ -1588,7 +1605,7 @@ const OPTIONS = {
   near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
-  diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'],
+  diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: [],
 };
 function parseArgv(args) {
   const raw = args.slice();
@@ -1638,7 +1655,7 @@ function main() {
   const argv = parseArgv(process.argv.slice(2));
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
-  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute };
+  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake };
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);

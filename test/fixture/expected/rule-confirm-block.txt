@@ -5,3 +5,14 @@ confirms (D8): the word `confirm`, from the person, in a turn of their own.
 Silence is not confirmation. A model's own turn is not confirmation. A
 restatement of the ruling is not confirmation. Any other reply reopens the
 question it bears on. Nothing is written before the word.
+
+## On confirmation
+
+Run
+
+    docket append --title "<answer 1, as a phrase>" --issue "<answer 2>" --principle "<answer 3>" [--edge "<verb> <id>"]… --body "<answer 5>"
+
+and report its output as printed: the entry, any check failures, and the
+`check:` line. Do not restate the entry in other words. An addendum
+(`docket append --addendum <id> --text "…"`) and a baseline rewrite
+(`docket append --baseline`) follow the same path behind the same block.
