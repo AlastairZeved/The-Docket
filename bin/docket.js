@@ -864,7 +864,7 @@ function runCheck(root, opts) {
     const fenceAt = ledger.lines.map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
     if (fenceAt.length % 2 === 1) fail(lp, fenceAt[fenceAt.length - 1], 2, 'a fence opened here is never closed; every line after it is read as code, cites included (FORMAT.md 8)');
     const committed = committedText(root, lp, ledger.text);
-    if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (a ledger not yet committed, or a clean tree whose HEAD has no parent)');   // FORMAT.md 13: the skip is said, not silent
+    if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (the ledger is not yet committed, or the revision compared with has no such file: a first commit, or the commit that added it)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
       const old = parseLedger(committed, lp);
       for (const o of old.rulings) {
@@ -908,11 +908,15 @@ function baseRevision() {
   const b = process.env.DOCKET_BASE;
   return b && /^[A-Za-z0-9_./~^-]{1,64}$/.test(b) && !/^0+$/.test(b) ? b : null;
 }
+function namesHead(rev, groot) {
+  const a = sh('git', ['rev-parse', '--verify', '--quiet', rev + '^{commit}'], groot), h = sh('git', ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], groot);
+  return a.status === 0 && h.status === 0 && a.stdout.trim() === h.stdout.trim();
+}
 function committedText(root, filePath, workingText) {
   const groot = gitRoot(path.dirname(filePath)) || root;               // git resolves <rev>:<path> from the repository root, whatever the enumeration root is
   const p = rel(groot, filePath);
   const base = baseRevision();
-  if (base) { const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout; }
+  if (base && !namesHead(base, groot)) { const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout; }   // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule below applies
   const head = sh('git', ['show', 'HEAD:' + p], groot);
   if (head.status !== 0) return null;
   let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
@@ -1310,7 +1314,7 @@ function diffLedgers(a, b) {
   const oldEdges = new Set();
   for (const r of a.rulings) for (const e of r.edges) oldEdges.add(edgeKey(e));
   for (const r of b.rulings) {
-    if (!a.byId.has(r.id)) added.push(r);
+    if (!a.byId.has(r.id)) { added.push(r); for (const x of r.addenda) addenda.push({ id: r.id, date: x.date, text: x.text, line: x.line }); }   // an added ruling's addenda are addenda added, as its edges are edges added: a range that appends a ruling and then its addendum hides neither
     for (const e of r.edges) if (!oldEdges.has(edgeKey(e))) edges.push(e);   // an added ruling's edges are edges added: what governs what has changed
   }
   return { changed, added, edges, addenda };
@@ -1411,7 +1415,8 @@ function sentenceCount(s) {
   let n = 0;
   const re = /[.!?]+(?=\s+[A-Z"'(À-Þ]|\s*$)/g;               // a stop that ends a sentence: followed by a capital, or last
   while (re.exec(t)) n++;
-  return Math.max(1, n);                                               // a line with no stop is one sentence, unfinished
+  if (!/[.!?]["')]*\s*$/.test(t)) n++;                                 // a text that ends without a stop: its last sentence is unfinished, and is one — "It does X. It does Y" reads as two
+  return Math.max(1, n);
 }
 // A crowd is refused when the role IS one, article or not, or one followed by a relative clause ("everyone who
 // cooks"). A role that merely opens with a crowd's word — "a people manager", "users researcher", "the public

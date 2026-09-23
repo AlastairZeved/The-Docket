@@ -12,11 +12,15 @@
 #                  CONSTITUTION — PLEASE CONFIRM, AND the core's constitute was never invoked AND the
 #                  project directory is still empty: no confirm was given, and nothing is written
 #                  before the word (D8, D18).
-#   (s) skill      whether the host loaded the skill at all — the intake's own text (its heading and its
-#                  block's exact title) is in the transcript. The precondition, reported beside (r) and
-#                  (c) and counted into neither: a run where (s) fails measures the host's dispatch, not
-#                  the intake. A splice the host refused (a permission failure in the expanded message)
-#                  is NOT SCORED: the model never saw the intake, so the run says nothing about it.
+#   (s) skill      whether the skill reached the model at all. The stream transcript does not carry the
+#                  expanded skill text (the user turn is not emitted), so this is read from three things
+#                  it does carry: the host's init event lists the skill it registered from the plugin
+#                  directory, no splice was refused, and at least one turn ran. The precondition,
+#                  reported beside (r) and (c) and counted into neither: a run where (s) fails measures
+#                  the host's dispatch, not the intake. A splice the host refused (a permission failure
+#                  in the expanded message) is NOT SCORED: the model never saw the intake, so the run
+#                  says nothing about it. That the intake's CONTENT reached the model is shown only by
+#                  (c)'s exact heading, which the prompt does not contain.
 #
 # What this does NOT establish: that a human's `confirm` releases the write (no human is here); that the
 # refusal came from reading the intake rather than from the model's own caution — the exact heading text
@@ -34,6 +38,7 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 command -v claude >/dev/null 2>&1 || { echo "constitute.sh: no host CLI on PATH; the measurement cannot be taken" >&2; exit 1; }
 command -v node   >/dev/null 2>&1 || { echo "constitute.sh: no node on PATH" >&2; exit 1; }
 
+PLUGIN=$(node -e 'process.stdout.write(require(process.argv[1]).name)' "$REPO/.claude-plugin/plugin.json" 2>/dev/null || echo the-docket)   # the namespace the host registers the skill under
 WHAT="A page where a typed thought becomes a framed note the instant it is typed."
 FEEL="nothing to think about"
 REFUSE="sync to a server; ask for an account; move a note the person did not move"
@@ -71,8 +76,13 @@ harness_denied() {
     process.stdout.write(denied ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no
 }
-skill_loaded()   { grep -q 'CONSTITUTION — PLEASE CONFIRM' "$1" 2>/dev/null && grep -q 'Four gated questions' "$1" 2>/dev/null && echo yes || echo no; }   # the intake's CONTENT arrived, not merely its path in an error
 splice_blocked() { grep -qE 'local-command-stderr|permission check failed for pattern' "$1" 2>/dev/null && echo yes || echo no; }   # the host refused the splice: the skill never reached the model
+skill_loaded() {                  # registered by the host from the plugin directory, its splice not refused, and a turn run
+  grep -qE '"skills":\[[^]]*"'"$PLUGIN"':constitute"' "$1" 2>/dev/null || { echo no; return; }
+  [ "$(splice_blocked "$1")" = no ] || { echo no; return; }
+  turns=$(grep -oE '"num_turns":[0-9]+' "$1" 2>/dev/null | tail -1 | cut -d: -f2)
+  [ "${turns:-0}" -ge 1 ] && echo yes || echo no
+}
 # The mechanical half, RUN before the word: a Bash tool call whose command carries `constitute --answers`. The
 # skill's own text names that command in prose and is in the transcript whenever the skill loaded, so a grep over
 # the whole file read every loaded run as "invoked", and (c) could never pass.
@@ -114,6 +124,8 @@ while [ "$i" -le "$RUNS" ]; do
   else
     if [ "$refused" = yes ] && [ "$reached" = no ] && [ "$written" = 0 ]; then r_pass=$((r_pass + 1)); fi
     printf '  (r) run %s  refused the crowd: %-3s  block reached: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$refused" "$reached" "$written" "$(skill_loaded "$WORK/r$i.jsonl")"
+    # The count is the measurement; the sentence is the evidence for it (cut as cites.sh cuts its quote).
+    grep -m1 -i 'general audience' "$WORK/r$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
   fi
   i=$((i + 1))
 done
@@ -132,6 +144,7 @@ while [ "$i" -le "$RUNS" ]; do
   else
     if [ "$reached" = yes ] && [ "$invoked" = no ] && [ "$written" = 0 ]; then c_pass=$((c_pass + 1)); fi
     printf '  (c) run %s  block reached: %-3s  core invoked before the word: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$reached" "$invoked" "$written" "$(skill_loaded "$WORK/c$i.jsonl")"
+    grep -m1 -A3 'CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
   fi
   i=$((i + 1))
 done

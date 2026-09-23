@@ -225,6 +225,14 @@ const SEC = String.fromCharCode(0xa7);
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'edit'], c7e);
   r = docket(['check'], { cwd: c7e });
   ok('check 7: a clean tree is judged against HEAD~1, so a committed edit still fails', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3: body changed other than by appended addendum lines \(append only\)$/m.test(r.out), r.out);
+  r = docket(['check'], { cwd: c7e, env: { DOCKET_BASE: 'HEAD' } });
+  ok('check 7: DOCKET_BASE naming HEAD itself is read as unset, so the same committed edit still fails rather than a commit passing against itself', r.code === 1 && /^test\/fixture\/DECISIONS\.md:39  check 7: R3: body changed/m.test(r.out), r.code + ' ' + r.out);
+  // the third skip: the ledger was added at HEAD, so the parent has no file of it, though HEAD has one and has a parent
+  const c7g = tempRepo(d => fs.rmSync(path.join(d, 'test', 'fixture', 'DECISIONS.md')));
+  fs.writeFileSync(path.join(c7g, 'test', 'fixture', 'DECISIONS.md'), read(path.join(FIX, 'DECISIONS.md')));
+  sh('git', ['add', '-A'], c7g); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'add the ledger'], c7g);
+  r = docket(['check'], { cwd: c7g });
+  ok('check 7: a ledger added at HEAD, clean, is skipped with the reason that fits — the compared commit has no such file', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 skipped — no earlier version to compare \(the ledger is not yet committed, or the revision compared with has no such file: a first commit, or the commit that added it\)$/m.test(r.out), r.out);
   const c7f = tempRepo();
   fs.appendFileSync(path.join(c7f, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. A new ruling (issue #20)\nPrinciple: Zero cognitive tax.\nText. Reason: r.\n');
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'append'], c7f);
@@ -1797,6 +1805,14 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and lists R8 as the one ruling added', /^Rulings added \(1\):\n  R8\. /m.test(r.out), r.out);
   ok('…R8’s edge as the one edge added, rendered as the grammar reads it', /^Edges added \(1\):\n  R8 waives R1$/m.test(r.out), r.out);
   ok('…and R2’s addendum as the one addendum added, dated', /^Addenda added \(1\):\n  R2  2026-09-11: /m.test(r.out), r.out);
+  {
+    // an addendum under a ruling the older reading lacks is an addendum added too, as its edges are edges added
+    const d8 = tmpDir('diff-add-');
+    fs.writeFileSync(path.join(d8, 'b.md'), read(path.join(FIX, 'DECISIONS.md')) + '> Addendum 2026-09-23: under the ruling this range added.\n');
+    const r8 = docket(['diff', '--files', path.join(FIX, 'history', 'DECISIONS.v1.md'), path.join(d8, 'b.md')]);
+    ok('diff lists an addendum under a ruling added between the two readings, not only those under rulings both hold', r8.code === 0 && /^Addenda added \(2\):\n  R2  2026-09-11: .*\n  R8  2026-09-23: under the ruling this range added\.$/m.test(r8.out), r8.out);
+    fs.rmSync(d8, { recursive: true, force: true });
+  }
   ok('…with no CHANGED section', !/CHANGED/.test(r.out), r.out);
   r = docket(['diff', '--files', V2, CUR]);
   ok('diff --files v2→current exits 1: an existing heading differs', r.code === 1, r.code + ' ' + r.out);
@@ -1953,6 +1969,8 @@ const SEC = String.fromCharCode(0xa7);
     }
     const shapes = [
       ['what is two sentences', Object.assign({}, ANSWERS, { what: 'It does X. It does Y.' }), /^constitute: what is one sentence; this reads as 2$/m],
+      ['what is two sentences, the second unfinished', Object.assign({}, ANSWERS, { what: 'It does X. It does Y' }), /^constitute: what is one sentence; this reads as 2$/m],
+      ['feeling is two fragments with a stop between', Object.assign({}, ANSWERS, { feeling: 'Calm. Always' }), /^constitute: feeling is a phrase, not a sentence$/m],
       ['what is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.what; return a; })(), /^constitute: what is required: one sentence/m],
       ['who is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.who; return a; })(), /^constitute: who is required: \{"role"/m],
       ['role is empty', Object.assign({}, ANSWERS, { who: { role: '  ', knows: 'k', doesntKnow: 'd' } }), /^constitute: who\.role is required: the person this is for, as a role$/m],
@@ -2007,7 +2025,7 @@ const SEC = String.fromCharCode(0xa7);
     const stubDir = tmpDir('host-');
     const stub = (name, lines) => { const p = path.join(stubDir, name); fs.writeFileSync(p, '#!/bin/sh\n' + lines.map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(p, 0o755); return p; };
     const turn = (text, tool) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text }].concat(tool ? [{ type: 'tool_use', name: tool, input: { file_path: 'test/fixture/app.js' } }] : []) } });
-    const result = (denials) => JSON.stringify({ type: 'result', result: 'done', permission_denials: denials || [] });
+    const result = (denials) => JSON.stringify({ type: 'result', result: 'done', num_turns: 1, permission_denials: denials || [] });
     const runScript = (script, hostLines, env) => {
       fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\n' + hostLines.map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
       return cp.spawnSync('sh', [path.join(ROOT, 'test', script)], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1', CONSTITUTE_RUNS: '1' }, env || {}) });
@@ -2028,24 +2046,27 @@ const SEC = String.fromCharCode(0xa7);
     r = runScript('cites.sh', [turn('Governed by R6; editing.', 'Edit'), result([{ tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js' } }])]);
     ok('cites.sh does not score a run the harness interfered with, and says so', /NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(b\) obeying  0 of 0/.test(r.stdout), r.stdout);
     // constitute.sh: (c) a host that prints the block's exact heading and touches nothing; the skill's text is in the transcript
-    // The skill's expanded text is what the transcript carries when the host loaded it: the intake itself, which
-    // names `docket constitute --answers` in prose. So "core invoked" must read tool calls, not text, and "skill
-    // loaded" must read the intake's content, not its path — the host's own error message names the path too.
-    const skillLine = JSON.stringify({ type: 'system', text: read(path.join(ROOT, 'intake', 'CONSTITUTE.md')) });
-    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
-    ok('constitute.sh scores a host that reaches the block and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    // The stream transcript never carries the expanded skill text, so "skill loaded" is read from the host's init
+    // event (the skill registered from the plugin directory), an unrefused splice, and a turn having run; and
+    // "core invoked" must read tool calls, not text — a model that restates "on confirm I will run docket
+    // constitute --answers" has invoked nothing. The stand-in's text quotes the intake to prove the second.
+    const skillLine = JSON.stringify({ type: 'system', subtype: 'init', skills: ['the-docket:constitute', 'the-docket:docket', 'the-docket:rule'], slash_commands: ['the-docket:constitute'] });
+    const intakeEcho = 'As the intake says: run `docket constitute --answers <that file>` on the word, and not before.\n';
+    r = runScript('constitute.sh', [skillLine, turn(intakeEcho + 'CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
+    ok('constitute.sh scores a host that reaches the block, quotes the intake’s command in prose and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
     ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
     ok('…and stderr is clean for both scripts', r.stderr.trim() === '', r.stderr);
     // a host that runs the mechanical half before the word: (c) fails on "core invoked"
     r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM' }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
     ok('constitute.sh fails (c) for a host that invokes the core before the word, even with the heading printed', /\(c\) halting   0 of 1/.test(r.stdout) && /core invoked before the word: yes/.test(r.stdout), r.stdout);
-    // the intake named by path only — the host's own error names the path — is not a loaded skill
+    // a transcript with no init event naming the skill — the intake's path in some message is not registration
     r = runScript('constitute.sh', [JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' }), turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result()]);
-    ok('constitute.sh reads "skill loaded" from the intake’s content, so a transcript that only names the path reads no', /\[skill loaded: no\]/.test(r.stdout), r.stdout);
-    // a splice the host refused: the model never saw the intake, so neither measure is taken, and the script says so
+    ok('constitute.sh reads "skill loaded" from the host’s init event, so a transcript that only names the intake’s path reads no', /\[skill loaded: no\]/.test(r.stdout) && /\(c\) halting   1 of 1/.test(r.stdout), r.stdout);
+    // a splice the host refused: the model never saw the intake, so neither measure is taken, and the script says so —
+    // even with the skill registered, since registration is not delivery
     const spliceBlocked = JSON.stringify({ type: 'user', message: { role: 'user', content: '<local-command-stderr>Shell command permission check failed for pattern "node …/bin/docket.js intake constitute": the command was blocked.</local-command-stderr>' } });
-    r = runScript('constitute.sh', [spliceBlocked, JSON.stringify({ type: 'result', result: '', num_turns: 0, permission_denials: [] })]);
+    r = runScript('constitute.sh', [skillLine, spliceBlocked, JSON.stringify({ type: 'result', result: '', num_turns: 0, permission_denials: [] })]);
     ok('constitute.sh scores nothing when the host refused the skill’s splice: both runs NOT SCORED, the measurement not taken, exit 1', r.status === 1 && /\(r\) run 1  NOT SCORED — the host refused the skill's splice; the model never saw the intake/.test(r.stdout) && /\(c\) run 1  NOT SCORED — the host refused the skill's splice/.test(r.stdout) && /no run could be scored; the measurement was not taken/.test(r.stderr), r.status + '\n' + r.stdout + r.stderr);
     // a denial that is not write-class (a `pwd` outside the allow-list) voids nothing: the run is scored
     r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result([{ tool_name: 'Bash', tool_input: { command: 'pwd && ls' } }])]);
