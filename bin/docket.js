@@ -41,7 +41,8 @@ const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
 const STOP_WAIT = 300;    // D14, logged in D19: the seconds `stop` waits for the judge's record — equal to the judge's own timeout, so no verdict the judge can still record lands after the stop has given up
-const START_SKEW_MS = 2000; // D14, logged in D22: two handlers of one event start apart by under a second; a verdict this much older than the stop's start is still this stop's
+const START_SKEW_MS = 2000; // D14, logged in D22: two handlers of one event start apart by under a second; a verdict this much older than the stop's start is still this stop's, and the stop waits this much past the judge's timeout
+const SNIFF_BYTES = 8000;   // git's own binary sniff: a file with a NUL in its first 8000 bytes is not text
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
@@ -91,8 +92,8 @@ function isTextFile(p) {
   let fd;
   try {
     fd = fs.openSync(p, 'r');
-    const buf = Buffer.alloc(8000);                                  // git's own binary sniff: the first 8000 bytes
-    const n = fs.readSync(fd, buf, 0, 8000, 0);
+    const buf = Buffer.alloc(SNIFF_BYTES);                           // git's own binary sniff
+    const n = fs.readSync(fd, buf, 0, SNIFF_BYTES, 0);
     for (let i = 0; i < n; i++) if (buf[i] === 0) return false;
     return true;
   } catch (e) { return false; } finally { if (fd !== undefined) fs.closeSync(fd); }
@@ -1695,7 +1696,7 @@ function headGoverned(root, have) {
     if (base === 'DECISIONS.md') { out.push(p); continue; }           // a ledger HEAD held
     if (/^DECISIONS.*\.md$/.test(base)) continue;                     // a ledger document is never governed code
     const t = show(p);
-    if (t === null || t.slice(0, 8000).includes('\u0000')) continue;
+    if (t === null || t.slice(0, SNIFF_BYTES).includes('\u0000')) continue;
     const L = ledgerAt(p);
     if (L && citesIn(t, L).some(c => c.exists)) out.push(p);
   }
@@ -1782,7 +1783,8 @@ function gate(argv) {
 // that skipped the question.
 const LOCATED_SEP = ' · ';
 // The answer to the reason question carries its evidence (D27): a field of its own, `reason holds: <the premise> (<file:line>)`
-// or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff.
+// or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff,
+// a ledger's included (D29).
 // The answer's field: the token, the premise in words, and its line in parentheses anywhere in the field — one
 // location or several, each `<file>:<line>` or `<file>:<first>-<last>`, with words beside them if the judge adds
 // some, each a line of the file as the diff leaves it or as it stood at HEAD.
@@ -1900,7 +1902,7 @@ function stop(argv) {
     const l = st.last;
     return l && l.hash === d.hash && Date.parse(l.at) >= start - START_SKEW_MS ? { kind: l.verdict, last: l } : null;
   };
-  const deadline = start + waitS * 1000;
+  const deadline = start + waitS * 1000 + (waitS ? START_SKEW_MS : 0);   // the judge's timeout runs from its own start, which may follow this one's (D22)
   let j = null;
   for (;;) {
     j = judged();

@@ -13,8 +13,9 @@ or a reading with the exact thing to look for.
 How scored: run the commands the repository's agent-instructions file names for
 checking work (whatever the host calls that file); failing that, the commands the
 README's test section names; failing that, where the witness is vendored,
-`node test/docket.js`. Exit code decides. If none of the three exists, F1 is not
-scored, and the verdict says so.
+`node test/docket.js`. Exit code decides. If none of the three exists, or the
+judge may not run the one that does, F1 is not scored, and the verdict says so
+and names the command.
 
 **F2 — `docket check` passes.**
 How scored: `docket check`; exit code decides. Its failures are located already;

@@ -23,7 +23,7 @@ D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
 | whether this stop was already blocked once in this turn | the host passes it in; if so, allow the stop at once |
-| a shell | confined to `docket.js` and the repository's own test commands. The core prints the protocol, the packs, the diff and the transcript, so one permission — to run the core — is the whole of what the judge needs |
+| a shell | confined to what the session allows: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too. A check command the judge may not run leaves the code pack's first feature unscored, and the verdict says so and names the command |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
 witness is vendored, or — where the judge runs as a host's hook — the file the
@@ -147,7 +147,7 @@ redirection — a host permits that shape and no other.
    STALE when every line says `reason gone` or `cite stale`, FAIL when any does
    not. The core refuses a record that disagrees with its own lines, a line not in
    the located form, and a PASS that carries a reason (D23), and says why: correct
-   the line it names and record again. A refusal is the core working, not failing;
+   the line it names and record again (D29). A refusal is the core working, not failing;
    the judging is not done until a record is made.
 7. **Return.**
    PASS → allow the stop.
@@ -243,7 +243,8 @@ and a host cannot see the difference between that and a PASS. So a host binds a
 second handler beside the judge on the same event: `docket stop`, which reads
 the same hook input, computes the same diff, and blocks a governed stop for
 which no fresh verdict has been recorded by the time the judge should have
-finished — it waits up to its bound, equal to the judge's own timeout, for the
+finished — it waits up to its bound, the judge's own timeout and the two
+seconds by which two handlers of one event may start apart, for the
 record, then refuses; and a fresh FAIL or STALE it finds it relays as a block
 with the recorded reason, in case the judge's own block never reached the
 maker; a session this stop's gate surfaced it relays the same way, with the

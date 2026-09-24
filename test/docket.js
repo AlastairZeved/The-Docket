@@ -2695,6 +2695,9 @@ const SEC = String.fromCharCode(0xa7);
     ok('verdict PASS without --session names the session it leaves surfaced and the flag that would release it', vp.code === 0 && /^note: session z is still surfaced; a PASS releases it only with --session z$/m.test(vp.out), vp.out);
     r = stopIn({ session_id: 'w' }, ['--wait', '0']);
     ok('…while another session with the same unjudged diff is blocked', /"decision":"block"/.test(r.out), r.out);
+    { const t1 = Date.now(); r = stopIn({ session_id: 'w' }, ['--wait', '1']);
+      const took = Date.now() - t1;
+      ok('stop waits the start skew of two handlers of one event past its bound, so a verdict recorded in the judge’s last second is not missed (D22)', /"decision":"block"/.test(r.out) && took >= 2900 && took < 60000, took + 'ms ' + r.out.slice(0, 80)); }
     r = stopIn({ session_id: 'w' }, ['--wait', 'soon']);
     ok('stop: --wait takes a whole number of seconds, exit 2', r.code === 2 && /whole number of seconds/.test(r.err), r.err);
     r = docket(['stop', '--wait', '0'], { cwd: d, input: 'not json' });
@@ -2867,7 +2870,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('decisions F10 routes a changed ruled number with no entry to the code pack’s F3 and to /rule', /located failure in the code pack's F3, routed to `\/rule`/.test(packs.decisions), 'F10 is not as stated');
     ok('the packs’ located-failure lines and examples are not cites of this ledger: check passes over them', docket(['check']).code === 0, docket(['check']).out);
     ok('code’s domain is everything that is not a spec document', /^Domain: everything that is not a spec document — every governed file in the diff but `UIUX\.md` and `PRD\.md`/m.test(packs.code), (packs.code.match(/^Domain:.*$/m) || [''])[0]);
-    ok('code F1 names its three sources in order and says when it is not scored', /agent-instructions file names for\s+checking work/.test(packs.code) && /README's test section names/.test(packs.code) && /`node test\/docket\.js`\. Exit code decides\. If none of the three exists, F1 is not\s+scored, and the verdict says so\./.test(packs.code), 'F1 is not as stated');
+    ok('code F1 names its three sources in order and says when it is not scored', /agent-instructions file names for\s+checking work/.test(packs.code) && /README's test section names/.test(packs.code) && /`node test\/docket\.js`\. Exit code decides\. If none of the three exists, or the\s+judge may not run the one that does, F1 is not scored, and the verdict says so\s+and names the command\./.test(packs.code), 'F1 is not as stated');
     ok('code F3 asks for the reason answer in the located line, with its line, and its example gives one (D23, D27)', /`reason holds: <the premise> \(<file:line>\)` where the code the\s+diff leaves still makes the premise true/.test(packs.code) && /reason holds: a deletion still cannot be undone \(src\/trash\.js:52\) · change the code, or supersede R4 through \/rule/.test(packs.code), 'F3 is not as stated');
     ok('code F4 lists what a skipped, disabled or deleted test looks like', /`skip`, `xit`, `only`, `\.skip\(`, `\.only\(`/.test(packs.code) && /a test file removed/.test(packs.code), 'F4 is not as stated');
     ok('design F5 carries its test sentence', /padding and shadow is a card whatever it is named; renaming is not redesigning/.test(packs.design), 'F5 is not as stated');
@@ -2962,6 +2965,19 @@ const SEC = String.fromCharCode(0xa7);
       GOOD_R);
     ok('judge.sh does not pass the number case read as STALE with the addendum route: the plant moves the number itself, which D14’s addendum reads under the first clause', /\(n\) number     0 of 1/.test(r.stdout) && /\(n\) run 1  judge: STALE  names R5: yes  the supersede route: no /.test(r.stdout), r.stdout);
     ok('…scores a planted case whose maker’s edit the harness denied — the plant is in the tree before the session — and does not score the clean case so denied, which fails the gate', /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) run 1  NOT SCORED — the harness denied the edit/.test(r.stdout) && r.status === 1 && /calibration \(D15\): not met: the clean case was not scored; the number case met its outcome in 0 of 1$/m.test(r.stdout), r.status + ' ' + r.stdout);
+    // the route is read on the ruling's own line: an addendum route on another ruling's line is not R7's
+    {
+      const OTHER = 'code · F3 · app.js:80 · R7 keeps the relational plane’s menu; this diff removes it · reason gone: relations are marks on the notes (app.js:191) · move the menu\ncode · F5 · app.js:12 · R2’s cite is gone · reason gone: nothing reads a position (app.js:12) · /rule --addendum R2 "nothing reads a position"';
+      const NUMX = 'code · F3 · app.js:12 · R5 ruled three sections; this diff makes four · reason holds: three tabs still read three sections (app.js:14) · change the code\ncode · F3 · app.js:41 · R6 keeps the toolbar · reason holds: the toolbar shows the note (app.js:44) · supersede R6 through /rule';
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(OTHER), result()], { verdict: 'STALE', reason: OTHER }),
+        say([turnText('Reviewed.'), blockTurn(NUMX), result()], { verdict: 'FAIL', reason: NUMX }),
+        GOOD_R);
+      ok('judge.sh reads the stale case’s route on R7’s own line: an addendum route on another ruling’s line is not a pass', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
+      ok('…and the number case’s route on R5’s own line: a supersede route on another ruling’s line is not a pass', /\(n\) number     0 of 1/.test(r.stdout) && /the supersede route: no /.test(r.stdout), r.stdout);
+    }
     // a host that never ran the judge anywhere: nothing judged, nothing met
     r = runJudge(say([turnText('Reviewed.'), result()]), say([turnText('Renamed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Nothing.'), result()]));
     ok('judge.sh with no judge at any stop scores every run and meets nothing: exit 1', r.status === 1 && /\(v\) run 1  judge: none/.test(r.stdout) && /the stop was allowed with no verdict: the judge never judged it, and an allowed stop is not a PASS/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) && /calibration \(D15\): not met/.test(r.stdout), r.status + '\n' + r.stdout);
