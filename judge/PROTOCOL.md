@@ -108,7 +108,8 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    rewrite. The premise may have gone with this diff or with an earlier change,
    and it seldom lives in the hunk the ruling's cite sits in: read it against the
    whole diff and the code the diff leaves, since what makes a ruling right is
-   usually somewhere the ruling's own lines are not. Write the answer into the located
+   usually somewhere the ruling's own lines are not. Read them with your file
+   tools and `docket gate --diff`: the shell runs the core, and nothing else. Write the answer into the located
    failure, after what the diff breaks and before the route: `reason holds`, or `reason gone` — and, for a cite that no longer points
    at code that implements its ruling, `cite stale`. A code line that names a
    ruling and answers neither way is refused when it is recorded (D23).

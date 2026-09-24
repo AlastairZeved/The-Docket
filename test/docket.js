@@ -2675,8 +2675,23 @@ const SEC = String.fromCharCode(0xa7);
     // A binding is a few lines that point at a core file (D13, D20). The rules the judge follows — the four cases, the
     // never-record rule, the command shape — are the protocol's, printed by the core; the prompt names the core and
     // the two things only the host knows: the hook input, and what a missing breadcrumb means.
-    ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, `node <core> protocol`, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /node <core> protocol/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
-    ok('…and says what a denied command means: the stop does not stand, and the reason is the one line the mechanical half also gives', /If a command you need is denied, the stop does not stand/.test(pr) && /the judge could not run the core/.test(pr), pr);
+    ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, `node <core> protocol`, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /node <core> protocol/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && /with your file tool/.test(pr) && /no \$\( \), no variable, no cd or other prefix: your one permission matches that shape alone/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
+    ok('…and says what a denied command means — one of the shape the permission matches, not any command the judge tried: the stop does not stand, and the reason is the one line the mechanical half also gives (D25)', /If a command of that shape is denied, the stop does not stand/.test(pr) && /the judge could not run the core/.test(pr), pr);
+    // the core's trail (D25): off by default, one line per run where a .docket/ exists, never where none does
+    {
+      const dt = tempRepo(); fs.appendFileSync(path.join(dt, 'test', 'fixture', 'app.js'), 'const t = 1; // R2\n');
+      docket(['gate', '--session', 't'], { cwd: dt });
+      ok('the core leaves no trail by default', !fs.existsSync(path.join(dt, '.docket', 'trail.log')), 'a trail with DOCKET_TRAIL unset');
+      fs.mkdirSync(path.join(dt, '.docket'), { recursive: true });
+      docket(['gate', '--session', 't'], { cwd: dt, env: { DOCKET_TRAIL: '1' } });
+      docket(['governs', 'R2', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: dt, env: { DOCKET_TRAIL: '1' } });
+      const tl = read(path.join(dt, '.docket', 'trail.log')).split('\n').filter(Boolean);
+      ok('…and with DOCKET_TRAIL set, one line per run of the core — the time, then the command as given', tl.length === 2 && /^\d{4}-\d\d-\d\dT\S+Z gate --session t$/.test(tl[0]) && /^\S+Z governs R2 --ledger test\/fixture\/DECISIONS\.md$/.test(tl[1]), tl.join(' | '));
+      const nt = tmpDir('notrail-'); fs.writeFileSync(path.join(nt, 'a.js'), 'x();\n');
+      docket(['gate', '--session', 't'], { cwd: nt, env: { DOCKET_TRAIL: '1', CLAUDE_PROJECT_DIR: '' } });
+      ok('…and none where the project has no .docket/: the trail never creates the directory', !fs.existsSync(path.join(nt, '.docket')), 'a .docket/ appeared');
+      fs.rmSync(dt, { recursive: true, force: true }); fs.rmSync(nt, { recursive: true, force: true });
+    }
     const PRT = read(path.join(ROOT, 'judge', 'PROTOCOL.md'));
     ok('the protocol names the four cases in which a stop stands and no other, the never-record rule, and the one command shape `docket` means', /^## When the stop stands$/m.test(PRT) && /In four cases, and in no other/.test(PRT) && /the host's re-entry flag is set/.test(PRT) && /`docket gate` printed SKIP/.test(PRT) && /printing `verdict recorded: PASS`/.test(PRT) && /never\s+runs the verdict command to make the fourth case true/.test(PRT) && /`docket` in this file and in the packs is `node <core>`/.test(PRT) && /never\s+prefixed with `cd`/.test(PRT), 'the protocol does not say');
     ok('the protocol says the judge never records a verdict to release a stop, and that a surfaced session is released by a PASS naming it with --session', /It never records a verdict to release a stop/.test(PRT) && /`docket verdict PASS\s+--session <id> --hash <hash> --failures 0`, naming that session/.test(PRT), 'the protocol does not say');

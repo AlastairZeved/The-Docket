@@ -2041,7 +2041,18 @@ function witness(argv) {
   out(n ? 'witness: ' + n + ' failure' + (n === 1 ? '' : 's') : 'witness: ok (' + c.ctx.ledgers.size + ' ledger' + (c.ctx.ledgers.size === 1 ? '' : 's') + ', ' + s.rows + ' spec rows)');
   return n ? 1 : 0;
 }
+// The core's trail (D25): with DOCKET_TRAIL set, each run of the core in a project that has a .docket/ appends one
+// line there — the time and the command — so a measurement can read what a judge ran when its host keeps no
+// transcript of it. Off by default; a failure to write is not the command's failure.
+function leaveTrail() {
+  if (!process.env.DOCKET_TRAIL) return;
+  try {
+    const d = path.join(enumerationRoot(process.cwd()), '.docket');
+    if (isDir(d)) fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n');
+  } catch (e) { /* the trail is the measurement's; the command runs whatever it does */ }
+}
 function main() {
+  leaveTrail();
   const argv = parseArgv(process.argv.slice(2));
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];

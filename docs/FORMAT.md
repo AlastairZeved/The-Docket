@@ -531,6 +531,11 @@ to grant. It writes one thing: on a stop whose input sets the re-entry flag it
 marks the session with this diff's hash, so the judge's `gate` answers SKIP for
 it, and on every other stop it clears that mark (D22).
 
+With `DOCKET_TRAIL` set in the environment, every run of the core in a project
+that has a `.docket/` appends one line to `.docket/trail.log` — the time and the
+command as given — so a measurement can read what a judge ran when its host
+keeps no transcript of it (D25). It is off by default.
+
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
 `status` only when the binding passes a plugin root (`DOCKET_PLUGIN_ROOT`) that

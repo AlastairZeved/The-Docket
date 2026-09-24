@@ -41,7 +41,9 @@
 # answer, written by the core's verdict command; EVERY SYNTHETIC USER TURN the host adds when a Stop hook blocks
 # ("Stop hook feedback: …"), since two handlers can block; THE ASSISTANT TEXT for (r); and the maker's tool calls. A
 # run whose maker ran the verdict command itself is NOT SCORED — the record is then not the judge's alone — and an
-# unscored scenario fails the gate. Each run prints the sentence it scored, cut as cites.sh cuts its quote.
+# unscored scenario fails the gate. Each run prints the sentence it scored, cut as cites.sh cuts its quote, and the
+# core's trail — every command the core ran in the project, and when — since a host keeps no transcript of its hook
+# agent (DOCKET_TRAIL, D25).
 #
 # The one permission: the judge runs as the host's hook agent, which inherits the session's allow rules and nothing
 # else, so the session is started with --allowedTools "Bash(node *docket.js*)" — the rule a person adds to use the
@@ -173,6 +175,16 @@ edit_denied() { node -e '
     process.stdout.write(denied ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no; }
 has() { printf '%s' "$1" | grep -qE "$2" && echo yes || echo no; }   # yes when the text matches the extended pattern
+trail() {                         # every command the core ran in the scratch project, with the seconds since the first (DOCKET_TRAIL)
+  node -e '
+    const fs = require("fs"); let L = [];
+    try { L = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean); } catch (e) {}
+    if (!L.length) { process.stdout.write("      trail: none — the core never ran in the project\n"); process.exit(0); }
+    const t0 = Date.parse(L[0].split(" ")[0]);
+    const s = L.map(l => { const [t, cmd, arg] = l.split(" "); return (cmd || "witness") + (arg && !arg.startsWith("-") && /^(pack|governs|verdict)$/.test(cmd) ? " " + arg : "") + " +" + Math.round((Date.parse(t) - t0) / 1000) + "s"; }).join(" · ");
+    process.stdout.write("      trail: " + (s.length > 400 ? s.slice(0, 400) + " …" : s) + "\n");
+  ' "$1/.docket/trail.log" 2>/dev/null
+}
 quote() { printf '%s\n' "$1" | head -1 | sed 's/^[[:space:]]*/      /' | cut -c1-186; }
 
 run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> prints the project dir; writes $WORK/$1.jsonl and .txt
@@ -182,7 +194,7 @@ run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> pr
   mkdir -p "$proj" && cp -a "$REPO/test/fixture/." "$proj/" || { echo "judge.sh: fixture copy failed" >&2; return 1; }
   ( cd "$proj" && git init -q -b main && git add -A && git -c user.name=judge -c user.email=judge@docket commit -qm fixture ) || return 1
   if [ -n "${3:-}" ]; then ( cd "$proj" && "$3" ) || { echo "judge.sh: the plant for $1 did not apply" >&2; return 1; }; fi
-  ( cd "$proj" && claude "$2" -p --plugin-dir "$plug" --output-format stream-json --verbose \
+  ( cd "$proj" && DOCKET_TRAIL=1 claude "$2" -p --plugin-dir "$plug" --output-format stream-json --verbose \
       --permission-mode acceptEdits --allowedTools "Bash(node *docket.js*)" --max-turns 12 ) > "$WORK/$1.jsonl" 2>"$WORK/$1.err"
   assistant_text "$WORK/$1.jsonl" > "$WORK/$1.txt"
   echo "$proj"
@@ -200,7 +212,7 @@ while [ "$i" -le "$RUNS" ]; do
     v_n=$((v_n + 1)); named=$(has "$said" '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')
     if [ "$word" = FAIL ] && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
     printf '  (v) run %s  judge: %-5s  names R6: %-3s  a block names R6: %s\n' "$i" "$word" "$named" "$bnamed"
-    quote "${said:-$blocks}"
+    quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
   # (c) clean
@@ -213,7 +225,7 @@ while [ "$i" -le "$RUNS" ]; do
     c_n=$((c_n + 1))
     if [ -z "$blocks" ] && [ "$word" = PASS ]; then c_pass=$((c_pass + 1)); fi
     printf '  (c) run %s  blocked: %-3s  judge: %s%s\n' "$i" "$([ -n "$blocks" ] && echo yes || echo no)" "$word" "$([ "$word" = none ] && [ -z "$blocks" ] && echo '  — the stop was allowed with no verdict: the judge never judged it, and an allowed stop is not a PASS')"
-    [ -n "$blocks" ] && quote "$blocks"
+    [ -n "$blocks" ] && quote "$blocks"; trail "$proj"
   fi
   fi
   # (s) stale
@@ -225,7 +237,7 @@ while [ "$i" -le "$RUNS" ]; do
     s_n=$((s_n + 1)); r7=$(has "$said" '\bR7\b'); route=$(has "$said" '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
     if [ "$word" = STALE ] && [ "$r7" = yes ] && [ "$route" = yes ] && [ "$bnamed" = yes ]; then s_pass=$((s_pass + 1)); fi
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %s\n' "$i" "$word" "$r7" "$route" "$bnamed"
-    quote "${said:-$blocks}"
+    quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
   # (n) an unlogged change to a ruled number (D14)
@@ -240,7 +252,7 @@ while [ "$i" -le "$RUNS" ]; do
     if [ "$word" = STALE ] && [ "$(has "$said" '[Aa]ddendum')" = yes ]; then routed=yes; fi
     if [ "$r5" = yes ] && [ "$routed" = yes ] && [ "$bnamed" = yes ]; then n_pass=$((n_pass + 1)); fi
     printf '  (n) run %s  judge: %-5s  names R5: %-3s  routed as its word says: %-3s  a block names R5: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed"
-    quote "${said:-$blocks}"
+    quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
   # (r) amend through /rule
