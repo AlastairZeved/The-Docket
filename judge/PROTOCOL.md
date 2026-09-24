@@ -10,7 +10,7 @@ the host gives it.
 binds one; it knows how to run a command and read a diff, and it does not know
 the maker's intentions or this repository's history. **Purpose.** Decide whether
 one stop stands, in seven steps, in this order. **Source.** D7, D8, D10, D11,
-D12 and D15 in `docs/DECISIONS.md`.
+D12, D15, D22 and D23 in `docs/DECISIONS.md`.
 
 ## What the judge is given
 
@@ -53,7 +53,8 @@ re-entry flag allow a stop with no record at all.
 
 In four cases, and in no other: (1) the host's re-entry flag is set — this stop
 follows a block in the same turn, and a session is blocked at most once per turn
-(D11); (2) the project has no `.docket/core` and no ledger — it is not under the
+(D11), and `docket gate` answers SKIP for such a stop too, from the mark the
+stop's mechanical half sets (D22); (2) the project has no `.docket/core` and no ledger — it is not under the
 docket; (3) `docket gate` printed SKIP; (4) the protocol, followed to its end,
 ended with `docket verdict` printing `verdict recorded: PASS`. The judge never
 runs the verdict command to make the fourth case true: a PASS is step 6's
@@ -96,7 +97,11 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    question: does the code or the condition that reason describes still exist
    after this diff? If the diff, or an earlier change, removed the thing the
    reason rests on, the contradiction is stale (step 6), and its route is an
-   addendum, not a rewrite; if the reason still holds, it is a failure.
+   addendum, not a rewrite; if the reason still holds, it is a failure. Write the
+   answer into the located failure, after what the diff breaks and before the
+   route: `reason holds`, or `reason gone` — and, for a cite that no longer points
+   at code that implements its ruling, `cite stale`. A code line that names a
+   ruling and answers neither way is refused when it is recorded (D23).
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
@@ -114,6 +119,10 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    contradiction is never itself the FAIL (D7): it keeps its addendum route
    whatever the verdict, and the verdict is FAIL for the other failures.
    Record it: `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id> --reason "<the located failures, one per line>"`.
+   `--failures` is the number of those lines, and the verdict follows from them:
+   STALE when every line says `reason gone` or `cite stale`, FAIL when any does
+   not. The core refuses a record that disagrees with its own lines, a line not in
+   the located form, and a PASS that carries a reason (D23).
 7. **Return.**
    PASS → allow the stop.
    FAIL → block, with the located failures and their fix routes: change the
@@ -126,7 +135,7 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
 
     Feature scores      one line per feature: <pack> <F-id> PASS|FAIL <file:line>
     Trace discrepancies the maker claimed X; the evidence shows Y
-    Failures            <pack> · <F-id> · <file:line> · expected vs found · fix route
+    Failures            <pack> · <F-id> · <file:line> · expected vs found · [reason holds | reason gone | cite stale] · fix route
     Verdict             PASS | FAIL | STALE
 
 A trace discrepancy is an execution failure (a command claimed but not run) or a
@@ -135,9 +144,12 @@ the most important findings and come before the failure list.
 
 ## A located failure
 
-    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · change the code, or supersede R6 through /rule
+    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · reason holds · change the code, or supersede R6 through /rule
+    code · F3 · app.js:80 · R7 keeps the relational plane's menu; this diff removes it · reason gone: relations are marks on the notes, so no line is left for a toolbar to have nothing above · /rule --addendum R7 "relations are marks now"
 
-never
+The answer between what the diff breaks and the route is required on a code line
+that names a ruling, and on no other; a line in any other pack ends with its
+route. Never
 
     the toolbar change looks wrong, try again
 
@@ -153,10 +165,13 @@ never
     <with --diff: the diff, as git prints it, then `+++ <path>` and the content of each untracked governed file>
 
 and decides mechanically (D10, D11): the hash is the SHA-256 of the diff since
-the committed head over every governed file and the ledger, followed by, for
-each untracked governed file in path order, a line `+++ <path>` and the file's
-content; `SKIP` when that diff is empty or its hash equals the
-last PASS's, or when this session is already surfaced; `SURFACE` when this session has been blocked five times or more since the
+the committed head over every governed file and the ledger — the files the
+working tree governs, and those the committed head governed that it no longer
+does: deleted, stripped of their last cite, or under a ledger that is gone (D22)
+— followed by, for each untracked governed file in path order, a line `+++ <path>`
+and the file's content; `SKIP` when that diff is empty or its hash equals the
+last PASS's, when this session is already surfaced, or when the stop's
+mechanical half marked this stop a re-entry (D22); `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. So a session whose failures stop
 falling is surfaced at its fourth stop at the earliest — the stop after the
@@ -182,8 +197,10 @@ history and the surfaced mark per identifier.
 
 `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id> [--reason "…"]`
 writes `.docket/verdict.json` (ignored by git) and bumps the session's block
-count, or resets it on PASS; a PASS names no failures and a FAIL or STALE names
-at least one, or the record is refused. The reason is kept with the verdict and
+count, or resets it on PASS, and appends the record, one JSON line, to
+`.docket/verdicts.jsonl`, the judge's answers in order; a PASS names no failures
+and carries no reason, a FAIL or STALE names at least one and carries one located
+line per failure, the word follows the lines, or the record is refused (D23). The reason is kept with the verdict and
 is what `gate` prints back as the residue when the session surfaces. The judge is the only party that calls it, by
 contract, not by mechanism: a forged verdict is a visible shell call in the
 maker's transcript.
@@ -202,9 +219,13 @@ which no fresh verdict has been recorded by the time the judge should have
 finished — it waits up to its bound, equal to the judge's own timeout, for the
 record, then refuses; and a fresh FAIL or STALE it finds it relays as a block
 with the recorded reason, in case the judge's own block never reached the
-maker. It writes no state and judges nothing; it refuses silence, once, and
-the stop that follows in the same turn is allowed by the re-entry flag. The
-judge never calls it.
+maker; a session this stop's gate surfaced it relays the same way, with the
+residue. It judges nothing, and writes one thing: on a stop the host flags as
+a re-entry it marks the session and the diff, so that the judge's gate answers
+SKIP for that stop whatever the hook agent makes of the flag — one was measured
+to block again in the same turn — and on every other stop it clears the mark
+(D22). It refuses silence, once, and the stop that follows in the same turn is
+allowed. The judge never calls it.
 
 ## Cost
 

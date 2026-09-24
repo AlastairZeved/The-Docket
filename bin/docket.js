@@ -41,6 +41,7 @@ const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
 const STOP_WAIT = 300;    // D14, logged in D19: the seconds `stop` waits for the judge's record — equal to the judge's own timeout, so no verdict the judge can still record lands after the stop has given up
+const START_SKEW_MS = 2000; // D14, logged in D22: two handlers of one event start apart by under a second; a verdict this much older than the stop's start is still this stop's
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
@@ -335,12 +336,13 @@ function parseLedger(text, ledgerPath) {
       while (j < lines.length && !isBoundary(lines[j])) j++;
       const bodyLines = lines.slice(i + 1, j);
       const heading = hm[3];
-      const { meta } = metaOf(heading);
+      const mo = metaOf(heading), meta = mo.meta;
+      const titleText = mo.start >= 0 ? heading.slice(0, mo.start) : heading;   // FORMAT.md 5: an edge anywhere in the heading, the title included
       const id = hm[1] + hm[2];
       const issueM = /issue #(\d+)/.exec(meta);
       const addenda = [];
       bodyLines.forEach((l, k) => { const am = ADDENDUM_RE.exec(l); if (am) addenda.push({ date: am[1], text: am[2], line: start + 2 + k }); });
-      const rawEdges = edgesIn(meta, id, start + 1, true);
+      const rawEdges = edgesIn(meta, id, start + 1, true).concat(edgesIn(titleText, id, start + 1, false));
       bodyLines.forEach((l, k) => { if (!ADDENDUM_RE.test(l)) rawEdges.push(...edgesIn(l, id, start + 2 + k, false)); });
       const seenE = new Set(), edges = [];
       for (const e of rawEdges) { const k = edgeKey(e); if (!seenE.has(k)) { seenE.add(k); edges.push(e); } }
@@ -1233,12 +1235,37 @@ function loadState(root) {
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
 }
 function saveState(root, st) { fs.mkdirSync(path.dirname(statePath(root)), { recursive: true }); fs.writeFileSync(statePath(root), JSON.stringify(st, null, 2) + '\n'); }
+// An addendum is pending until a ruling written after it has an edge into its entry (FORMAT.md 6, D21). Which came
+// first is read from history: the edge's line was added in a commit that descends from the one that added the
+// addendum's line, or in that same commit (the preamble's order: the addendum, then the ruling), or it is not committed
+// yet. An in-edge older than the addendum answered something else: supersession is clause-level (D3), and a ruling that
+// once named an entry has not moved the law past the clause a later addendum is about. With no history to read — no
+// repository, or a ledger never committed — a later entry's edge resolves it, as before.
+function blameCommits(ledgerPath) {
+  const r = sh('git', ['blame', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));
+  if (r.status !== 0) return null;
+  const m = new Map();
+  for (const line of r.stdout.split('\n')) { const h = /^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/.exec(line); if (h) m.set(Number(h[2]), h[1]); }
+  return m;
+}
 function pendingAddenda(ledger) {
-  const pend = [];
+  const pend = [], anc = new Map();
+  let blame;                                                          // read once, and only for a ledger that carries an addendum
+  const writtenAfter = (edgeLine, addLine) => {
+    if (blame === undefined) blame = blameCommits(ledger.path);
+    if (!blame) return true;
+    const a = blame.get(addLine), e = blame.get(edgeLine), zero = /^0{40}$/;
+    if (!a || !e || zero.test(e) || a === e) return true;             // unknown, not committed yet, or one commit
+    if (zero.test(a)) return false;                                   // the addendum is not committed and the edge is: the edge came first
+    const k = a + e;
+    if (!anc.has(k)) anc.set(k, sh('git', ['merge-base', '--is-ancestor', a, e], path.dirname(ledger.path)).status === 0);
+    return anc.get(k);
+  };
   for (const r of ledger.rulings) {
-    if (!r.addenda.length) continue;
-    const resolved = ledger.rulings.some(o => o.line > r.line && o.edges.some(e => e.to === r.id));
-    if (!resolved) for (const a of r.addenda) pend.push({ id: r.id, date: a.date, text: a.text });
+    for (const a of r.addenda) {
+      const resolved = ledger.rulings.some(o => o.line > r.line && o.edges.some(e => e.to === r.id && writtenAfter(e.line, a.line)));
+      if (!resolved) pend.push({ id: r.id, date: a.date, text: a.text });
+    }
   }
   return pend;
 }
@@ -1607,16 +1634,55 @@ function sessionId(argv) {
   if (process.env.DOCKET_SESSION) return process.env.DOCKET_SESSION;
   return 'default';
 }
-// The diff the judge reads and the gate hashes: `git diff HEAD` over every governed file and every ledger, then, for
-// each untracked governed file in path order, a line `+++ <path>` and its content. Empty when nothing governed moved.
+// Files HEAD governed that the working tree does not show as governed — deleted, stripped of their last cite, or under
+// a ledger that is gone — and a ledger HEAD held that is gone. A diff that removes a governed file touches a governed
+// file (D10), so each is in the diff (D22). Governed is read at HEAD: the file's text there cites a ruling that its
+// ledger there holds.
+function headGoverned(root, have) {
+  const ch = sh('git', ['diff', 'HEAD', '--relative', '--name-only', '-z'], root);
+  if (ch.status !== 0) return [];
+  const cand = ch.stdout.split('\0').filter(p => p && !have.has(p));
+  if (!cand.length) return [];
+  const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], root);
+  const atHead = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);
+  const show = p => { const r = sh('git', ['show', 'HEAD:./' + p], root); return r.status === 0 ? r.stdout : null; };
+  const ledgers = new Map();
+  const ledgerAt = p => {                                             // the nearest DECISIONS.md or docs/DECISIONS.md above p, at HEAD
+    for (let dir = path.posix.dirname(p); ; dir = path.posix.dirname(dir)) {
+      for (const c of dir === '.' ? ['DECISIONS.md', 'docs/DECISIONS.md'] : [dir + '/DECISIONS.md', dir + '/docs/DECISIONS.md']) {
+        if (!atHead.has(c)) continue;
+        if (!ledgers.has(c)) { const t = show(c); ledgers.set(c, t === null ? null : parseLedger(t, path.join(root, c))); }
+        return ledgers.get(c);
+      }
+      if (dir === '.' || dir === '/') return null;
+    }
+  };
+  const out = [];
+  for (const p of cand) {
+    if (!atHead.has(p)) continue;                                     // new since HEAD: the working tree's reading decides it
+    const base = path.posix.basename(p);
+    if (base === 'DECISIONS.md') { out.push(p); continue; }           // a ledger HEAD held
+    if (/^DECISIONS.*\.md$/.test(base)) continue;                     // a ledger document is never governed code
+    const t = show(p);
+    if (t === null || t.slice(0, 8000).includes('\u0000')) continue;
+    const L = ledgerAt(p);
+    if (L && citesIn(t, L).some(c => c.exists)) out.push(p);
+  }
+  return out;
+}
+// The diff the judge reads and the gate hashes: `git diff HEAD` over every governed file and every ledger — those the
+// working tree governs, and those HEAD governed that it no longer shows (D22) — then, for each untracked governed file
+// in path order, a line `+++ <path>` and its content. Empty when nothing governed moved.
 function governedDiff(root) {
   const ctx = loadContext(root, { includeUntracked: true });
   const tracked = new Set(trackedFiles(root) || []);
   const files = new Set();
   for (const [lp, ledger] of ctx.ledgers) { files.add(lp); for (const f of governedFiles(ctx, ledger)) files.add(f); }
-  const rels = Array.from(files).map(f => rel(root, f)).sort();
-  const trackedRels = rels.filter(r => tracked.has(path.join(root, r)));
-  const untrackedRels = rels.filter(r => !tracked.has(path.join(root, r)));
+  const now = Array.from(files).map(f => rel(root, f));
+  const gone = headGoverned(root, new Set(now));
+  const rels = uniq(now.concat(gone)).sort();
+  const trackedRels = rels.filter(r => tracked.has(path.join(root, r)) || gone.includes(r));
+  const untrackedRels = rels.filter(r => !trackedRels.includes(r));
   let diffText = '', touched = [];
   if (trackedRels.length) {
     const r = sh('git', ['diff', 'HEAD', '--'].concat(trackedRels), root);
@@ -1635,6 +1701,24 @@ function governedDiff(root) {
   return { hash: sha256(text), touched: uniq(touched), empty: text === '', text };
 }
 function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
+// The residue a surfaced session reports: its blocks and the failures per verdict since the last PASS, and the last
+// verdict with the lines it was recorded with (D11). The gate prints it at SURFACE, and `stop` relays it (D22).
+function residueLines(st, sess) {
+  const h = sess.history, L = [];
+  L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
+  if (st.last) {
+    L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')');
+    if (st.last.reason) for (const line of String(st.last.reason).split('\n')) if (line.trim()) L.push('  ' + line.trim());
+  }
+  return L;
+}
+// A re-entry the stop's mechanical half marked for this session and this diff within the judge's own timeout: this
+// stop follows a block in the same turn, and a session is blocked at most once per turn (D11). The mark is the core's,
+// so the rule does not rest on a hook agent reading the host's flag, which one was measured to block again (D22).
+function reentryMarked(sess, hash) {
+  const m = sess.reentry;
+  return !!(m && typeof m === 'object' && m.hash === hash && Date.now() - Date.parse(m.at) <= STOP_WAIT * 1000);
+}
 function gate(argv) {
   const root = enumerationRoot(process.cwd());
   const id = sessionId(argv);
@@ -1644,16 +1728,12 @@ function gate(argv) {
   const say = (decision, extra) => { if (argv.json) out(JSON.stringify(Object.assign({ decision, session: id, hash: d.hash, files: d.touched }, extra || {}), null, 2)); };
   if (d.empty || d.hash === st.lastPassHash) { say('SKIP', { reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff' }); if (!argv.json) out('SKIP'); return 0; }   // D10
   if (sess.surfaced) { say('SKIP', { reason: 'this session is surfaced until a PASS or a new session' }); if (!argv.json) out('SKIP'); return 0; }   // D11
+  if (reentryMarked(sess, d.hash)) { say('SKIP', { reason: 'this stop follows a block in the same turn: a session is blocked at most once per turn' }); if (!argv.json) out('SKIP'); return 0; }   // D11, D22
   const h = sess.history;
   const stuck = sess.blocks >= THIRD_CYCLE && h.length >= 2 && h[h.length - 1] >= h[h.length - 2];   // failures not falling after the third block
   if (sess.blocks >= BLOCK_CAP || stuck) {                                                          // D11
     sess.surfaced = true; st.sessions[id] = sess; saveState(root, st);
-    const L = ['SURFACE'];
-    L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
-    if (st.last) {
-      L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')');
-      if (st.last.reason) for (const line of String(st.last.reason).split('\n')) if (line.trim()) L.push('  ' + line.trim());
-    }
+    const L = ['SURFACE'].concat(residueLines(st, sess));
     L.push('report this to the user verbatim, then stop again');
     say('SURFACE', { residue: L.slice(1, -1) }); if (!argv.json) out(L.join('\n'));
     return 0;
@@ -1661,6 +1741,33 @@ function gate(argv) {
   say('JUDGE');
   if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(d.text); }
   return 0;
+}
+// A verdict is held to its lines (D23). Each is one located failure in the protocol's form — pack · F<n> · file:line ·
+// what · … · route — and their count is --failures. A code-pack line that names a ruling answers the question of the
+// protocol's step 4 in so many words, after what the diff breaks and before the route: "reason holds" (a failure), or
+// "reason gone" or "cite stale" (a stale one, whose route is an addendum). The verdict follows from its lines: STALE
+// when every failure is a stale one, FAIL when any is not. A judge that named the contradiction and never asked
+// whether its reason still stood was the failure measured most often; the form asks, and the record refuses an answer
+// that skipped the question.
+const LOCATED_SEP = ' · ';
+function holdToLines(root, v, failures, lines) {
+  if (!lines.length) die('verdict: a ' + v + ' names its located failures: --reason "<one per line: pack · F<n> · file:line · what · route>"', 2);
+  if (lines.length !== failures) die('verdict: --failures ' + failures + ' but --reason carries ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ': one located failure per line, and the count is theirs', 2);
+  let ids = null;
+  const rulingIds = () => { if (!ids) { ids = new Set(); for (const [, L] of loadContext(root).ledgers) for (const r of L.rulings) ids.add(r.id); } return ids; };
+  let stale = 0;
+  lines.forEach((l, i) => {
+    const f = l.split(LOCATED_SEP).map(x => x.trim()), at = 'verdict: line ' + (i + 1);
+    if (f.length < 5 || !/^[a-z][a-z0-9-]*$/.test(f[0]) || !/^F\d+[a-z]?$/.test(f[1]) || !f[2] || !f[f.length - 1]) die(at + ' is not a located failure: <pack> · F<n> · <file:line> · <what> · <fix route>, its fields joined by " · " (the protocol\'s form)', 2);
+    const said = f.slice(3, -1).join(LOCATED_SEP);
+    const gone = /\b(?:reason gone|cite stale)\b/i.test(said), holds = /\breason holds\b/i.test(said);
+    if (gone && holds) die(at + ' says both that the reason holds and that it is gone', 2);
+    const names = f[0] === 'code' && (f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []).some(t => rulingIds().has(t));
+    if (names && !gone && !holds) die(at + ' names a ruling and says nothing of its reason: after what the diff breaks, write "reason holds", or "reason gone" (or "cite stale"), then the route (protocol step 4)', 2);
+    if (gone) stale += 1;
+  });
+  if (v === 'STALE' && stale < lines.length) die('verdict: STALE is the verdict only when every failure is a stale one (protocol step 6); ' + (lines.length - stale) + ' of these ' + lines.length + (lines.length - stale === 1 ? ' is' : ' are') + ' not: record FAIL, with the stale ones and their addendum route among its lines', 2);
+  if (v === 'FAIL' && stale === lines.length) die('verdict: every failure here is a stale one: the verdict is STALE, not FAIL (protocol step 6)', 2);
 }
 function verdict(argv) {
   const v = (argv._[1] || '').toUpperCase();
@@ -1671,9 +1778,12 @@ function verdict(argv) {
   if (!Number.isInteger(failures) || failures < 0) die('verdict: --failures must be a non-negative integer', 2);
   if (v === 'PASS' && failures !== 0) die('verdict: a PASS has no located failures; this names ' + failures, 2);
   if (v !== 'PASS' && failures === 0) die('verdict: a ' + v + ' names at least one located failure; --failures is 0', 2);
-  const hash = flag(argv, '--hash') || governedDiff(root).hash;
   const reason = flag(argv, '--reason');
   if (reason !== null && UNSAFE_RE.test(reason)) die('verdict: --reason carries a control or bidi character', 2);
+  const lines = reason === null ? [] : String(reason).split('\n').map(x => x.trim()).filter(Boolean);
+  if (v === 'PASS' && lines.length) die('verdict: a PASS names no located failures; --reason is for a FAIL or a STALE', 2);
+  if (v !== 'PASS') holdToLines(root, v, failures, lines);            // D23
+  const hash = flag(argv, '--hash') || governedDiff(root).hash;
   const st = loadState(root);
   const sess = Object.assign(freshSession(), st.sessions[id] || {});
   st.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
@@ -1682,6 +1792,9 @@ function verdict(argv) {
   else { sess.blocks += 1; sess.history.push(failures); }
   st.sessions[id] = sess;
   saveState(root, st);
+  // Every verdict, in order, one JSON line each: the judge's record for a person to read and for a measurement to score
+  // the judge's first answer by. Nothing in the core reads it (D22).
+  try { fs.appendFileSync(path.join(root, '.docket', 'verdicts.jsonl'), JSON.stringify(st.last) + '\n'); } catch (e) { process.stderr.write('note: .docket/verdicts.jsonl could not be appended to (' + e.code + '); the verdict is recorded in .docket/verdict.json\n'); }
   const left = v === 'PASS' && !flag(argv, '--session') ? Object.keys(st.sessions).filter(k => k !== id && st.sessions[k].surfaced) : [];   // a PASS releases the session it names, and this one was not named
   if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash, stillSurfaced: left }, null, 2)); return 0; }
   out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
@@ -1700,7 +1813,6 @@ function stop(argv) {
   let input = {};
   try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
   if (typeof input !== 'object' || Array.isArray(input)) input = {};
-  if (input.stop_hook_active === true) return 0;                                                 // D11: blocked at most once per turn
   const waitRaw = flag(argv, '--wait');
   const waitS = waitRaw === null ? STOP_WAIT : Number(waitRaw);
   if (!(Number.isInteger(waitS) && waitS >= 0)) die('stop: --wait takes a whole number of seconds', 2);
@@ -1708,15 +1820,24 @@ function stop(argv) {
   const id = flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default';
   const d = governedDiff(root);
   const st0 = loadState(root);
+  const s0 = st0.sessions[id];
+  // The re-entry mark (D22): set on a stop the host flags as following a block in the same turn, so that the judge's gate
+  // answers SKIP for it whatever the hook agent makes of the flag; cleared on every other stop, so that a mark never
+  // outlives the turn it was set in. It is the one thing `stop` writes.
+  if (input.stop_hook_active === true) {                                                         // D11: blocked at most once per turn
+    if (!d.empty) { st0.sessions[id] = Object.assign(freshSession(), s0 || {}, { reentry: { hash: d.hash, at: new Date().toISOString() } }); saveState(root, st0); }
+    return 0;
+  }
+  if (s0 && s0.reentry) { delete s0.reentry; saveState(root, st0); }
   if (d.empty || d.hash === st0.lastPassHash) return 0;                                          // D10: nothing to judge
-  if (st0.sessions[id] && st0.sessions[id].surfaced) return 0;                                   // D11: a surfaced session skips
+  if (s0 && s0.surfaced) return 0;                                                               // D11: surfaced before this stop, it skips
   const start = Date.now();
   const judged = () => {                                                                         // a fresh record for this diff, or the surfacing mark
     const st = loadState(root);
-    if (st.sessions[id] && st.sessions[id].surfaced) return { kind: 'surfaced' };
+    if (st.sessions[id] && st.sessions[id].surfaced) return { kind: 'surfaced', st };
     if (st.lastPassHash === d.hash) return { kind: 'PASS' };
     const l = st.last;
-    return l && l.hash === d.hash && Date.parse(l.at) >= start - 2000 ? { kind: l.verdict, last: l } : null;
+    return l && l.hash === d.hash && Date.parse(l.at) >= start - START_SKEW_MS ? { kind: l.verdict, last: l } : null;
   };
   const deadline = start + waitS * 1000;
   let j = null;
@@ -1728,7 +1849,12 @@ function stop(argv) {
   }
   const files = d.touched.join(', ');
   const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
-  if (j && (j.kind === 'surfaced' || j.kind === 'PASS')) return 0;
+  if (j && j.kind === 'PASS') return 0;
+  if (j && j.kind === 'surfaced') {                                                              // surfaced by this stop's gate: the residue reaches the maker whether or not the judge's block does (D11, D22)
+    const reason = 'The docket\'s judge surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since the last PASS.\n' + residueLines(j.st, j.st.sessions[id]).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
+    out(JSON.stringify({ decision: 'block', reason }));
+    return 0;
+  }
   if (j) {                                                                                       // a fresh FAIL or STALE: relayed, in case the judge's own block never reached the maker
     const l = j.last, n = l.failures;
     const reason = 'The docket\'s judge recorded ' + j.kind + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (j.kind === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or amend the law through /rule.') + tail;

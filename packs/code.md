@@ -1,6 +1,6 @@
 # code — the pack for code
 
-Domain: every governed file that no other pack claims — not `*.css`, `*.html`, `UIUX.md`, `PRD.md`, not `*.md`, not a ledger
+Domain: everything that is not a spec document — every governed file in the diff but `UIUX.md` and `PRD.md`: code, styles, markup, prose and the ledger alike; where another pack's domain covers a file too, both score it
 
 `docket` in this file is the core, run as the protocol says. A pack is a list of measurable features. The judge scores each against the diff
 and the repository, on governed files only, and records PASS or FAIL with a
@@ -26,7 +26,10 @@ window the pre-edit hook shows), `docket governs <id>`; read the diff against
 each clause of the ruling and against each in-edge's clause — a later ruling may
 have superseded or waived the clause the diff breaks. A contradiction whose
 stated reason still holds is a failure; one whose reason no longer holds is a
-stale contradiction, with the addendum route.
+stale contradiction, with the addendum route. The located failure says which,
+after what the diff breaks and before the route: `reason holds` or `reason gone`
+(and `cite stale` for a cite left on code that no longer implements its ruling);
+a code line that names a ruling and says neither is refused when it is recorded.
 
 **F4 — no test skipped, disabled or deleted.**
 How scored: read the diff for `skip`, `xit`, `only`, `.skip(`, `.only(`, a
@@ -48,7 +51,7 @@ is a failure; a run whose output contradicts the claim is a failure.
 
 ## Located failure
 
-    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · change the code, or supersede R6 through /rule
+    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · reason holds · change the code, or supersede R6 through /rule
 
 never
 

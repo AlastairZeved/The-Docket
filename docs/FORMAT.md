@@ -170,13 +170,14 @@ The verbs, and only these: `supersedes`, `overrides`, `retires`, `reverses`,
 optional qualifier is a parenthetical immediately after the target id. The
 entry that contains the text is the edge's **source**; the id named is its
 **target**. The edge's **clause** is the sentence that contains it: in the
-heading, the meta clause; in the body, the text between the nearest sentence
+heading's meta, the meta clause; in the title — the heading before its meta —
+the title's sentence; in the body, the text between the nearest sentence
 boundaries (`.`, `;`, or a line break).
 
 An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 `R7 partially reverses R6 (relational plane only)` is one edge from R7 to R6.
-The same edge stated twice — in the heading's meta and again in the body — is
-one edge, and its clause is the first statement. One verb may name several
+The same edge stated twice — in the meta, the title or the body — is one edge,
+and its clause is the first statement in that order: meta, then title, then body. One verb may name several
 targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with
 the same clause.
 
@@ -199,18 +200,20 @@ An **addendum** is a line under an entry of the form
 
 It records that something about the entry has changed without amending the
 entry: most often that the entry's stated reason no longer holds. An addendum
-is **pending** until a later ruling has an edge into the entry (any verb); the
-docket (`docket status`) lists pending addenda. `docket append --addendum <id>
+is **pending** until a ruling written after it has an edge into the entry (any
+verb); the docket (`docket status`) lists pending addenda. `docket append --addendum <id>
 --text <text>` writes one with today's date as the last line of the entry;
 `append` refuses a `--body` that carries an addendum line, so an addendum is
 dated by the tool and never by hand.
 
-An addendum written under an entry that already has an in-edge is not pending
-and never was: the later ruling it would call for exists. The ledger preamble's
-order — the addendum first, the superseding ruling second — is the order for an
-entry no later ruling has yet named; for one already named, the addendum is a
-note under a ruling the law has moved past, and the docket does not ask for a
-second superseding ruling on its account.
+Which was written first is read from history (D21): the line holding the edge
+was added in a commit that descends from the one that added the addendum's line,
+or in that same commit — the preamble's order, the addendum first and the ruling
+second — or it is not committed yet. An in-edge older than the addendum does not
+resolve it: supersession is clause-level (D3), so a ruling that once named an
+entry, superseding one clause or extending it, has not moved the law past the
+clause a later addendum is about. With no history to read — no repository, or a
+ledger never committed — a later entry's edge into the entry resolves it.
 
 The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
@@ -483,20 +486,32 @@ cited in the text being replaced are what the edit most needs to know.
 
 `docket gate --session <id>` decides mechanically whether a stop is judged. Its
 hash is the SHA-256 of `git diff HEAD` over every governed file and every ledger
-under the root, followed by, for each untracked governed file in path order, a
-line `+++ <path>` and the file's content. `SKIP` when that text is empty, when its
-hash equals the last PASS's, or when the session is surfaced; `SURFACE` when the
+under the root — those the working tree governs, and those `HEAD` governed that
+the working tree does not: a governed file deleted or stripped of its last cite,
+a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
+(D22) — followed by, for each untracked governed file in path order, a line
+`+++ <path>` and the file's content. `SKIP` when that text is empty, when its hash
+equals the last PASS's, when the session is surfaced, or when `docket stop`
+marked this stop a re-entry within the judge's timeout; `SURFACE` when the
 session has been blocked five times since the last PASS or its located failures
 have not fallen across the last two verdicts after the third block, with the
 residue printed beneath and the session marked surfaced; else `JUDGE <hash>
 <files…>`, and with `--diff` the text itself beneath. `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
-session's history; a changed hash never resets anything.
+session's history; a changed hash never resets anything. A FAIL or STALE carries
+`--reason`, one located failure per line in the protocol's form, as many lines as
+`--failures` says; a code-pack line that names a ruling answers `reason holds`,
+`reason gone` or `cite stale`; STALE is refused unless every line is a stale one
+and FAIL when every line is; a PASS carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the root: `last` (verdict, hash,
 failures, time, session, and the reason it was recorded with), `lastPassHash`,
-and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`.
+and `sessions`, one entry per identifier with `blocks`, `history`, `surfaced` and,
+while a re-entry is marked, `reentry` (the diff's hash and the time). Every
+verdict is also appended, one JSON line each and in order, to
+`.docket/verdicts.jsonl`: the judge's record, for a person to read and for a
+measurement to score the judge's first answer by; nothing in the core reads it.
 A file that is missing, half-written or hand-edited is read as what it holds and
 nothing more. `.docket/` is ignored by git, and a constituted project is told to
 ignore it too.
@@ -506,11 +521,15 @@ the same event and fed the same hook input on stdin: it allows at once when the
 host's re-entry flag is set, when nothing governed changed or the last PASS
 judged this diff, or when the session is surfaced; otherwise it waits up to
 `--wait` seconds (300 by default, the judge's own timeout) for a verdict
-recorded for this diff after it started, or for the surfacing mark: a PASS or
-the mark allows; a FAIL or STALE is relayed as a block carrying the recorded
-reason; a stop that reaches the bound unjudged is blocked with a reason that
-names the files, the bound and, when the binding passes one with
-`--permission`, the rule to grant. It writes no state.
+recorded for this diff since it started — or up to two seconds before, the most
+two handlers of one event start apart — or for the surfacing mark: a PASS
+allows; a FAIL or STALE is relayed as a block carrying the recorded reason; a
+session surfaced during the wait is relayed as a block carrying the residue; a
+stop that reaches the bound unjudged is blocked with a reason that names the
+files, the bound and, when the binding passes one with `--permission`, the rule
+to grant. It writes one thing: on a stop whose input sets the re-entry flag it
+marks the session with this diff's hash, so the judge's `gate` answers SKIP for
+it, and on every other stop it clears that mark (D22).
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
