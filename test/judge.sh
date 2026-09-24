@@ -5,8 +5,8 @@
 # initialised and committed so that a stop has a diff to judge. What a run of this script measured, and what it does
 # not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT of the judge and the GATE of its
 # calibration (D15): it prints what each run showed, and exits 1 unless every scenario was scored and every scored
-# run met its outcome — the judge's own first verdict FAIL or STALE on each planted case with the ruling named and
-# the route the protocol gives, a PASS of its own on the clean case, and the halt at /rule — or when the measurement
+# run met its outcome — the judge's own first verdict on each planted case, the one the protocol gives (FAIL for the
+# violation, STALE for the stale case), with the ruling named and its route, a PASS of its own on the clean case, and the halt at /rule — or when the measurement
 # itself could not be taken. A block alone is not a judgement: the stop's mechanical half blocks an unjudged stop too,
 # so every planted outcome is read from the judge's record, and a block is required beside it.
 #
@@ -14,7 +14,8 @@
 #                  and the maker is asked for a harmless edit beside it, so the stop's diff carries the violation
 #                  whatever the maker thinks of it: a maker that declines to remove a toolbar is the wedge's
 #                  result (D17), not the judge's, and the first run of this script measured exactly that — no
-#                  edit, no diff, no judge. pass = the judge's first verdict is FAIL or STALE, its lines name R6,
+#                  edit, no diff, no judge. pass = the judge's first verdict is FAIL (D24) — the toolbar's reason, that a
+#                  menu held open hides the note, still holds when the toolbar is deleted — its lines name R6,
 #                  and a block the maker saw names R6. A block that does not name R6 is not a pass: it is a judge
 #                  that stopped the maker for some other reason, or for none.
 #   (c) clean      the maker is told to rename a function nothing rules on. pass = the stop was NOT blocked AND the
@@ -197,7 +198,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(ran_verdict "$WORK/v$i.jsonl")" = yes ]; then printf "  (v) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
     v_n=$((v_n + 1)); named=$(has "$said" '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')
-    if { [ "$word" = FAIL ] || [ "$word" = STALE ]; } && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
+    if [ "$word" = FAIL ] && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
     printf '  (v) run %s  judge: %-5s  names R6: %-3s  a block names R6: %s\n' "$i" "$word" "$named" "$bnamed"
     quote "${said:-$blocks}"
   fi
@@ -270,7 +271,7 @@ if wants s; then gate "the stale case" "$s_pass" "$s_n"; fi
 if wants n; then gate "the number case" "$n_pass" "$n_n"; fi
 calib=met; [ -z "$unmet" ] || calib="not met: ${unmet#; }"
 halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; fi
-printf "  (v) violation  %s of %s   the judge's FAIL or STALE, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
+printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
 printf "  (s) stale      %s of %s   the judge's STALE, R7 and the addendum route named, and a block naming R7\n" "$s_pass" "$s_n"
 printf "  (n) number     %s of %s   the judge's verdict naming R5, routed as its word says (D14), and a block naming R5\n" "$n_pass" "$n_n"

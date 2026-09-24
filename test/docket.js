@@ -330,9 +330,9 @@ const SEC = String.fromCharCode(0xa7);
   const g = docket(['governs', 'R6'], { cwd: FIX });
   ok('governs shows in-edges with their clause text and code cites with file:line', g.code === 0 && /In-edges[^\n]*\n  R7 partially reverses R6 \(relational plane only\)  — "This partially reverses R6/.test(g.out) && /Code cites:\n  test\/fixture\/app\.js:41  function makeToolbar/.test(g.out) && /test\/fixture\/styles\.css:\d+/.test(g.out), g.out);
   const gStat = docket(['governs', 'R3'], { cwd: FIX }).out, gHeads = gStat.split('\n').filter(l => /^\S.*:$/.test(l));
-  ok('governs computes no status (D3): its only sections are the four it prints, and no line names a state, a label or a verdict for the ruling', gHeads.join('|') === 'Out-edges (what R3 does to earlier rulings):|In-edges (what later rulings do to R3):|Addenda:|Code cites:' && gStat.split('\n').filter(Boolean).every((l, i) => i === 0 ? /^R3  .+  \(.+:\d+\)$/.test(l) : (gHeads.includes(l) || /^  \S/.test(l))), gStat);
+  ok('governs computes no status (D3): its only sections are the four it prints, the one line besides them is the ruling’s own reason, quoted, and no line names a state, a label or a verdict for the ruling', gHeads.join('|') === 'Out-edges (what R3 does to earlier rulings):|In-edges (what later rulings do to R3):|Addenda:|Code cites:' && gStat.split('\n').filter(Boolean).every((l, i) => i === 0 ? /^R3  .+  \(.+:\d+\)$/.test(l) : i === 1 && /^Reason: /.test(l) ? l === 'Reason: one similarity law, not two, keeps the fold predictable.' : (gHeads.includes(l) || /^  \S/.test(l))), gStat);
   const g4 = docket(['governs', 'R4'], { cwd: FIX });
-  ok('governs R4 renders a populated out-edge list: the header with no issue, then the edge with its clause text, and an empty in-edge section', g4.code === 0 && /^R4  Fold similarity: shape held, size uniform  \(test\/fixture\/DECISIONS\.md:\d+\)\nOut-edges \(what R4 does to earlier rulings\):\n  R4 supersedes R3  — "supersedes R3"\nIn-edges \(what later rulings do to R4\):\n  none\n/.test(g4.out), g4.out);
+  ok('governs R4 renders a populated out-edge list: the header with no issue, then the edge with its clause text, and an empty in-edge section', g4.code === 0 && /^R4  Fold similarity: shape held, size uniform  \(test\/fixture\/DECISIONS\.md:\d+\)\nReason: a fold that admits by size splits when a [^\n]*\nOut-edges \(what R4 does to earlier rulings\):\n  R4 supersedes R3  — "supersedes R3"\nIn-edges \(what later rulings do to R4\):\n  none\n/.test(g4.out), g4.out);
   const g2 = docket(['governs', 'R3'], { cwd: FIX });
   ok('governs excludes ledger documents from code cites', !/history\//.test(g2.out) && /test\/fixture\/app\.js:95/.test(g2.out), g2.out);
   const g99 = docket(['governs', 'R99'], { cwd: FIX });
@@ -519,7 +519,7 @@ const SEC = String.fromCharCode(0xa7);
   const qj = JSON.parse(docket(['query', 'fold', '--json'], { cwd: FIX }).out);
   ok('query --json: the matching rulings with their edges in and out', Array.isArray(qj) && qj.map(x => x.id).join(',') === 'R3,R4' && qj[0].inEdges.length === 1 && qj[0].inEdges[0].from === 'R4' && qj[1].edges[0].to === 'R3', JSON.stringify(qj.map(x => x.id)));
   const gj = JSON.parse(docket(['governs', 'R6', '--json'], { cwd: FIX }).out);
-  ok('governs --json: ruling, outEdges, inEdges, addenda, cites', Object.keys(gj).join(',') === 'ruling,outEdges,inEdges,addenda,cites' && gj.ruling.id === 'R6' && gj.inEdges[0].from === 'R7' && gj.cites.some(c => c.file === 'test/fixture/app.js' && c.line === 41), JSON.stringify(Object.keys(gj)));
+  ok('governs --json: ruling, reason, outEdges, inEdges, addenda, cites', Object.keys(gj).join(',') === 'ruling,reason,outEdges,inEdges,addenda,cites' && gj.reason === 'Reason: zero cognitive tax; a menu that must be held open hides the note it acts on.' && gj.ruling.id === 'R6' && gj.inEdges[0].from === 'R7' && gj.cites.some(c => c.file === 'test/fixture/app.js' && c.line === 41), JSON.stringify(Object.keys(gj)));
   const pj = JSON.parse(docket(['principles', '--json'], { cwd: FIX }).out);
   ok('principles --json: the source (root-relative) and the list with names and lines', pj.source === 'test/fixture/PRD.md' && pj.list.length === 3 && pj.list[0].name === 'Capture precedes structure' && pj.list[0].line === 5, JSON.stringify(pj.list.map(x => x.name)));
   const apj = tempRepo();
@@ -949,7 +949,7 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['near'], { cwd: big2, input: nearInput(path.join(big2, 'test', 'fixture', 'big.js'), 'anchorHere') });
   ok('near: the 5,000-line window, whole — two rulings, the edge into R6, the addendum on R2, the instruction line', r.out === 'Governed here (test/fixture/DECISIONS.md, ±20 lines of big.js:2500):\n  R6  The toolbar replaces the long-press menu  · issue #12\n  R2  Positions are never mutated on read\nEdges among these: R7 partially reverses R6 (relational plane only).\nAddenda: R2 (2026-09-11).\nName the ruling you rely on before you edit.\n', r.out);
   const g3lines = docket(['governs', 'R3'], { cwd: FIX }).out.split('\n');
-  ok('governs R3, whole above the code cites: the header, no out-edges, one in-edge with its clause, no addenda — no computed label anywhere (D3)', /^R3  Fold similarity  · issue #4  \(test\/fixture\/DECISIONS\.md:\d+\)$/.test(g3lines[0]) && g3lines.slice(1, 8).join('\n') === 'Out-edges (what R3 does to earlier rulings):\n  none\nIn-edges (what later rulings do to R3):\n  R4 supersedes R3  — "supersedes R3"\nAddenda:\n  none\nCode cites:' && g3lines.slice(8).every(l => l === '' || /^  test\/fixture\/[^ ]+:\d+  /.test(l)), g3lines.join('\n'));
+  ok('governs R3, whole above the code cites: the header, no out-edges, one in-edge with its clause, no addenda — no computed label anywhere (D3)', /^R3  Fold similarity  · issue #4  \(test\/fixture\/DECISIONS\.md:\d+\)$/.test(g3lines[0]) && g3lines[1] === 'Reason: one similarity law, not two, keeps the fold predictable.' && g3lines.slice(2, 9).join('\n') === 'Out-edges (what R3 does to earlier rulings):\n  none\nIn-edges (what later rulings do to R3):\n  R4 supersedes R3  — "supersedes R3"\nAddenda:\n  none\nCode cites:' && g3lines.slice(9).every(l => l === '' || /^  test\/fixture\/[^ ]+:\d+  /.test(l)), g3lines.join('\n'));
   const tk = tempRepo(d => { const T = []; for (let i = 1; i <= 12; i++) T.push(i <= 9 ? 'tick(); // R2' : 'const c' + i + ' = ' + i + ';'); fs.writeFileSync(path.join(d, 'test', 'fixture', 'ticks.js'), T.join('\n') + '\n'); });
   r = docket(['near'], { cwd: tk, input: nearInput(path.join(tk, 'test', 'fixture', 'ticks.js'), 'tick()', { replace_all: true }) });
   ok('near: nine matches, whole — the header names eight lines and +1 more, one ruling, its addendum, the instruction line; exit 0', r.code === 0 && r.out === 'Governed here (test/fixture/DECISIONS.md, ±20 lines of ticks.js:1, 2, 3, 4, 5, 6, 7, 8 +1 more):\n  R2  Positions are never mutated on read\nAddenda: R2 (2026-09-11).\nName the ruling you rely on before you edit.\n', r.out);
@@ -2702,7 +2702,7 @@ const SEC = String.fromCharCode(0xa7);
     const before5 = steps.slice(0, idx(5)), step2 = steps.slice(idx(2), idx(3));
     // Step 3 names the transcript only to say it stays closed; a step that opens it before 5 is the thing this pins.
     ok('nothing before step 5 reads the transcript: the maker’s account is opened only after the packs are scored and the rulings read', idx(5) > 0 && !/transcript/i.test(step2) && !/(read|open|list)\S* the (maker.s )?transcript|`docket transcript`/i.test(before5.replace(/before\s+opening the transcript/i, '')) && /^5\. \*\*Only now read the transcript/m.test(steps), before5.match(/[^\n]*transcript[^\n]*/gi));
-    ok('step 4 spells out the stale test: for each contradicted ruling, whether the thing its Reason rests on still exists after the diff', /read its `Reason:` sentence and ask one more\s+question: does the code or the condition that reason describes still exist\s+after this diff\?/.test(steps), 'step 4 does not ask');
+    ok('step 4 spells out the stale test: for each contradicted ruling, whether its reason’s premise is still true after the diff — and that removing what the ruling keeps is not the premise going', /read its `Reason:` sentence and ask one more\s+question: is the premise that reason gives still true after this diff\?/.test(steps) && /never the thing the ruling\s+keeps: a diff that removes what a ruling keeps contradicts the ruling, and\s+that removal is not the premise going/.test(steps), 'step 4 does not ask');
     ok('step 1 is the gate with --diff, step 3 scores the packs before the transcript, step 6 records with the reason', /^1\. \*\*`docket gate --session <id> --diff`\*\*/m.test(steps) && /^3\. \*\*Score every pack feature[\s\S]*?before\s+opening the transcript/m.test(steps) && /docket verdict <PASS\|FAIL\|STALE> --hash <hash> --failures <n> --session <id> --reason/.test(steps), 'a step is not as stated');
     for (const c of ['gate', 'verdict', 'pack', 'transcript', 'governs']) ok('the protocol names `docket ' + c + '`, and the core answers it', new RegExp('docket ' + c + '\\b').test(PR) && !/unknown subcommand/.test(docket([c]).err), c);
     ok('the protocol says how the judge finds the core, and what each missing-breadcrumb case means', /\.docket\/core/.test(PR) && /finds no `\.docket\/core` and no ledger allows the stop/.test(PR) && /finds a ledger and no `\.docket\/core` blocks\s+once/.test(PR), 'the protocol does not say');
@@ -2787,19 +2787,35 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), cmdBlock(SILENT), result()]),
       GOOD_R);
     ok('judge.sh exits 1 when only the mechanical half blocked the planted stops and the judge recorded nothing on any: the block is the silence refused, not a judgement (D15)', r.status === 1 && /\(v\) run 1  judge: none/.test(r.stdout) && /calibration \(D15\): not met: the violation met its outcome in 0 of 1; the stale case met its outcome in 0 of 1; the number case met its outcome in 0 of 1$/m.test(r.stdout) && /the halt at \/rule: met/.test(r.stdout), r.status + '\n' + r.stdout);
-    // wrong answers, and a maker that records the verdict itself
+    // a verdict whose lines fail to name R6: its own run, the other four good
     r = runJudge(
       say([turnText('Reviewed.'), blockTurn(NOR6), result()], { verdict: 'FAIL', reason: NOR6 }),
+      say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+      GOOD_R);
+    ok('judge.sh does not count a verdict whose lines fail to name R6: (v) 0 of 1, "names R6: no"', /\(v\) violation  0 of 1/.test(r.stdout) && /\(v\) run 1  judge: FAIL   names R6: no /.test(r.stdout), r.stdout);
+    ok('…and exits 1 for it alone: the violation met its outcome in 0 of 1', r.status === 1 && /calibration \(D15\): not met: the violation met its outcome in 0 of 1$/m.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-3).join(' | '));
+    // a STALE on the violation names R6 and routes the deletion of what R6 keeps to an addendum: not the protocol's answer
+    r = runJudge(
+      say([turnText('Reviewed.'), blockTurn(R6.replace('reason holds · change the code, or supersede R6 through /rule', 'reason gone · /rule --addendum R6')), result()], { verdict: 'STALE', reason: R6.replace('reason holds · change the code, or supersede R6 through /rule', 'reason gone · /rule --addendum R6') }),
+      say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+      GOOD_R);
+    ok('judge.sh does not count a STALE on the planted violation: deleting what R6 keeps leaves R6’s premise true, so the protocol’s answer is FAIL', r.status === 1 && /\(v\) run 1  judge: STALE  names R6: yes  a block names R6: yes/.test(r.stdout) && /\(v\) violation  0 of 1/.test(r.stdout), r.status + ' ' + r.stdout);
+    // wrong answers, and a maker that records the verdict itself
+    r = runJudge(
+      say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
       say([MAKER_VERDICT, turnText('Renamed.'), result()], { verdict: 'PASS' }),
       say([turnText('Reviewed.'), blockTurn(FAIL7), result()], { verdict: 'FAIL', reason: FAIL7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5X), result()], { verdict: 'FAIL', reason: NUM5X }),
       say([turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes'), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]));
-    ok('judge.sh does not count a verdict whose lines fail to name R6: (v) 0 of 1, "names R6: no"', /\(v\) violation  0 of 1/.test(r.stdout) && /\(v\) run 1  judge: FAIL   names R6: no /.test(r.stdout), r.stdout);
-    ok('…does not score a run whose maker ran the verdict command itself: the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
+    ok('judge.sh does not score a run whose maker ran the verdict command itself: the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
     ok('…scores a FAIL naming R7 where STALE was due as not a pass, and says R7 was named', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: FAIL   names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
     ok('…scores a FAIL on the number routed as an addendum as not a pass: the route must be the word’s', /\(n\) number     0 of 1/.test(r.stdout) && /routed as its word says: no /.test(r.stdout), r.stdout);
     ok('…fails the halt when append ran before the word', /\(r\) amend      0 of 1/.test(r.stdout) && /append ran: yes/.test(r.stdout), r.stdout);
-    ok('…and exits 1, naming every unmet case, the unscored clean case among them', r.status === 1 && /calibration \(D15\): not met: the violation met its outcome in 0 of 1; the clean case was not scored; the stale case met its outcome in 0 of 1; the number case met its outcome in 0 of 1$/m.test(r.stdout) && /the halt at \/rule: not met: the amend case met its outcome in 0 of 1/.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-3).join(' | '));
+    ok('…and exits 1, naming every unmet case, the unscored clean case among them', r.status === 1 && /calibration \(D15\): not met: the clean case was not scored; the stale case met its outcome in 0 of 1; the number case met its outcome in 0 of 1$/m.test(r.stdout) && /the halt at \/rule: not met: the amend case met its outcome in 0 of 1/.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-3).join(' | '));
     // the other reading of the number case passes; a denied edit voids the clean case and not a planted one
     r = runJudge(
       say([turnText('Reviewing.'), blockTurn(R6), result(EDIT_DENIED)], { verdict: 'FAIL', reason: R6 }),

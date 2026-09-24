@@ -10,7 +10,7 @@ the host gives it.
 binds one; it knows how to run a command and read a diff, and it does not know
 the maker's intentions or this repository's history. **Purpose.** Decide whether
 one stop stands, in seven steps, in this order. **Source.** D7, D8, D10, D11,
-D12, D15, D22 and D23 in `docs/DECISIONS.md`.
+D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
 
 ## What the judge is given
 
@@ -90,16 +90,26 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    applies, and the feature id. Reason: reading the maker's account first is
    checking homework with the answer key.
 4. **`docket governs <id>`** for every ruling cited in the touched regions (the
-   ids `near` would have printed for each hunk). Check the diff against each
+   ids `near` would have printed for each hunk); it prints the ruling's
+   `Reason:` sentence beneath its heading, then its edges. Check the diff against each
    ruling's clauses and against every in-edge's clause: a later ruling may have
    superseded the clause the diff breaks, or waived it for this case. For each
    ruling the diff contradicts, read its `Reason:` sentence and ask one more
-   question: does the code or the condition that reason describes still exist
-   after this diff? If the diff, or an earlier change, removed the thing the
-   reason rests on, the contradiction is stale (step 6), and its route is an
-   addendum, not a rewrite; if the reason still holds, it is a failure. Write the
-   answer into the located failure, after what the diff breaks and before the
-   route: `reason holds`, or `reason gone` — and, for a cite that no longer points
+   question: is the premise that reason gives still true after this diff? The
+   premise is the fact the reason says makes the ruling right — about the
+   product, the code, or the person using it — and never the thing the ruling
+   keeps: a diff that removes what a ruling keeps contradicts the ruling, and
+   that removal is not the premise going (D24). A ruling that keeps a confirmation
+   before a delete because a deletion cannot be undone: a diff that removes the
+   confirmation leaves that premise true, so the reason holds and the
+   contradiction is a failure; a diff that makes every deletion undoable and
+   removes the confirmation makes the premise false, so the reason is gone and
+   the contradiction is stale (step 6), and its route is an addendum, not a
+   rewrite. The premise may have gone with this diff or with an earlier change,
+   and it seldom lives in the hunk the ruling's cite sits in: read it against the
+   whole diff and the code the diff leaves, since what makes a ruling right is
+   usually somewhere the ruling's own lines are not. Write the answer into the located
+   failure, after what the diff breaks and before the route: `reason holds`, or `reason gone` — and, for a cite that no longer points
    at code that implements its ruling, `cite stale`. A code line that names a
    ruling and answers neither way is refused when it is recorded (D23).
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
@@ -145,7 +155,7 @@ the most important findings and come before the failure list.
 ## A located failure
 
     code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · reason holds · change the code, or supersede R6 through /rule
-    code · F3 · app.js:80 · R7 keeps the relational plane's menu; this diff removes it · reason gone: relations are marks on the notes, so no line is left for a toolbar to have nothing above · /rule --addendum R7 "relations are marks now"
+    code · F3 · src/trash.js:30 · R4 keeps a confirmation before a delete; this diff removes it · reason gone: every deletion is undoable now · /rule --addendum R4 "deletions can be undone"
 
 The answer between what the diff breaks and the route is required on a code line
 that names a ruling, and on no other; a line in any other pack ends with its

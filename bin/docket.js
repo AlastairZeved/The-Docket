@@ -730,6 +730,18 @@ function resolveRuling(ledger, id) {
   if (same.length > 1) return { r: null, ambiguous: same.map(x => x.id) };
   return { r: null };
 }
+// A ruling's reason as the judge's step 4 reads it (D24): from `Reason:` to the end of its line, outside code spans and
+// fenced blocks, and outside addenda; null for an entry that states none.
+function reasonOf(r) {
+  const fenced = fencedLines(r.bodyLines);
+  for (let k = 0; k < r.bodyLines.length; k++) {
+    const l = r.bodyLines[k];
+    if (fenced[k] || ADDENDUM_RE.test(l)) continue;
+    const at = maskCode(l).indexOf('Reason:');
+    if (at >= 0) return l.slice(at).trim();
+  }
+  return null;
+}
 function governs(argv) {
   const id = argv._[1];
   if (!id) die('usage: docket governs <id>', 2);
@@ -742,11 +754,13 @@ function governs(argv) {
   const cites = codeCites(ctx, ledger).filter(c => c.id === r.id);
   const ins = inEdges(ledger, r.id);
   if (argv.json) {
-    out(JSON.stringify({ ruling: rulingJson(r), outEdges: r.edges, inEdges: ins, addenda: r.addenda, cites: cites.map(c => ({ file: c.rel, line: c.line, text: c.text.trim() })) }, null, 2));
+    out(JSON.stringify({ ruling: rulingJson(r), reason: reasonOf(r), outEdges: r.edges, inEdges: ins, addenda: r.addenda, cites: cites.map(c => ({ file: c.rel, line: c.line, text: c.text.trim() })) }, null, 2));
     return 0;
   }
   const lines = [];                                                    // D3: an edge list, never a status
   lines.push(r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + rel(root, ledger.path) + ':' + r.line + ')');
+  const why = reasonOf(r);
+  if (why) lines.push(why);                                            // the premise the judge's step 4 asks after
   lines.push('Out-edges (what ' + r.id + ' does to earlier rulings):');
   if (!r.edges.length) lines.push('  none'); for (const e of r.edges) lines.push('  ' + renderEdge(e) + '  — "' + e.clause + '"');
   lines.push('In-edges (what later rulings do to ' + r.id + '):');

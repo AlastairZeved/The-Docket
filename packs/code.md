@@ -26,7 +26,10 @@ window the pre-edit hook shows), `docket governs <id>`; read the diff against
 each clause of the ruling and against each in-edge's clause — a later ruling may
 have superseded or waived the clause the diff breaks. A contradiction whose
 stated reason still holds is a failure; one whose reason no longer holds is a
-stale contradiction, with the addendum route. The located failure says which,
+stale contradiction, with the addendum route. A reason no longer holds when its
+premise, the fact it says makes the ruling right, is false after the diff;
+removing what the ruling keeps is the contradiction, never the premise going.
+The located failure says which,
 after what the diff breaks and before the route: `reason holds` or `reason gone`
 (and `cite stale` for a cite left on code that no longer implements its ruling);
 a code line that names a ruling and says neither is refused when it is recorded.
@@ -40,7 +43,8 @@ removed from the check commands F1 uses.
 **F5 — no cite removed from code without an addendum or ruling explaining it.**
 How scored: every removed line of the diff that carried a ruling id (a cite the
 ledger's grammar reads) against the ledger's newest entries and addenda; a
-removed cite that no entry or addendum accounts for is a failure.
+removed cite that no entry or addendum accounts for is a failure, and its line
+says `reason holds` unless the ruling's premise is gone too.
 
 **F6 — every claim of a passing check in the transcript has a matching command
 run in the transcript.**
