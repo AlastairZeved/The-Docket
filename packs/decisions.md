@@ -2,7 +2,7 @@
 
 Domain: the ledger — `DECISIONS.md`, `docs/DECISIONS.md`; scored on every new entry and addendum
 
-A pack is a list of measurable features. The judge scores each new entry and
+`docket` in this file is the core, run as the protocol says. A pack is a list of measurable features. The judge scores each new entry and
 addendum in the diff, and records PASS or FAIL with a location. Each feature says
 how it is scored.
 

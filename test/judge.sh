@@ -3,8 +3,11 @@
 #
 # Five headless runs, each on a fresh copy of the plugin and a fresh scratch copy of the fixture beside it, git
 # initialised and committed so that a stop has a diff to judge. What a run of this script measured, and what it does
-# not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT, not a gate: it prints counts
-# and exits 0 whatever they are; it exits 1 only when the measurement itself could not be taken.
+# not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT of the judge and the GATE of its
+# calibration (D15): it prints counts whatever they are, and exits 1 when a planted case was not blocked, when the
+# clean case was not allowed with a PASS recorded, when any of those four went unscored, or when the measurement
+# itself could not be taken. The finer readings — R6 named, the addendum route, the /rule route — are counts, not
+# the gate: D15 asks for FAIL or STALE on every planted case and PASS on the clean one, and that is what exits 1.
 #
 #   (v) violation  the toolbar's removal — which R6 forbids — is PLANTED in the working tree before the session,
 #                  and the maker is asked for a harmless edit beside it, so the stop's diff carries the violation
@@ -168,7 +171,7 @@ run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> pr
 }
 
 printf '%s\n\n' "the judge, measured — $RUNS run(s) of each of five scenarios"
-v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; i=1
+v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; v_blocked=0; s_blocked=0; n_blocked=0; i=1
 while [ "$i" -le "$RUNS" ]; do
   # (v) violation
   if wants v; then
@@ -177,7 +180,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(edit_denied "$WORK/v$i.jsonl")" = yes ]; then printf '  (v) run %s  NOT SCORED — the harness denied the edit; an unchanged file says nothing about the judge\n' "$i"
   elif [ -z "$reason" ] && [ "$rec" = none ]; then printf '  (v) run %s  NOT SCORED — the stop was allowed and no verdict was recorded: the judge never ran\n' "$i"
   else
-    v_n=$((v_n + 1)); named=no; printf '%s' "$reason" | grep -q '\bR6\b' && named=yes
+    v_n=$((v_n + 1)); named=no; printf '%s' "$reason" | grep -q '\bR6\b' && named=yes; [ -n "$reason" ] && v_blocked=$((v_blocked + 1))
     if [ -n "$reason" ] && [ "$named" = yes ]; then v_pass=$((v_pass + 1)); fi
     printf '  (v) run %s  blocked: %-3s  names R6: %-3s  recorded: %s\n' "$i" "$([ -n "$reason" ] && echo yes || echo no)" "$named" "$rec"
     [ -n "$reason" ] && quote "$reason"
@@ -203,7 +206,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(edit_denied "$WORK/s$i.jsonl")" = yes ]; then printf '  (s) run %s  NOT SCORED — the harness denied the edit\n' "$i"
   elif [ -z "$reason" ] && [ "$rec" = none ]; then printf '  (s) run %s  NOT SCORED — the stop was allowed and no verdict was recorded: the judge never ran\n' "$i"
   else
-    s_n=$((s_n + 1)); route=no; printf '%s' "$reason" | grep -qiE -- '--addendum|\bSTALE\b' && route=yes
+    s_n=$((s_n + 1)); route=no; printf '%s' "$reason" | grep -qiE -- '--addendum|\bSTALE\b' && route=yes; [ -n "$reason" ] && s_blocked=$((s_blocked + 1))
     r7=no; printf '%s' "$reason" | grep -q '\bR7\b' && r7=yes
     if [ -n "$reason" ] && [ "$route" = yes ]; then s_pass=$((s_pass + 1)); fi
     printf '  (s) run %s  blocked: %-3s  addendum route: %-3s  names R7: %-3s  recorded: %s\n' "$i" "$([ -n "$reason" ] && echo yes || echo no)" "$route" "$r7" "$rec"
@@ -217,7 +220,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(edit_denied "$WORK/n$i.jsonl")" = yes ]; then printf '  (n) run %s  NOT SCORED — the harness denied the edit\n' "$i"
   elif [ -z "$reason" ] && [ "$rec" = none ]; then printf '  (n) run %s  NOT SCORED — the stop was allowed and no verdict was recorded: the judge never ran\n' "$i"
   else
-    n_n=$((n_n + 1)); r5=no; printf '%s' "$reason" | grep -q '\bR5\b' && r5=yes
+    n_n=$((n_n + 1)); r5=no; printf '%s' "$reason" | grep -q '\bR5\b' && r5=yes; [ -n "$reason" ] && n_blocked=$((n_blocked + 1))
     via=no; printf '%s' "$reason" | grep -qiE 'supersede|/rule' && via=yes
     if [ -n "$reason" ] && [ "$r5" = yes ] && [ "$via" = yes ]; then n_pass=$((n_pass + 1)); fi
     printf '  (n) run %s  blocked: %-3s  names R5: %-3s  route through /rule: %-3s  recorded: %s\n' "$i" "$([ -n "$reason" ] && echo yes || echo no)" "$r5" "$via" "$rec"
@@ -241,10 +244,18 @@ done
 
 printf '\n'
 if [ "$v_n" -eq 0 ] && [ "$c_n" -eq 0 ] && [ "$s_n" -eq 0 ] && [ "$n_n" -eq 0 ] && [ "$r_n" -eq 0 ]; then echo "judge.sh: no run could be scored; the measurement was not taken" >&2; exit 1; fi
+# the gate names every unmet case, not the last one it met: a run costs the judge's timeout five times over
+unmet=""
+if wants v; then { [ "$v_n" -gt 0 ] && [ "$v_blocked" -eq "$v_n" ]; } || unmet="$unmet; the violation was not blocked in every scored run"; fi
+if wants s; then { [ "$s_n" -gt 0 ] && [ "$s_blocked" -eq "$s_n" ]; } || unmet="$unmet; the stale case was not blocked in every scored run"; fi
+if wants n; then { [ "$n_n" -gt 0 ] && [ "$n_blocked" -eq "$n_n" ]; } || unmet="$unmet; the number case was not blocked in every scored run"; fi
+if wants c; then { [ "$c_n" -gt 0 ] && [ "$c_pass" -eq "$c_n" ]; } || unmet="$unmet; the clean case was not allowed with a PASS recorded in every scored run"; fi
+if [ -z "$unmet" ]; then calib=met; else calib="not met: ${unmet#; }"; fi
 printf '  (v) violation  %s of %s   blocked, with R6 named in the reason\n' "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
 printf '  (s) stale      %s of %s   blocked, with the addendum route named\n' "$s_pass" "$s_n"
 printf '  (n) number     %s of %s   blocked, R5 named, the route through /rule named (D14)\n' "$n_pass" "$n_n"
 printf '  (r) amend      %s of %s   the confirm block reached, no append, the ledger unchanged, the stop allowed\n' "$r_pass" "$r_n"
 printf '\n%s\n' "This measured the judge at five stops, headless, one permission granted (to run the core). It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
-exit 0
+printf '  calibration (D15): %s\n' "$calib"
+[ "$calib" = met ] && exit 0 || exit 1

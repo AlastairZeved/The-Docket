@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" near",
+            "command": "DOCKET_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}\" node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" near",
             "timeout": 5
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" status",
+            "command": "DOCKET_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}\" node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" status",
             "timeout": 5
           }
         ]
@@ -30,12 +30,12 @@
           {
             "type": "agent",
             "timeout": 300,
-            "prompt": "You are the docket's judge at this stop. Verify this condition: the stop stands under the judge's protocol. It is met in exactly four cases and in no other: (1) stop_hook_active in the hook input is true \u2014 this stop follows a block in this same turn, and a session is blocked at most once per turn; (2) .docket/core is missing from the project directory (the hook input's cwd) and no DECISIONS.md exists anywhere under the project \u2014 the project is not under the docket; (3) the core's gate printed SKIP; (4) the protocol, followed to its end, ended with the core's verdict command printing `verdict recorded: PASS`. Never run the verdict command to make the condition true: a PASS is the protocol's answer to a diff you scored and found nothing in, and nothing else; cases (1) to (3) are met with no verdict at all. In every other outcome the condition is not met: FAIL or STALE \u2014 your reason is the verdict's Failures lines with their fix routes, as the protocol shapes them; SURFACE \u2014 your reason is the residue the gate printed, ending with its last sentence; a missing .docket/core beside a DECISIONS.md \u2014 your reason is: the docket's core is not recorded in .docket/core \u2014 start the session with the plugin loaded, so that its session hook writes it; a command you need denied \u2014 your reason is one line: the judge could not run the core; allow `Bash(node *docket.js*)`; and an answer you would give without having run the protocol is not an answer. Hook input: $ARGUMENTS\nRead .docket/core: it holds one line, the absolute path of the core, docket.js. Run `node <core> protocol` and follow what it prints, step by step and in its order, running every command it names exactly as `node <core> \u2026` from the project directory you are already in \u2014 never prefixed with cd or anything else, since only that exact shape is permitted; the session identifier is the hook input's session_id, the transcript is its transcript_path, and the maker's last message is its last_assistant_message. You write no file and edit nothing."
+            "prompt": "You are the docket's judge at this stop. Verify: the stop stands under the protocol the core prints \u2014 it says in which four cases a stop stands and what your reason is in every other. Read .docket/core in the project directory (the hook input's cwd): one line, the absolute path of the core, docket.js. Run `node <core> protocol` and follow it to its end. If .docket/core is missing: with no DECISIONS.md anywhere under the project the stop stands; with one it does not, and your reason is that the session did not start with the plugin loaded, so its session hook never wrote the breadcrumb. If a command you need is denied, the stop does not stand, and your reason is one line: the judge could not run the core. Hook input: $ARGUMENTS"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" stop",
-            "timeout": 300
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" stop --permission \"Bash(node *docket.js*)\"",
+            "timeout": 330
           }
         ]
       }

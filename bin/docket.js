@@ -40,7 +40,7 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
-const STOP_WAIT = 270;    // D14, logged in D19: the seconds `stop` waits for the judge's record — under the judge's own timeout of 300, so a judge still working is not overtaken
+const STOP_WAIT = 300;    // D14, logged in D19: the seconds `stop` waits for the judge's record — equal to the judge's own timeout, so no verdict the judge can still record lands after the stop has given up
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
@@ -1585,12 +1585,13 @@ function intake(argv) {
 
 // The judge is a subagent the host runs at a stop. The host gives it a shell and the project directory and nothing
 // else: not where the plugin is, in its prompt or in its environment, and no reading outside the project. So the core,
-// when it runs as the plugin's own hook — the host sets CLAUDE_PLUGIN_ROOT for a command hook, and this file is under
-// it — leaves its own path in the project, at .docket/core, and the judge reads that. Written only where a ledger
-// governs (an ungoverned project gets no .docket/), and rewritten only when it changes. A maker can overwrite it: that
-// is a visible Write in its transcript, the boundary the protocol gives a forged verdict.
+// when it runs as the plugin's own hook — the binding passes the plugin root as DOCKET_PLUGIN_ROOT, taken from whatever
+// the host calls it (D13), and this file is under it — leaves its own path in the project, at .docket/core, and the
+// judge reads that (D20). Written only where a ledger governs (an ungoverned project gets no .docket/), and rewritten only
+// when it changes. A maker can overwrite it: that is a visible Write in its transcript, the boundary the protocol gives
+// a forged verdict.
 function recordCore(root) {
-  const pr = process.env.CLAUDE_PLUGIN_ROOT;
+  const pr = process.env.DOCKET_PLUGIN_ROOT;
   if (!pr) return;
   const me = path.resolve(__filename);
   if (!me.startsWith(path.resolve(pr) + path.sep)) return;
@@ -1681,8 +1682,10 @@ function verdict(argv) {
   else { sess.blocks += 1; sess.history.push(failures); }
   st.sessions[id] = sess;
   saveState(root, st);
-  if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash }, null, 2)); return 0; }
+  const left = v === 'PASS' && !flag(argv, '--session') ? Object.keys(st.sessions).filter(k => k !== id && st.sessions[k].surfaced) : [];   // a PASS releases the session it names, and this one was not named
+  if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash, stillSurfaced: left }, null, 2)); return 0; }
   out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
+  for (const k of left) out('note: session ' + k + ' is still surfaced; a PASS releases it only with --session ' + k);
   return 0;
 }
 
@@ -1710,20 +1713,32 @@ function stop(argv) {
   const start = Date.now();
   const judged = () => {                                                                         // a fresh record for this diff, or the surfacing mark
     const st = loadState(root);
-    if (st.sessions[id] && st.sessions[id].surfaced) return 'surfaced';
-    if (st.lastPassHash === d.hash) return 'PASS';
+    if (st.sessions[id] && st.sessions[id].surfaced) return { kind: 'surfaced' };
+    if (st.lastPassHash === d.hash) return { kind: 'PASS' };
     const l = st.last;
-    return l && l.hash === d.hash && Date.parse(l.at) >= start - 2000 ? l.verdict : null;
+    return l && l.hash === d.hash && Date.parse(l.at) >= start - 2000 ? { kind: l.verdict, last: l } : null;
   };
   const deadline = start + waitS * 1000;
+  let j = null;
   for (;;) {
-    if (judged()) return 0;
+    j = judged();
+    if (j) break;
     if (Date.now() >= deadline) break;
     sleepMs(Math.min(1000, Math.max(1, deadline - Date.now())));
   }
+  const files = d.touched.join(', ');
+  const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
+  if (j && (j.kind === 'surfaced' || j.kind === 'PASS')) return 0;
+  if (j) {                                                                                       // a fresh FAIL or STALE: relayed, in case the judge's own block never reached the maker
+    const l = j.last, n = l.failures;
+    const reason = 'The docket\'s judge recorded ' + j.kind + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (j.kind === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or amend the law through /rule.') + tail;
+    out(JSON.stringify({ decision: 'block', reason }));
+    return 0;
+  }
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
-  // whose job it is and what to do: nothing, then stop again.
-  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + d.touched.join(', ') + ') within ' + waitS + ' second' + (waitS === 1 ? '' : 's') + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. If it recurs turn after turn, tell the person: the judge could not run the core; allow Bash(node *docket.js*) so it can.';
+  // whose job it is and what to do: nothing, then stop again. The permission's own spelling is the binding's (D13).
+  const perm = flag(argv, '--permission');
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + ') within ' + waitS + ' second' + (waitS === 1 ? '' : 's') + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. If it recurs turn after turn, tell the person: the judge could not run the core; allow it to' + (perm ? ' (' + perm + ')' : '') + '.';
   out(JSON.stringify({ decision: 'block', reason }));
   return 0;
 }
@@ -1822,7 +1837,7 @@ const USAGE = [
   '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
   '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the diff since the last PASS, decided mechanically (D10, D11); --diff prints it',
   '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
-  '  docket stop [--wait <s>]             stdin: the stop hook\'s input; blocks a governed stop no fresh verdict judged (the host binds it beside the judge)',
+  '  docket stop [--wait <s>] [--permission "<rule>"]   stdin: the stop hook\'s input; blocks a governed stop no fresh verdict judged, or one a fresh FAIL or STALE judged (the host binds it beside the judge)',
   '  docket protocol                     print judge/PROTOCOL.md',
   '  docket pack <name> | --list         print a pack, or the packs with their domains',
   '  docket transcript <path> [--last n] the assistant text and tool calls of a JSON-lines message log',
@@ -1830,7 +1845,7 @@ const USAGE = [
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
-const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait']);
+const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait', '--permission']);
 const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
@@ -1840,7 +1855,7 @@ const OPTIONS = {
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: [],
   gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: [], pack: ['--json', '--list'], transcript: ['--last'],
-  stop: ['--session', '--wait'],
+  stop: ['--session', '--wait', '--permission'],
 };
 function parseArgv(args) {
   const raw = args.slice();

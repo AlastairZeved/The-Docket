@@ -2,15 +2,15 @@
 
 Domain: `*.md` except a ledger (`DECISIONS*.md`) — governed prose only
 
-A pack is a list of measurable features. The judge scores each against the diff
+`docket` in this file is the core, run as the protocol says. A pack is a list of measurable features. The judge scores each against the diff
 and the repository, on governed files only, and records PASS or FAIL with a
 location. Each feature says how it is scored.
 
 ## Precondition — the reader gate
 
 The pack scores nothing until the document's target reader, purpose and source
-are stated: in the project's `PRD.md` reader section, or in the document's own
-header. A reader is valid only with a role, at least one explicit "knows" and
+are stated: in the project's `PRD.md`, in the section that names the reader,
+or in the document's own header. A reader is valid only with a role, at least one explicit "knows" and
 one explicit "doesn't know"; "general audience", "non-technical", "someone
 curious" fail. A purpose is valid only as a specific verb on a specific object;
 "make it clear", "help them understand" fail. A missing or invalid precondition

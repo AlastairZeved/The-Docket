@@ -2426,26 +2426,34 @@ const SEC = String.fromCharCode(0xa7);
     ok('stop: the host’s re-entry flag allows at once, even with a governed diff unjudged (D11: blocked at most once per turn)', r.code === 0 && r.out === '', r.out);
     r = stopIn({ session_id: 'x' }, ['--wait', '0']);
     const j = (() => { try { return JSON.parse(r.out); } catch (e) { return null; } })();
-    ok('stop: a governed diff with no verdict recorded is blocked in the shape the host reads, naming the file, the bound and the permission', r.code === 0 && j && j.decision === 'block' && /recorded no verdict for this stop’s diff \(test\/fixture\/app\.js\) within 0 seconds/.test(j.reason.replace(/'/g, '’')) && /the judge is not you\. Do not run the core yourself; stop again/.test(j.reason) && /allow Bash\(node \*docket\.js\*\) so it can/.test(j.reason), r.out);
+    ok('stop: a governed diff with no verdict recorded is blocked in the shape the host reads, naming the file and the bound, and telling the maker whose job the judging is', r.code === 0 && j && j.decision === 'block' && /recorded no verdict for this stop’s diff \(test\/fixture\/app\.js\) within 0 seconds/.test(j.reason.replace(/'/g, '’')) && /the judge is not you\. Do not run the core yourself; stop again/.test(j.reason) && /allow it to\.$/.test(j.reason), r.out);
+    r = stopIn({ session_id: 'x' }, ['--wait', '0', '--permission', 'Bash(node *docket.js*)']);
+    ok('…and names the rule to grant only when the binding passes one with --permission: the core knows no host’s syntax', /allow it to \(Bash\(node \*docket\.js\*\)\)\.$/.test(JSON.parse(r.out).reason) && !/Bash\(/.test(read(CORE).replace(/\/\/[^\n]*/g, '')), r.out);
     const H = docket(['gate', '--session', 'x'], { cwd: d }).out.split(' ')[1];
-    docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'x'], { cwd: d });
+    docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'x', '--reason', 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only · change the code'], { cwd: d });
     r = stopIn({ session_id: 'x' }, ['--wait', '0']);
-    ok('stop: a verdict recorded for this diff just now allows silently — the judge’s own block carries the reason', r.code === 0 && r.out === '', r.out);
+    const jf = (() => { try { return JSON.parse(r.out); } catch (e) { return null; } })();
+    ok('stop: a FAIL recorded for this diff just now is relayed as a block carrying the recorded reason and the fix route — a recorded failure never passes in silence', r.code === 0 && jf && jf.decision === 'block' && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:262 · R2 keeps positions read-only · change the code\nChange the code, or amend the law through \/rule\./.test(jf.reason.replace(/'/g, '’')), r.out);
+    docket(['verdict', 'STALE', '--hash', H, '--failures', '1', '--session', 'x', '--reason', 'R2: its reason is gone'], { cwd: d });
+    r = stopIn({ session_id: 'x' }, ['--wait', '0']);
+    ok('…and a fresh STALE the same way, with the addendum route', /recorded STALE for this stop/.test(r.out) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
     const sp = path.join(d, '.docket', 'verdict.json');
     const st = JSON.parse(read(sp)); st.last.at = new Date(Date.now() - 60000).toISOString(); fs.writeFileSync(sp, JSON.stringify(st));
     r = stopIn({ session_id: 'x' }, ['--wait', '0']);
     ok('stop: a record older than this stop is not this stop’s judgement: blocked', /"decision":"block"/.test(r.out), r.out);
     const t0 = Date.now();
-    cp.spawn('sh', ['-c', 'sleep 1.5; node ' + JSON.stringify(CORE) + ' verdict FAIL --hash ' + H + ' --failures 2 --session x'], { cwd: d, detached: true, stdio: 'ignore' }).unref();
+    cp.spawn('sh', ['-c', 'sleep 1.5; node ' + JSON.stringify(CORE) + ' verdict PASS --hash ' + H + ' --failures 0 --session x'], { cwd: d, detached: true, stdio: 'ignore' }).unref();
     r = stopIn({ session_id: 'x' }, ['--wait', '10']);
-    ok('stop waits for the judge: a record that lands during the wait allows, and the wait ends when it lands, not at the bound', r.code === 0 && r.out === '' && Date.now() - t0 < 8000, r.out + ' ' + (Date.now() - t0) + 'ms');
-    docket(['verdict', 'PASS', '--hash', H, '--failures', '0', '--session', 'x'], { cwd: d });
+    ok('stop waits for the judge: a PASS that lands during the wait allows, and the wait ends when it lands, not at the bound', r.code === 0 && r.out === '' && Date.now() - t0 < 8000, r.out + ' ' + (Date.now() - t0) + 'ms');
     r = stopIn({ session_id: 'y' }, ['--wait', '0']);
     ok('stop: the hash of the last PASS allows for every session, with no wait', r.code === 0 && r.out === '', r.out);
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q2 = 2; // R2\n');
     const st2 = JSON.parse(read(sp)); st2.sessions.z = { blocks: 5, history: [1, 1, 1, 1, 1], surfaced: true }; fs.writeFileSync(sp, JSON.stringify(st2));
     r = stopIn({ session_id: 'z' }, ['--wait', '0']);
     ok('stop: a surfaced session is allowed (its next gate says SKIP), the session read from the hook input', r.code === 0 && r.out === '', r.out);
+    // a PASS recorded without naming the session leaves a surfaced session surfaced, and says so
+    const vp = docket(['verdict', 'PASS', '--hash', 'abc', '--failures', '0'], { cwd: d });
+    ok('verdict PASS without --session names the session it leaves surfaced and the flag that would release it', vp.code === 0 && /^note: session z is still surfaced; a PASS releases it only with --session z$/m.test(vp.out), vp.out);
     r = stopIn({ session_id: 'w' }, ['--wait', '0']);
     ok('…while another session with the same unjudged diff is blocked', /"decision":"block"/.test(r.out), r.out);
     r = stopIn({ session_id: 'w' }, ['--wait', 'soon']);
@@ -2461,21 +2469,23 @@ const SEC = String.fromCharCode(0xa7);
     const d = tempRepo();
     let r = docket(['status'], { cwd: d });
     ok('status without a plugin root in the environment writes no .docket/core', r.code === 0 && !fs.existsSync(path.join(d, '.docket', 'core')), 'written');
-    r = docket(['status'], { cwd: d, env: { CLAUDE_PLUGIN_ROOT: '/nowhere/else' } });
+    r = docket(['status'], { cwd: d, env: { DOCKET_PLUGIN_ROOT: '/nowhere/else' } });
     ok('…nor with a plugin root that does not contain the running core', r.code === 0 && !fs.existsSync(path.join(d, '.docket', 'core')), 'written');
     r = docket(['status'], { cwd: d, env: { CLAUDE_PLUGIN_ROOT: ROOT } });
+    ok('…nor from the host’s own variable: the core reads only the name the binding passes it (D13)', r.code === 0 && !fs.existsSync(path.join(d, '.docket', 'core')), 'written from the host’s variable');
+    r = docket(['status'], { cwd: d, env: { DOCKET_PLUGIN_ROOT: ROOT } });
     ok('status run as the plugin’s own hook writes .docket/core: the absolute path of the running core, one line', r.code === 0 && read(path.join(d, '.docket', 'core')) === CORE + '\n', String(fs.existsSync(path.join(d, '.docket', 'core')) && read(path.join(d, '.docket', 'core'))));
     const before = fs.statSync(path.join(d, '.docket', 'core')).mtimeMs;
     fs.writeFileSync(path.join(d, '.docket', 'core'), CORE + '\n'); fs.utimesSync(path.join(d, '.docket', 'core'), new Date(0), new Date(0));
-    docket(['status'], { cwd: d, env: { CLAUDE_PLUGIN_ROOT: ROOT } });
+    docket(['status'], { cwd: d, env: { DOCKET_PLUGIN_ROOT: ROOT } });
     ok('…and rewrites it only when it changes', fs.statSync(path.join(d, '.docket', 'core')).mtimeMs === 0, 'rewritten though unchanged'); void before;
     fs.rmSync(path.join(d, '.docket'), { recursive: true, force: true });
     const inp = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(d, 'test', 'fixture', 'app.js'), old_string: 'makeToolbar(' } });
-    r = docket(['near'], { cwd: d, input: inp, env: { CLAUDE_PLUGIN_ROOT: ROOT } });
+    r = docket(['near'], { cwd: d, input: inp, env: { DOCKET_PLUGIN_ROOT: ROOT } });
     ok('near run as the plugin’s own hook on a governed edit writes .docket/core too, so every edit refreshes it', r.code === 0 && read(path.join(d, '.docket', 'core')) === CORE + '\n', r.out.slice(0, 80));
     fs.rmSync(path.join(d, '.docket'), { recursive: true, force: true });
     const un = tmpDir('ungoverned-'); fs.writeFileSync(path.join(un, 'a.js'), 'x();\n');
-    r = docket(['near'], { cwd: un, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(un, 'a.js'), old_string: 'x' } }), env: { CLAUDE_PLUGIN_ROOT: ROOT, CLAUDE_PROJECT_DIR: '' } });
+    r = docket(['near'], { cwd: un, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(un, 'a.js'), old_string: 'x' } }), env: { DOCKET_PLUGIN_ROOT: ROOT, CLAUDE_PROJECT_DIR: '' } });
     ok('…but not in an ungoverned project: no ledger, no .docket/', r.code === 0 && r.out === '' && !fs.existsSync(path.join(un, '.docket')), r.out);
     fs.rmSync(d, { recursive: true, force: true }); fs.rmSync(un, { recursive: true, force: true });
   }
@@ -2527,17 +2537,19 @@ const SEC = String.fromCharCode(0xa7);
     const stop = ((H.hooks.Stop || [])[0] || {}).hooks && H.hooks.Stop[0].hooks[0];
     ok('the Stop handler is of type agent with the timeout the ruling names, and carries no agent field and no model: the host reads neither an agent file nor a model choice from it', stop && stop.type === 'agent' && stop.timeout === 300 && !('agent' in stop) && !('model' in stop) && !('matcher' in H.hooks.Stop[0]), JSON.stringify(stop));
     const mech = H.hooks.Stop[0].hooks[1];
-    ok('beside it, the mechanical half: a command handler running the core’s stop through the plugin root, quoted, with the same timeout', mech && mech.type === 'command' && mech.command === 'node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" stop' && mech.timeout === 300, JSON.stringify(mech));
-    ok('the Stop prompt tells the judge the one command shape the permission covers: `node <core> …`, never prefixed with cd', /never prefixed with cd/.test(stop ? stop.prompt : ''), (stop ? stop.prompt : '').slice(-400));
+    ok('beside it, the mechanical half: a command handler running the core’s stop through the plugin root, quoted, given the permission’s spelling, with a timeout thirty seconds past the judge’s so it can outwait the judge and still answer', mech && mech.type === 'command' && mech.command === 'node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" stop --permission "Bash(node *docket.js*)"' && mech.timeout === 330 && mech.timeout > stop.timeout, JSON.stringify(mech));
+    ok('the command hooks pass the plugin root to the core under the core’s own name, so the host’s variable stays in the binding (D13)', /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" near$/.test(H.hooks.PreToolUse[0].hooks[0].command) && /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" status$/.test(H.hooks.SessionStart[0].hooks[0].command) && !/CLAUDE_PLUGIN_ROOT/.test(read(CORE).replace(/\/\/[^\n]*/g, '')), H.hooks.PreToolUse[0].hooks[0].command);
     const pr = stop ? stop.prompt : '';
-    ok('the Stop prompt carries the hook input placeholder, reads .docket/core, runs the core’s protocol and follows it, and honours the re-entry flag', /\$ARGUMENTS/.test(pr) && /\.docket\/core/.test(pr) && /node <core> protocol/.test(pr) && /stop_hook_active/.test(pr) && /session_id/.test(pr) && /transcript_path/.test(pr), pr.slice(0, 200));
-    // A hook agent that answers without running anything answers "met", and the stop passes in silence — measured
-    // once, on a planted violation. So the condition is unmeetable until the core's own line is in hand.
-    ok('…and names the four cases in which the condition is met — the re-entry flag, no breadcrumb and no ledger, SKIP, a recorded PASS — and no other, so a judge that runs nothing cannot pass a stop in silence, and a judge may not record a PASS to make the condition true', /met\s+in exactly four cases and in no other/.test(pr) && /the core's gate printed SKIP/.test(pr) && /printing\s+`verdict recorded: PASS`/.test(pr) && /Never run the verdict command to make the condition true/.test(pr) && /a command you need denied/.test(pr) && /an answer you would\s+give without having run the protocol is not an answer/.test(pr), pr);
-    ok('the protocol says the same: the judge never records a verdict to release a stop', /It never records a verdict to release a stop/.test(read(path.join(ROOT, 'judge', 'PROTOCOL.md'))), 'the protocol does not say');
-    ok('the protocol, the binding page and FORMAT.md 16 each name the stop’s mechanical half and what it refuses', /## The stop's mechanical half/.test(read(path.join(ROOT, 'judge', 'PROTOCOL.md'))) && /binds `docket stop` beside it on the same event/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /`docket stop` is the stop's mechanical half/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'a document is silent');
+    // A binding is a few lines that point at a core file (D13, D20). The rules the judge follows — the four cases, the
+    // never-record rule, the command shape — are the protocol's, printed by the core; the prompt names the core and
+    // the two things only the host knows: the hook input, and what a missing breadcrumb means.
+    ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, `node <core> protocol`, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /node <core> protocol/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
+    ok('…and says what a denied command means: the stop does not stand, and the reason is the one line the mechanical half also gives', /If a command you need is denied, the stop does not stand/.test(pr) && /the judge could not run the core/.test(pr), pr);
+    const PRT = read(path.join(ROOT, 'judge', 'PROTOCOL.md'));
+    ok('the protocol names the four cases in which a stop stands and no other, the never-record rule, and the one command shape `docket` means', /^## When the stop stands$/m.test(PRT) && /In four cases, and in no other/.test(PRT) && /the host's re-entry flag is set/.test(PRT) && /`docket gate` printed SKIP/.test(PRT) && /printing `verdict recorded: PASS`/.test(PRT) && /never\s+runs the verdict command to make the fourth case true/.test(PRT) && /`docket` in this file and in the packs is `node <core>`/.test(PRT) && /never\s+prefixed with `cd`/.test(PRT), 'the protocol does not say');
+    ok('the protocol says the judge never records a verdict to release a stop, and that a surfaced session is released by a PASS naming it with --session', /It never records a verdict to release a stop/.test(PRT) && /`docket verdict PASS\s+--session <id> --hash <hash> --failures 0`, naming that session/.test(PRT), 'the protocol does not say');
+    ok('the protocol, the binding page and FORMAT.md 16 each name the stop’s mechanical half and what it refuses', /## The stop's mechanical half/.test(read(path.join(ROOT, 'judge', 'PROTOCOL.md'))) && /binds\s+`docket stop` beside it on the same event/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /`docket stop` is the stop's mechanical half/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'a document is silent');
     ok('USAGE lists stop, and the section map names it', /docket stop \[--wait <s>\]/.test(docket(['help']).out) && /^\/\/ 16  gate\/verdict\/stop/m.test(read(CORE)), 'stop is not listed');
-    ok('…and says what a missing breadcrumb means either way: no ledger → the condition is met; a ledger → not met, once, with the cause', /\.docket\/core is missing from the project directory\s+\(the hook input's cwd\) and no DECISIONS\.md exists anywhere under the project — the project is not under the docket/.test(pr) && /a missing \.docket\/core beside a DECISIONS\.md — your reason is: the docket's core is not recorded in\s+\.docket\/core/.test(pr), pr);
     ok('…and names no host, no model and no vendor, as the core does not', !/claude|anthropic|openai|gpt|gemini|copilot|sonnet|opus|haiku/i.test(pr), pr.match(/claude|anthropic|openai|gpt|gemini|copilot|sonnet|opus|haiku/i));
     const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
     ok('agents/docket-judge.md names itself, denies every writing tool, caps its turns at forty, and names no model', /^name:\s*docket-judge$/m.test(A) && /^disallowedTools:\s*Write, Edit, NotebookEdit$/m.test(A) && /^maxTurns:\s*40$/m.test(A) && !/^model:/m.test(A), A.split('\n').slice(0, 7).join('\n'));
@@ -2616,7 +2628,7 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(STALE7), result()], { last: { verdict: 'STALE', failures: 1 } }),
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { last: { verdict: 'FAIL', failures: 1 } }),
       say([turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes\nWaiting for the word.'), result()]));
-    ok('judge.sh scores a judge that blocks with R6, passes the clean rename, names the addendum route for R7, routes the changed number through /rule, and lets /rule halt: 1 of 1 five times, exit 0', r.status === 0 && /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) clean      1 of 1/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout) && /\(n\) number     1 of 1/.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    ok('judge.sh scores a judge that blocks with R6, passes the clean rename, names the addendum route for R7, routes the changed number through /rule, and lets /rule halt: 1 of 1 five times, calibration met, exit 0', r.status === 0 && /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) clean      1 of 1/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout) && /\(n\) number     1 of 1/.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout) && /calibration \(D15\): met/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
     ok('…prints the evidence for each: the block’s reason, the record, the confirm block', /names R6: yes  recorded: FAIL/.test(r.stdout) && /R6 keeps the toolbar; this diff removes it/.test(r.stdout) && /\(c\) run 1  blocked: no   recorded: PASS/.test(r.stdout) && /addendum route: yes  names R7: yes  recorded: STALE/.test(r.stdout) && /names R5: yes  route through \/rule: yes  recorded: FAIL/.test(r.stdout) && /block reached: yes  append ran: no   ledger unchanged: yes  stop blocked: no/.test(r.stdout), r.stdout);
     ok('…with nothing on stderr', r.stderr.trim() === '', r.stderr);
     // a block that does not name R6 is not a pass; an allowed stop with no record is not scored; a FAIL where STALE was due is not a pass; an append that ran fails the halt
@@ -2631,6 +2643,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…records a FAIL naming R7 where the addendum route was due as not a pass, and says R7 was named', /\(s\) stale      0 of 1/.test(r.stdout) && /addendum route: no   names R7: yes  recorded: FAIL/.test(r.stdout), r.stdout);
     ok('…and a block on the changed number that names R5 but no route through /rule is not a pass', /\(n\) number     0 of 1/.test(r.stdout) && /names R5: yes  route through \/rule: no /.test(r.stdout), r.stdout);
     ok('…and fails the halt when append ran before the word', /\(r\) amend      0 of 1/.test(r.stdout) && /append ran: yes/.test(r.stdout), r.stdout);
+    ok('…and exits 1: the clean case went unscored, so D15’s calibration is not met, whatever the blocks named', r.status === 1 && /calibration \(D15\): not met: the clean case was not allowed with a PASS recorded/.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-2).join(' '));
     // the harness denied the maker's edit: (v) is not scored
     r = runJudge(
       say([turnText('Reviewing.'), result([{ tool_name: 'Edit', tool_input: { file_path: 'app.js' } }])]),
@@ -2641,9 +2654,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('judge.sh does not score a run whose edit the harness denied, and says so', /\(v\) run 1  NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(v\) violation  0 of 0/.test(r.stdout), r.stdout);
     // a host that never ran the judge anywhere: the measurement was not taken
     r = runJudge(say([turnText('Reviewed.'), result()]), say([turnText('Renamed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Nothing.'), result()]));
-    ok('judge.sh with no judge at any stop scores only (r), and (r) fails on the block not reached', /\(v\) run 1  NOT SCORED/.test(r.stdout) && /\(c\) run 1  NOT SCORED/.test(r.stdout) && /\(s\) run 1  NOT SCORED/.test(r.stdout) && /\(n\) run 1  NOT SCORED/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) && r.status === 0, r.status + '\n' + r.stdout);
+    ok('judge.sh with no judge at any stop scores only (r), (r) fails on the block not reached, and the calibration is not met: exit 1', /\(v\) run 1  NOT SCORED/.test(r.stdout) && /\(c\) run 1  NOT SCORED/.test(r.stdout) && /\(s\) run 1  NOT SCORED/.test(r.stdout) && /\(n\) run 1  NOT SCORED/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) && r.status === 1 && /calibration \(D15\): not met/.test(r.stdout), r.status + '\n' + r.stdout);
+    // a judge that passes the planted violation: the measurement says 0 of 1 and the gate says not met
+    r = runJudge(
+      say([turnText('Reviewed.'), result()], { last: { verdict: 'PASS', failures: 0 } }),
+      say([turnText('Renamed.'), result()], { last: { verdict: 'PASS', failures: 0 } }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { last: { verdict: 'STALE', failures: 1 } }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { last: { verdict: 'FAIL', failures: 1 } }),
+      say([turnText('RULING — PLEASE CONFIRM'), result()]));
+    ok('judge.sh exits 1 for a judge that passed the planted violation: a judge that passes a deliberately broken build is not a judge (D15)', r.status === 1 && /\(v\) violation  0 of 1/.test(r.stdout) && /calibration \(D15\): not met: the violation was not blocked/.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-2).join(' '));
     ok('judge.sh selects scenarios with JUDGE_ONLY and says which it keeps with JUDGE_KEEP', /JUDGE_ONLY=v,c,s,n,r/.test(read(path.join(ROOT, 'test', 'judge.sh'))) && /JUDGE_KEEP=1 keeps the scratch directory/.test(read(path.join(ROOT, 'test', 'judge.sh'))), 'the header does not say');
-    ok('judge.sh states the one permission it grants and why, and that an allowed stop is not a PASS', /--allowedTools "Bash\(node \*docket\.js\*\)"/.test(read(path.join(ROOT, 'test', 'judge.sh'))) && /An allowed stop with no record is the judge not\n#\s+running/.test(read(path.join(ROOT, 'test', 'judge.sh'))), 'the header does not say');
+    ok('judge.sh states the one permission it grants and why, that an allowed stop is not a PASS, and that it gates the calibration D15 asks for', /--allowedTools "Bash\(node \*docket\.js\*\)"/.test(read(path.join(ROOT, 'test', 'judge.sh'))) && /An allowed stop with no record is the judge not\n#\s+running/.test(read(path.join(ROOT, 'test', 'judge.sh'))) && /the GATE of its\n# calibration \(D15\)/.test(read(path.join(ROOT, 'test', 'judge.sh'))), 'the header does not say');
   }
 }
 

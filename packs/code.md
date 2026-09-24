@@ -2,7 +2,7 @@
 
 Domain: every governed file that no other pack claims — not `*.css`, `*.html`, `UIUX.md`, `PRD.md`, not `*.md`, not a ledger
 
-A pack is a list of measurable features. The judge scores each against the diff
+`docket` in this file is the core, run as the protocol says. A pack is a list of measurable features. The judge scores each against the diff
 and the repository, on governed files only, and records PASS or FAIL with a
 location. Each feature says how it is scored: a command whose exit code decides,
 or a reading with the exact thing to look for.

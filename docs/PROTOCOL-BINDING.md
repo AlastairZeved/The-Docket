@@ -49,11 +49,17 @@ the core prints the protocol, the packs, the diff and the transcript itself
 (`protocol`, `pack`, `gate --diff`, `transcript`), and the one permission the
 judge needs is to run the core — in the host bound here, the rule
 `Bash(node *docket.js*)`, with no space before the closing parenthesis, so that a
-quoted path matches too. A subagent that cannot run the core cannot judge, and
-must say so rather than allow the stop in silence — and because a subagent may
-say nothing at all, the host binds `docket stop` beside it on the same event: a
-command that blocks a governed stop no fresh verdict has judged, once, and
-writes nothing (`judge/PROTOCOL.md`, the stop's mechanical half).
+quoted path matches too; a project whose own checks are not the core (the code
+pack's first feature) grants the judge that command as well. A subagent that
+cannot run the core cannot judge, and must say so rather than allow the stop in
+silence — and because a subagent may say nothing at all, the host binds
+`docket stop` beside it on the same event: a command that blocks a governed
+stop no fresh verdict has judged, relays a fresh FAIL or STALE, and writes
+nothing (`judge/PROTOCOL.md`, the stop's mechanical half). The host's own
+names stay in the binding: its command hooks pass the plugin root to the core
+as `DOCKET_PLUGIN_ROOT`, and `stop` is given the permission's spelling with
+`--permission`, so the core names neither the host's variable nor its rule
+syntax (D13, D20).
 
 ## What a binding may contain
 

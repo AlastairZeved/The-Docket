@@ -49,6 +49,26 @@ diff "reads well overall". It never records a verdict to release a stop: a PASS
 is step 6's answer to a diff it scored and found nothing in, and SKIP and the
 re-entry flag allow a stop with no record at all.
 
+## When the stop stands
+
+In four cases, and in no other: (1) the host's re-entry flag is set — this stop
+follows a block in the same turn, and a session is blocked at most once per turn
+(D11); (2) the project has no `.docket/core` and no ledger — it is not under the
+docket; (3) `docket gate` printed SKIP; (4) the protocol, followed to its end,
+ended with `docket verdict` printing `verdict recorded: PASS`. The judge never
+runs the verdict command to make the fourth case true: a PASS is step 6's
+answer to a diff it scored and found nothing in, and the first three cases stand
+with no verdict at all. In every other outcome the stop does not stand: FAIL or
+STALE — the reason is the verdict's Failures lines with their fix routes; SURFACE
+— the reason is the residue the gate printed, ending with its last sentence; a
+ledger beside no `.docket/core` — the reason names the missing file and its
+cause; a command denied — the reason is one line, that the judge could not run
+the core; and an answer given without having run the protocol is not an answer.
+
+`docket` in this file and in the packs is `node <core>`, the core named above:
+run every command exactly in that shape, from the project directory, never
+prefixed with `cd` or anything else — a host permits that shape and no other.
+
 ## The seven steps, in order, and the order is the point
 
 1. **`docket gate --session <id> --diff`** — after one look at the host's re-entry flag:
@@ -153,8 +173,10 @@ judged blocks, not the surfacing stop, and the plateau test above is made at
 every stop from the fourth on, not once. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
-by a new session, or by a PASS the human records with `docket verdict PASS`
-after judging the residue themselves; nothing the maker does alone releases it. The session identifier is
+by a new session, or by a PASS the human records with `docket verdict PASS
+--session <id> --hash <hash> --failures 0`, naming that session (`status` names
+it), after judging the residue themselves; nothing the maker does alone
+releases it. The session identifier is
 whatever the host passes; the state file keeps one block count, one failure
 history and the surfaced mark per identifier.
 
@@ -177,9 +199,12 @@ and a host cannot see the difference between that and a PASS. So a host binds a
 second handler beside the judge on the same event: `docket stop`, which reads
 the same hook input, computes the same diff, and blocks a governed stop for
 which no fresh verdict has been recorded by the time the judge should have
-finished — it waits up to its bound for the record, then refuses. It writes no
-state and judges nothing; it refuses silence, once, and the stop that follows
-in the same turn is allowed by the re-entry flag. The judge never calls it.
+finished — it waits up to its bound, equal to the judge's own timeout, for the
+record, then refuses; and a fresh FAIL or STALE it finds it relays as a block
+with the recorded reason, in case the judge's own block never reached the
+maker. It writes no state and judges nothing; it refuses silence, once, and
+the stop that follows in the same turn is allowed by the re-entry flag. The
+judge never calls it.
 
 ## Cost
 

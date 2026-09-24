@@ -2,7 +2,7 @@
 
 Domain: `*.css`, `*.html`, `UIUX.md`, `PRD.md`
 
-A pack is a list of measurable features. The judge scores each against the diff
+`docket` in this file is the core, run as the protocol says. A pack is a list of measurable features. The judge scores each against the diff
 and the repository, on governed files only, and records PASS or FAIL with a
 location. Each feature says how it is scored.
 

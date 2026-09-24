@@ -505,15 +505,18 @@ ignore it too.
 the same event and fed the same hook input on stdin: it allows at once when the
 host's re-entry flag is set, when nothing governed changed or the last PASS
 judged this diff, or when the session is surfaced; otherwise it waits up to
-`--wait` seconds (270 by default) for a verdict recorded for this diff after it
-started, or for the surfacing mark, and allows on either; a stop that reaches
-the bound unjudged is blocked with a reason that names the files and the bound.
-It writes no state.
+`--wait` seconds (300 by default, the judge's own timeout) for a verdict
+recorded for this diff after it started, or for the surfacing mark: a PASS or
+the mark allows; a FAIL or STALE is relayed as a block carrying the recorded
+reason; a stop that reaches the bound unjudged is blocked with a reason that
+names the files, the bound and, when the binding passes one with
+`--permission`, the rule to grant. It writes no state.
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
-`status` only when the host names a plugin root that contains the running file,
-and only where a ledger governs; rewritten only when it changes. The judge a host
+`status` only when the binding passes a plugin root (`DOCKET_PLUGIN_ROOT`) that
+contains the running file, and only where a ledger governs; rewritten only when
+it changes. The judge a host
 runs at a stop is given no word of where the plugin is, so it finds the core
 here, and everything else it reads it asks the core to print. A host's hook
 agent working in a project with a ledger and no breadcrumb blocks the stop once,
