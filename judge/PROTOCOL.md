@@ -54,7 +54,9 @@ re-entry flag allow a stop with no record at all.
 In four cases, and in no other: (1) the host's re-entry flag is set — this stop
 follows a block in the same turn, and a session is blocked at most once per turn
 (D11), and `docket gate` answers SKIP for such a stop too, from the mark the
-stop's mechanical half sets (D22); (2) the project has no `.docket/core` and no ledger — it is not under the
+stop's mechanical half sets (D22) — and should your gate have run before that
+mark, `docket verdict` says, when it records, that the stop stands and its
+block is not counted; (2) the project has no `.docket/core` and no ledger — it is not under the
 docket; (3) `docket gate` printed SKIP; (4) the protocol, followed to its end,
 ended with `docket verdict` printing `verdict recorded: PASS`. The judge never
 runs the verdict command to make the fourth case true: a PASS is step 6's
@@ -110,9 +112,16 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    whole diff and the code the diff leaves, since what makes a ruling right is
    usually somewhere the ruling's own lines are not. Read them with your file
    tools and `docket gate --diff`: the shell runs the core, and nothing else. Write the answer into the located
-   failure, after what the diff breaks and before the route: `reason holds`, or `reason gone` — and, for a cite that no longer points
-   at code that implements its ruling, `cite stale`. A code line that names a
-   ruling and answers neither way is refused when it is recorded (D23).
+   failure as a field of its own, after what the diff breaks and before the route,
+   with the line that shows it: `reason holds: <the premise, as the code the diff
+   leaves shows it> (<file:line>)`, the line where the premise is still true; or
+   `reason gone: <what changed> (<file:line>)`, the line of the diff, or of what it
+   leaves, that makes it false — and, for a cite that no longer points at code that
+   implements its ruling, `cite stale`. The line is one of a file in the
+   repository, before or after the diff, and never a ledger: a ruling's words
+   record what was decided, not whether its premise is still true. A code line
+   that names a ruling and answers neither way, or answers without its line, is
+   refused when it is recorded (D23, D27).
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
@@ -146,7 +155,7 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
 
     Feature scores      one line per feature: <pack> <F-id> PASS|FAIL <file:line>
     Trace discrepancies the maker claimed X; the evidence shows Y
-    Failures            <pack> · <F-id> · <file:line> · expected vs found · [reason holds | reason gone | cite stale] · fix route
+    Failures            <pack> · <F-id> · <file:line> · expected vs found · [reason holds: <premise> (<file:line>) | reason gone: <what changed> (<file:line>) | cite stale] · fix route
     Verdict             PASS | FAIL | STALE
 
 A trace discrepancy is an execution failure (a command claimed but not run) or a
@@ -155,12 +164,13 @@ the most important findings and come before the failure list.
 
 ## A located failure
 
-    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · reason holds · change the code, or supersede R6 through /rule
-    code · F3 · src/trash.js:30 · R4 keeps a confirmation before a delete; this diff removes it · reason gone: every deletion is undoable now · /rule --addendum R4 "deletions can be undone"
+    code · F3 · src/trash.js:30 · R4 keeps a confirmation before a delete; this diff removes it · reason holds: a deletion still cannot be undone (src/trash.js:52) · change the code, or supersede R4 through /rule
+    code · F3 · src/trash.js:30 · R4 keeps a confirmation before a delete; this diff removes it · reason gone: every deletion is undoable now (src/undo.js:14) · /rule --addendum R4 "deletions can be undone"
 
-The answer between what the diff breaks and the route is required on a code line
-that names a ruling, and on no other; a line in any other pack ends with its
-route. Never
+The answer between what the diff breaks and the route, with its line, is
+required on a code line that names a ruling, and on no other; a line in any other
+pack ends with its route. A located failure says where and what — F3 failed at
+app.js:1112: R6 keeps the toolbar; this diff removes it — never
 
     the toolbar change looks wrong, try again
 

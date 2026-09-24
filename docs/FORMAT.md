@@ -492,21 +492,29 @@ a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
 (D22) — followed by, for each untracked governed file in path order, a line
 `+++ <path>` and the file's content. `SKIP` when that text is empty, when its hash
 equals the last PASS's, when the session is surfaced, or when `docket stop`
-marked this stop a re-entry within the judge's timeout; `SURFACE` when the
-session has been blocked five times since the last PASS or its located failures
-have not fallen across the last two verdicts after the third block, with the
-residue printed beneath and the session marked surfaced; else `JUDGE <hash>
+marked this stop a re-entry and the mark is younger than the judge's timeout;
+`SURFACE` when the session has been blocked five times since the last PASS or
+its located failures have not fallen across the last two verdicts after the
+third block, with the residue printed beneath and the session marked surfaced;
+else `JUDGE <hash>
 <files…>`, and with `--diff` the text itself beneath. `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
-session's history; a changed hash never resets anything. A FAIL or STALE carries
-`--reason`, one located failure per line in the protocol's form, as many lines as
-`--failures` says; a code-pack line that names a ruling answers `reason holds`,
-`reason gone` or `cite stale`; STALE is refused unless every line is a stale one
-and FAIL when every line is; a PASS carries no reason (D23).
+session's history; a changed hash never resets anything. A FAIL or STALE for a
+diff whose re-entry mark is still young is recorded and not counted, with
+`counted: false`: the stop it judged follows a block in the same turn, and the
+judge reached it only because its gate ran before the mark was written. A FAIL
+or STALE carries `--reason`, one located failure per line in the protocol's form,
+as many lines as `--failures` says; a code-pack line that names a ruling answers,
+in a field of its own, `reason holds: <the premise> (<file:line>)`, `reason gone:
+<what changed> (<file:line>)` or `cite stale`, the line one of a file in the
+repository before or after the diff and never a ledger's (D27); STALE is refused
+unless every line is a stale one and FAIL when every line is; a PASS carries no
+reason (D23).
 
 The state lives in `.docket/verdict.json` under the root: `last` (verdict, hash,
-failures, time, session, and the reason it was recorded with), `lastPassHash`,
+failures, time, session, the reason it was recorded with, and `counted: false`
+on a verdict not counted), `lastPassHash`,
 and `sessions`, one entry per identifier with `blocks`, `history`, `surfaced` and,
 while a re-entry is marked, `reentry` (the diff's hash and the time). Every
 verdict is also appended, one JSON line each and in order, to

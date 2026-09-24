@@ -30,9 +30,13 @@ stale contradiction, with the addendum route. A reason no longer holds when its
 premise, the fact it says makes the ruling right, is false after the diff;
 removing what the ruling keeps is the contradiction, never the premise going.
 The located failure says which,
-after what the diff breaks and before the route: `reason holds` or `reason gone`
-(and `cite stale` for a cite left on code that no longer implements its ruling);
-a code line that names a ruling and says neither is refused when it is recorded.
+as a field of its own after what the diff breaks and before the route, with the
+line that shows it: `reason holds: <the premise> (<file:line>)` where the code the
+diff leaves still makes the premise true, or `reason gone: <what changed>
+(<file:line>)` where the diff makes it false (and `cite stale` for a cite left on
+code that no longer implements its ruling); the line is never a ledger's. A code
+line that names a ruling and says neither, or says one without its line, is
+refused when it is recorded.
 
 **F4 — no test skipped, disabled or deleted.**
 How scored: read the diff for `skip`, `xit`, `only`, `.skip(`, `.only(`, a
@@ -44,7 +48,8 @@ removed from the check commands F1 uses.
 How scored: every removed line of the diff that carried a ruling id (a cite the
 ledger's grammar reads) against the ledger's newest entries and addenda; a
 removed cite that no entry or addendum accounts for is a failure, and its line
-says `reason holds` unless the ruling's premise is gone too.
+says `reason holds: … (<file:line>)` unless the ruling's premise is gone too, and
+then `reason gone: … (<file:line>)`.
 
 **F6 — every claim of a passing check in the transcript has a matching command
 run in the transcript.**
@@ -55,7 +60,7 @@ is a failure; a run whose output contradicts the claim is a failure.
 
 ## Located failure
 
-    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · reason holds · change the code, or supersede R6 through /rule
+    code · F3 · src/trash.js:30 · R4 keeps a confirmation before a delete; this diff removes it · reason holds: a deletion still cannot be undone (src/trash.js:52) · change the code, or supersede R4 through /rule
 
 never
 

@@ -67,8 +67,6 @@ only job is to hold the text.
 
 - "it's technically not a card because…" — it is a card.
 - "it's spatial because it uses translateY" — it is a hover effect.
-- "the pattern is familiar, so it costs nothing to learn" — familiarity is the
-  cost F5 counts.
 
 A judge that has read this table cannot pass a patch F5 would have caught.
 

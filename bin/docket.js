@@ -1734,7 +1734,7 @@ function residueLines(st, sess) {
 // so the rule does not rest on a hook agent reading the host's flag, which one was measured to block again (D22).
 function reentryMarked(sess, hash) {
   const m = sess.reentry;
-  return !!(m && typeof m === 'object' && m.hash === hash && Date.now() - Date.parse(m.at) <= STOP_WAIT * 1000);
+  return !!(m && typeof m === 'object' && m.hash === hash && Date.now() - Date.parse(m.at) < STOP_WAIT * 1000);   // younger than the judge's timeout (D22)
 }
 function gate(argv) {
   const root = enumerationRoot(process.cwd());
@@ -1767,6 +1767,24 @@ function gate(argv) {
 // whether its reason still stood was the failure measured most often; the form asks, and the record refuses an answer
 // that skipped the question.
 const LOCATED_SEP = ' · ';
+// The answer to the reason question carries its evidence (D27): a field of its own, `reason holds: <the premise> (<file:line>)`
+// or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff
+// and never a ledger — a ruling's words record what was decided, not whether its premise is still true.
+const ANSWER_RE = /^reason (holds|gone)\s*:\s*(.*?)\s*\(([^()]+?):(\d+)\)$/i;
+function evidenceOf(root, fields, at) {
+  const a = fields.map(x => x.trim()).find(x => /^reason (?:holds|gone)\b/i.test(x));
+  const m = a ? a.match(ANSWER_RE) : null;
+  if (!m || !/\S/.test(m[2])) die(at + ' answers the reason question without its evidence: the answer is a field of its own, `reason holds: <the premise, as the code the diff leaves shows it> (<file:line>)` or `reason gone: <what the diff changed> (<file:line>)` (protocol step 4, D27)', 2);
+  const p = m[3].trim(), n = Number(m[4]), abs = path.resolve(root, p);
+  const where = p + ':' + m[4];
+  if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
+  if (path.basename(abs) === 'DECISIONS.md') die(at + ' points its evidence into a ledger (' + where + '): a ruling\'s words record what was decided, not whether its premise is still true; point at the line of the code or document that shows it (D27)', 2);
+  let text = null;
+  if (isFile(abs)) { try { text = fs.readFileSync(abs, 'utf8'); } catch (e) { text = null; } }
+  else if (!fs.existsSync(abs)) { const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) text = h.stdout; }
+  const count = text === null ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+  if (!(n >= 1 && n <= count)) die(at + ' points its evidence at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
+}
 function holdToLines(root, v, failures, lines) {
   if (!lines.length) die('verdict: a ' + v + ' names its located failures: --reason "<one per line: pack · F<n> · file:line · what · route>"', 2);
   if (lines.length !== failures) die('verdict: --failures ' + failures + ' but --reason carries ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ': one located failure per line, and the count is theirs', 2);
@@ -1780,7 +1798,8 @@ function holdToLines(root, v, failures, lines) {
     const gone = /\b(?:reason gone|cite stale)\b/i.test(said), holds = /\breason holds\b/i.test(said);
     if (gone && holds) die(at + ' says both that the reason holds and that it is gone', 2);
     const names = f[0] === 'code' && (f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []).some(t => rulingIds().has(t));
-    if (names && !gone && !holds) die(at + ' names a ruling and says nothing of its reason: after what the diff breaks, write "reason holds", or "reason gone" (or "cite stale"), then the route (protocol step 4)', 2);
+    if (names && !gone && !holds) die(at + ' names a ruling and says nothing of its reason: after what the diff breaks, write "reason holds: <the premise> (<file:line>)", or "reason gone: <what changed> (<file:line>)" (or "cite stale"), then the route (protocol step 4)', 2);
+    if (names && (holds || /\breason gone\b/i.test(said))) evidenceOf(root, f.slice(3, -1), at);
     if (gone) stale += 1;
   });
   if (v === 'STALE' && stale < lines.length) die('verdict: STALE is the verdict only when every failure is a stale one (protocol step 6); ' + (lines.length - stale) + ' of these ' + lines.length + (lines.length - stale === 1 ? ' is' : ' are') + ' not: record FAIL, with the stale ones and their addendum route among its lines', 2);
@@ -1805,16 +1824,21 @@ function verdict(argv) {
   const sess = Object.assign(freshSession(), st.sessions[id] || {});
   st.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
   if (reason) st.last.reason = reason;
+  // A FAIL or STALE for a diff whose stop the command half has marked a re-entry was judged by a judge whose gate ran
+  // before the mark was written: that stop follows a block in the same turn, so it stands, and its block is not counted
+  // a second time (D11). It is recorded all the same, marked uncounted (D22's addendum).
+  const raced = v !== 'PASS' && reentryMarked(sess, hash);
+  if (raced) st.last.counted = false;
   if (v === 'PASS') { st.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; }   // reset only on PASS (D11); a changed hash never resets
-  else { sess.blocks += 1; sess.history.push(failures); }
+  else if (!raced) { sess.blocks += 1; sess.history.push(failures); }
   st.sessions[id] = sess;
   saveState(root, st);
   // Every verdict, in order, one JSON line each: the judge's record for a person to read and for a measurement to score
   // the judge's first answer by. Nothing in the core reads it (D22).
   try { fs.appendFileSync(path.join(root, '.docket', 'verdicts.jsonl'), JSON.stringify(st.last) + '\n'); } catch (e) { process.stderr.write('note: .docket/verdicts.jsonl could not be appended to (' + e.code + '); the verdict is recorded in .docket/verdict.json\n'); }
   const left = v === 'PASS' && !flag(argv, '--session') ? Object.keys(st.sessions).filter(k => k !== id && st.sessions[k].surfaced) : [];   // a PASS releases the session it names, and this one was not named
-  if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash, stillSurfaced: left }, null, 2)); return 0; }
-  out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
+  if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, counted: !raced, hash, stillSurfaced: left }, null, 2)); return 0; }
+  out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + ')' + (raced ? '; not counted: this stop follows a block in the same turn, so it stands (D11)' : '') + '; session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
   for (const k of left) out('note: session ' + k + ' is still surfaced; a PASS releases it only with --session ' + k);
   return 0;
 }
