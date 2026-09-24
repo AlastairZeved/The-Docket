@@ -501,6 +501,15 @@ A file that is missing, half-written or hand-edited is read as what it holds and
 nothing more. `.docket/` is ignored by git, and a constituted project is told to
 ignore it too.
 
+`docket stop` is the stop's mechanical half, bound by a host beside the judge on
+the same event and fed the same hook input on stdin: it allows at once when the
+host's re-entry flag is set, when nothing governed changed or the last PASS
+judged this diff, or when the session is surfaced; otherwise it waits up to
+`--wait` seconds (270 by default) for a verdict recorded for this diff after it
+started, or for the surfacing mark, and allows on either; a stop that reaches
+the bound unjudged is blocked with a reason that names the files and the bound.
+It writes no state.
+
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
 `status` only when the host names a plugin root that contains the running file,

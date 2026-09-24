@@ -22,7 +22,7 @@
 // 13  vendor               the witness copied to where the law lives (D9)
 // 14  constitute           a spine before the first line (D9, D13)
 // 15  intake               an intake file, printed for a skill to splice
-// 16  gate/verdict         the mechanical gate and the verdict file (D10, D11)
+// 16  gate/verdict/stop    the mechanical gate, the verdict file, the stop that refuses silence (D10, D11)
 // 17  protocol/pack/transcript   what the judge reads, printed by the core
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
@@ -40,6 +40,7 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
+const STOP_WAIT = 270;    // D14: the seconds `stop` waits for the judge's record — under the judge's own timeout of 300, so a judge still working is not overtaken
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
@@ -1685,6 +1686,46 @@ function verdict(argv) {
   return 0;
 }
 
+// The mechanical half of a stop. The host's hook agent can answer "met" without running anything, and the stop then
+// passes in silence — measured twice in ten runs, once when its shell command was refused for a prefix the allow rule
+// does not cover. A command hook cannot be talked out of its job: `stop`, bound beside the judge on the same event,
+// reads the same hook input, computes the same diff, and blocks a governed stop that no fresh verdict has judged by
+// the time the judge should have finished. It writes no state and judges nothing: it refuses silence, once — the
+// stop that follows in the same turn is allowed by the host's re-entry flag (D11).
+function sleepMs(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+function stop(argv) {
+  let input = {};
+  try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
+  if (typeof input !== 'object' || Array.isArray(input)) input = {};
+  if (input.stop_hook_active === true) return 0;                                                 // D11: blocked at most once per turn
+  const waitRaw = flag(argv, '--wait');
+  const waitS = waitRaw === null ? STOP_WAIT : Number(waitRaw);
+  if (!(Number.isInteger(waitS) && waitS >= 0)) die('stop: --wait takes a whole number of seconds', 2);
+  const root = enumerationRoot(process.cwd());
+  const id = flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default';
+  const d = governedDiff(root);
+  const st0 = loadState(root);
+  if (d.empty || d.hash === st0.lastPassHash) return 0;                                          // D10: nothing to judge
+  if (st0.sessions[id] && st0.sessions[id].surfaced) return 0;                                   // D11: a surfaced session skips
+  const start = Date.now();
+  const judged = () => {                                                                         // a fresh record for this diff, or the surfacing mark
+    const st = loadState(root);
+    if (st.sessions[id] && st.sessions[id].surfaced) return 'surfaced';
+    if (st.lastPassHash === d.hash) return 'PASS';
+    const l = st.last;
+    return l && l.hash === d.hash && Date.parse(l.at) >= start - 2000 ? l.verdict : null;
+  };
+  const deadline = start + waitS * 1000;
+  for (;;) {
+    if (judged()) return 0;
+    if (Date.now() >= deadline) break;
+    sleepMs(Math.min(1000, Math.max(1, deadline - Date.now())));
+  }
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + d.touched.join(', ') + ') within ' + waitS + ' second' + (waitS === 1 ? '' : 's') + ', so the stop cannot stand: a governed stop is judged or it waits. If the judge could not run the core, allow Bash(node *docket.js*) and stop again; the stop that follows this block in the same turn is allowed.';
+  out(JSON.stringify({ decision: 'block', reason }));
+  return 0;
+}
+
 // ─── 17. protocol, pack, transcript: what the judge reads, printed by the core ─
 
 // The judge's shell is allowed one thing — this program — and it may read nothing outside the project. So the protocol,
@@ -1779,6 +1820,7 @@ const USAGE = [
   '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
   '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the diff since the last PASS, decided mechanically (D10, D11); --diff prints it',
   '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
+  '  docket stop [--wait <s>]             stdin: the stop hook\'s input; blocks a governed stop no fresh verdict judged (the host binds it beside the judge)',
   '  docket protocol                     print judge/PROTOCOL.md',
   '  docket pack <name> | --list         print a pack, or the packs with their domains',
   '  docket transcript <path> [--last n] the assistant text and tool calls of a JSON-lines message log',
@@ -1786,7 +1828,7 @@ const USAGE = [
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
-const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last']);
+const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait']);
 const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
@@ -1796,6 +1838,7 @@ const OPTIONS = {
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: [],
   gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: [], pack: ['--json', '--list'], transcript: ['--last'],
+  stop: ['--session', '--wait'],
 };
 function parseArgv(args) {
   const raw = args.slice();
@@ -1845,7 +1888,7 @@ function main() {
   const argv = parseArgv(process.argv.slice(2));
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
-  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript };
+  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript, stop };
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);

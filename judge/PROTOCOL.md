@@ -45,7 +45,9 @@ It writes nothing: no file, no edit, no note. It runs nothing but the commands
 above. It confirms no ruling, amends no ruling, and never tells the maker to
 "try again": every failure it returns is located (file, line, ruling, feature)
 with a fix route. It never passes a diff with a feature failure because the
-diff "reads well overall".
+diff "reads well overall". It never records a verdict to release a stop: a PASS
+is step 6's answer to a diff it scored and found nothing in, and SKIP and the
+re-entry flag allow a stop with no record at all.
 
 ## The seven steps, in order, and the order is the point
 
@@ -69,7 +71,12 @@ diff "reads well overall".
 4. **`docket governs <id>`** for every ruling cited in the touched regions (the
    ids `near` would have printed for each hunk). Check the diff against each
    ruling's clauses and against every in-edge's clause: a later ruling may have
-   superseded the clause the diff breaks, or waived it for this case.
+   superseded the clause the diff breaks, or waived it for this case. For each
+   ruling the diff contradicts, read its `Reason:` sentence and ask one more
+   question: does the code or the condition that reason describes still exist
+   after this diff? If the diff, or an earlier change, removed the thing the
+   reason rests on, the contradiction is stale (step 6), and its route is an
+   addendum, not a rewrite; if the reason still holds, it is a failure.
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
@@ -162,6 +169,17 @@ maker's transcript.
 Nothing verifies the relay. The residue reaches the human only through the
 maker's own reply (D11), and a maker can drop it; the boundary is the maker's
 compliance, as the boundary against a forged verdict is tool permission.
+
+## The stop's mechanical half
+
+A judge that answers without running anything lets the stop pass in silence,
+and a host cannot see the difference between that and a PASS. So a host binds a
+second handler beside the judge on the same event: `docket stop`, which reads
+the same hook input, computes the same diff, and blocks a governed stop for
+which no fresh verdict has been recorded by the time the judge should have
+finished — it waits up to its bound for the record, then refuses. It writes no
+state and judges nothing; it refuses silence, once, and the stop that follows
+in the same turn is allowed by the re-entry flag. The judge never calls it.
 
 ## Cost
 
