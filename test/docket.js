@@ -2579,7 +2579,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('design F5 names the eleven patterns and the renaming rule', /card, badge, chip, filter, toggle, panel,\s+sidebar, modal, dropdown, accordion, tab/.test(packs.design) && /renaming is not redesigning/.test(packs.design), 'F5 is not as stated');
     ok('prose has F1–F19 with F2a, F4a, F4b and F12a, the reader gate as its precondition, and the scale rule as a table', fids(packs.prose).join(',') === 'F1,F2,F2a,F3,F4,F4a,F4b,F5,F6,F7,F8,F9,F10,F11,F12,F12a,F13,F14,F15,F16,F17,F18,F19' && /## Precondition — the reader gate/.test(packs.prose) && /"general audience", "non-technical", "someone\s+curious" fail/.test(packs.prose) && /## Scale rule/.test(packs.prose), fids(packs.prose).join(','));
     // The scale rule's primaries, row by row: a sentence makes compression and weld primary, a paragraph the chain,
-    // the document the whole. Swapping any two rows' primaries is the mutant this pins.
+    // the document the whole. Swapping any two rows' primaries is what this pins.
     ok('prose’s scale rule: a sentence → F5–F8 and F9–F12 primary, F3–F4 skipped; a paragraph → F3–F4 primary; the document → F13–F19 primary and exclusive on termination', /^\| a sentence \| F1–F2a, F5–F8, F9–F12 \| F5–F8 and F9–F12 \| F3–F4, unless the sentence carries several claims \|$/m.test(packs.prose) && /^\| a paragraph \| all \| F3–F4 \| none \|$/m.test(packs.prose) && /^\| the document \| all \| F13–F19, exclusive on termination \| none \|$/m.test(packs.prose), (packs.prose.match(/^\| (a sentence|a paragraph|the document) .*$/gm) || []).join('\n'));
     ok('prose F18 is the termination sentence, whole', /a reader without the author's expertise can follow the\s+reasoning chain, in the order presented, using language and structure they\s+already have, without silently disengaging/.test(packs.prose), 'F18 is not the sentence');
     ok('decisions has F1–F10, each stating how it is scored, and the interrogation’s eight questions', fids(packs.decisions).join(',') === 'F1,F2,F3,F4,F5,F6,F7,F8,F9,F10' && (packs.decisions.match(/How\s+scored:/g) || []).length === 10 && (packs.decisions.match(/^- .*\?$/gm) || []).length === 8, fids(packs.decisions).join(',') + ' / ' + (packs.decisions.match(/^- .*\?$/gm) || []).length);
@@ -2587,7 +2587,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('the packs’ located-failure lines and examples are not cites of this ledger: check passes over them', docket(['check']).code === 0, docket(['check']).out);
   }
 
-  // ── test/judge.sh, driven by a stand-in host: the four scorings, the s-plant guard, silence not counted ──
+  // ── test/judge.sh, driven by a stand-in host: the five scorings, the guard against a block that names nothing, silence not counted ──
   {
     const stubDir = tmpDir('judge-host-');
     const q = s => "'" + s.replace(/'/g, "'\\''") + "'";
