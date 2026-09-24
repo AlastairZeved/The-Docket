@@ -40,7 +40,7 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
-const STOP_WAIT = 270;    // D14: the seconds `stop` waits for the judge's record — under the judge's own timeout of 300, so a judge still working is not overtaken
+const STOP_WAIT = 270;    // D14, logged in D19: the seconds `stop` waits for the judge's record — under the judge's own timeout of 300, so a judge still working is not overtaken
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
@@ -1721,7 +1721,9 @@ function stop(argv) {
     if (Date.now() >= deadline) break;
     sleepMs(Math.min(1000, Math.max(1, deadline - Date.now())));
   }
-  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + d.touched.join(', ') + ') within ' + waitS + ' second' + (waitS === 1 ? '' : 's') + ', so the stop cannot stand: a governed stop is judged or it waits. If the judge could not run the core, allow Bash(node *docket.js*) and stop again; the stop that follows this block in the same turn is allowed.';
+  // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
+  // whose job it is and what to do: nothing, then stop again.
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + d.touched.join(', ') + ') within ' + waitS + ' second' + (waitS === 1 ? '' : 's') + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. If it recurs turn after turn, tell the person: the judge could not run the core; allow Bash(node *docket.js*) so it can.';
   out(JSON.stringify({ decision: 'block', reason }));
   return 0;
 }

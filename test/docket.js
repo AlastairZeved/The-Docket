@@ -2321,6 +2321,9 @@ const SEC = String.fromCharCode(0xa7);
     ok('D18’s body states the escalation and the confirm rule the intakes follow', /one clarification/.test(gj.ruling.body) && /restated as a checklist/.test(gj.ruling.body) && /no third attempt/.test(gj.ruling.body) && /Silence is not confirmation/.test(gj.ruling.body) && /\bReason: /.test(gj.ruling.body), gj.ruling.body.slice(0, 300));
     ok('USAGE lists the three subcommands', ['docket diff <revA> <revB>', 'docket diff --files <a> <b>', 'docket vendor <dir>', 'docket constitute --answers <json>'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
     ok('USAGE lists gate, verdict, protocol, pack and transcript', ['docket gate --session <id> [--diff]', 'docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]', 'docket protocol', 'docket pack <name> | --list', 'docket transcript <path> [--last n]'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
+    const g19 = docket(['governs', 'D19']);
+    const out19 = (g19.out.match(/^Out-edges[^\n]*\n([\s\S]*?)(?=^In-edges)/m) || [])[1] || '';
+    ok('D19 is in the ledger, extends D15 and D8 (in the Out-edges section), and records the five scenarios, the stale rate, the mechanical half’s wait and the measurement’s cap', g19.code === 0 && /^\s+D19 extends D15/m.test(out19) && /^\s+D19 extends D8/m.test(out19) && (() => { const b = JSON.parse(docket(['governs', 'D19', '--json']).out).ruling.body; return /Violation:/.test(b) && /Clean:/.test(b) && /Stale:/.test(b) && /Number:/.test(b) && /Amend:/.test(b) && /two of the four scored runs/.test(b) && /two hundred and seventy seconds/.test(b) && /twelve turns per session/.test(b) && /no verdict of it counts \(D15\)/.test(b); })(), g19.out.slice(0, 300));
     ok('the section map names 12 diff, 13 vendor, 14 constitute', /^\/\/ 12  diff/m.test(read(CORE)) && /^\/\/ 13  vendor/m.test(read(CORE)) && /^\/\/ 14  constitute/m.test(read(CORE)), 'section map incomplete');
   }
 }
@@ -2423,7 +2426,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('stop: the host’s re-entry flag allows at once, even with a governed diff unjudged (D11: blocked at most once per turn)', r.code === 0 && r.out === '', r.out);
     r = stopIn({ session_id: 'x' }, ['--wait', '0']);
     const j = (() => { try { return JSON.parse(r.out); } catch (e) { return null; } })();
-    ok('stop: a governed diff with no verdict recorded is blocked in the shape the host reads, naming the file, the bound and the permission', r.code === 0 && j && j.decision === 'block' && /recorded no verdict for this stop’s diff \(test\/fixture\/app\.js\) within 0 seconds/.test(j.reason.replace(/'/g, '’')) && /allow Bash\(node \*docket\.js\*\) and stop again/.test(j.reason), r.out);
+    ok('stop: a governed diff with no verdict recorded is blocked in the shape the host reads, naming the file, the bound and the permission', r.code === 0 && j && j.decision === 'block' && /recorded no verdict for this stop’s diff \(test\/fixture\/app\.js\) within 0 seconds/.test(j.reason.replace(/'/g, '’')) && /the judge is not you\. Do not run the core yourself; stop again/.test(j.reason) && /allow Bash\(node \*docket\.js\*\) so it can/.test(j.reason), r.out);
     const H = docket(['gate', '--session', 'x'], { cwd: d }).out.split(' ')[1];
     docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'x'], { cwd: d });
     r = stopIn({ session_id: 'x' }, ['--wait', '0']);

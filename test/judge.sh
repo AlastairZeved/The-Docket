@@ -3,8 +3,8 @@
 #
 # Five headless runs, each on a fresh copy of the plugin and a fresh scratch copy of the fixture beside it, git
 # initialised and committed so that a stop has a diff to judge. What a run of this script measured, and what it does
-# not, is recorded in the ledger as a ruling of its own. This is a MEASUREMENT, not a gate: it prints counts and
-# exits 0 whatever they are; it exits 1 only when the measurement itself could not be taken.
+# not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT, not a gate: it prints counts
+# and exits 0 whatever they are; it exits 1 only when the measurement itself could not be taken.
 #
 #   (v) violation  the toolbar's removal — which R6 forbids — is PLANTED in the working tree before the session,
 #                  and the maker is asked for a harmless edit beside it, so the stop's diff carries the violation
