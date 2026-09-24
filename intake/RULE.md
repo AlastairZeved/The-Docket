@@ -55,6 +55,25 @@ Run
     docket append --title "<answer 1, as a phrase>" --issue "<answer 2>" --principle "<answer 3>" [--edge "<verb> <id>"]… --body "<answer 5>"
 
 and report its output as printed: the entry, any check failures, and the
-`check:` line. Do not restate the entry in other words. An addendum
-(`docket append --addendum <id> --text "…"`) and a baseline rewrite
-(`docket append --baseline`) follow the same path behind the same block.
+`check:` line. Do not restate the entry in other words. A baseline rewrite
+(`docket append --baseline`) follows the same path behind the same block; an
+addendum has a block of its own, below.
+
+## An addendum
+
+`/rule --addendum <id> "<why>"` — the route a STALE verdict gives — asks none
+of the five questions: the ruling stands, and what is added is one dated line
+under it saying why its reason no longer holds. Refused: an id that names no
+ruling (`docket governs <id>` says so), and a why that restates the ruling or
+names nothing the code or the product now does differently; the escalation
+above applies to it. Print the ruling's heading and, beneath it, the line
+exactly as `docket append --addendum` will write it — `> Addendum <today's
+date>: <why>` — under the heading `ADDENDUM — PLEASE CONFIRM`, and stop. The
+confirm is the block's own: the word `confirm`, from the person, in a turn of
+their own; nothing is written before it. On the word, run
+
+    docket append --addendum <id> --text "<why>"
+
+and report its output as printed. A route is not a confirmation: that a
+judge's block named this addendum makes it a proposal to put to the person,
+never one to write.

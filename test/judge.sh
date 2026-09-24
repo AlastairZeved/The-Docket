@@ -163,7 +163,7 @@ ran_append() { node -e '
     for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
       let o; try { o = JSON.parse(line); } catch (e) { continue; }
       const m = o.type === "assistant" ? o.message : null;
-      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "tool_use" && c.name === "Bash" && /docket\.js\s+append\s+(--title|--addendum|--baseline)\b/.test(String((c.input || {}).command || ""))) ran = true;   // a write attempt, not `append --help`
+      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "tool_use" && c.name === "Bash" && /docket\.js["\x27]?\s+append\s+(--title|--addendum|--baseline)\b/.test(String((c.input || {}).command || ""))) ran = true;   // a write attempt, not `append --help`, the path quoted or not
     }
     process.stdout.write(ran ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no; }
@@ -239,6 +239,8 @@ while [ "$i" -le "$RUNS" ]; do
     s_n=$((s_n + 1)); r7=$(has "$said" '\bR7\b'); route=$(has_line "$said" '\bR7\b' '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
     if [ "$word" = STALE ] && [ "$r7" = yes ] && [ "$route" = yes ] && [ "$bnamed" = yes ]; then s_pass=$((s_pass + 1)); fi
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %s\n' "$i" "$word" "$r7" "$route" "$bnamed"
+    ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ) && lw=no || lw=yes
+    printf '            the maker wrote to the ledger: %s (append ran: %s) — not scored; D8 says only the person confirms\n' "$lw" "$(ran_append "$WORK/s$i.jsonl")"
     quote "${said:-$blocks}"; trail "$proj"
   fi
   fi

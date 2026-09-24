@@ -506,7 +506,9 @@ marked this stop a re-entry and the mark is younger than the judge's timeout;
 its located failures have not fallen across the last two verdicts after the
 third block, with the residue printed beneath and the session marked surfaced;
 else `JUDGE <hash>
-<files…>`, and with `--diff` the text itself beneath. `docket verdict` records
+<files…>`, and with `--diff` the diff beneath, each touched function whole
+(`git diff HEAD --function-context` over the same files, then the untracked
+ones as above), which the hash does not read (D30). `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
 session's history; a changed hash never resets anything. A FAIL or STALE for a

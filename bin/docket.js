@@ -760,21 +760,30 @@ function reasonOf(r) {
   }
   return null;
 }
+// Several ids print several blocks, each as one id prints it, a blank line between (D30): a judge whose turns a host
+// caps reads every ruling the touched regions cite in one command.
 function governs(argv) {
-  const id = argv._[1];
-  if (!id) die('usage: docket governs <id>', 2);
+  const ids = argv._.slice(1);
+  if (!ids.length) die('usage: docket governs <id> [<id>…]', 2);
   const { root, ledger } = ledgerFromCwd(argv);
-  const res = resolveRuling(ledger, id);                                // an id is a name, and a name is read whatever its case, as query reads one
-  if (res.ambiguous) die('no ruling ' + id + ' in ' + rel(root, ledger.path) + '; ' + res.ambiguous.join(' and ') + ' differ only in case — name one exactly', 2);
-  let r = res.r;
-  if (!r) die('no ruling ' + id + ' in ' + rel(root, ledger.path), 2);
+  const rs = ids.map(id => {
+    const res = resolveRuling(ledger, id);                              // an id is a name, and a name is read whatever its case, as query reads one
+    if (res.ambiguous) die('no ruling ' + id + ' in ' + rel(root, ledger.path) + '; ' + res.ambiguous.join(' and ') + ' differ only in case — name one exactly', 2);
+    if (!res.r) die('no ruling ' + id + ' in ' + rel(root, ledger.path), 2);
+    return res.r;
+  });
   const ctx = loadContext(root);
-  const cites = codeCites(ctx, ledger).filter(c => c.id === r.id);
-  const ins = inEdges(ledger, r.id);
+  const all = codeCites(ctx, ledger);
   if (argv.json) {
-    out(JSON.stringify({ ruling: rulingJson(r), reason: reasonOf(r), outEdges: r.edges, inEdges: ins, addenda: r.addenda, cites: cites.map(c => ({ file: c.rel, line: c.line, text: c.text.trim() })) }, null, 2));
+    const objs = rs.map(r => { const cites = all.filter(c => c.id === r.id); return { ruling: rulingJson(r), reason: reasonOf(r), outEdges: r.edges, inEdges: inEdges(ledger, r.id), addenda: r.addenda, cites: cites.map(c => ({ file: c.rel, line: c.line, text: c.text.trim() })) }; });
+    out(JSON.stringify(objs.length === 1 ? objs[0] : objs, null, 2));
     return 0;
   }
+  out(rs.map(r => governsBlock(root, ledger, r, all.filter(c => c.id === r.id))).join('\n\n'));
+  return 0;
+}
+function governsBlock(root, ledger, r, cites) {
+  const ins = inEdges(ledger, r.id);
   const lines = [];                                                    // D3: an edge list, never a status
   lines.push(r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + rel(root, ledger.path) + ':' + r.line + ')');
   const why = reasonOf(r);
@@ -787,8 +796,7 @@ function governs(argv) {
   if (!r.addenda.length) lines.push('  none'); for (const a of r.addenda) lines.push('  ' + a.date + ': ' + a.text);
   lines.push('Code cites:');
   if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + c.text.trim().slice(0, 100));
-  out(lines.join('\n'));
-  return 0;
+  return lines.join('\n');
 }
 function principles(argv) {
   const { root, ledger } = ledgerFromCwd(argv);
@@ -1730,7 +1738,14 @@ function governedDiff(root) {
   let untrackedText = '';
   for (const f of untrackedRels) { untrackedText += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
   const text = diffText + untrackedText;
-  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text };
+  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, tracked: diffText ? trackedRels : [], untrackedText };
+}
+// The diff the judge reads: the hashed text with each touched function whole, so that a ruling's premise in the same
+// function is on the page and not a file read away; a host caps a judge's turns (D30). The hash never reads it.
+function wideDiff(root, d) {
+  if (!d.tracked.length) return d.text;
+  const w = sh('git', ['diff', 'HEAD', '--function-context', '--'].concat(d.tracked), root);
+  return w.status === 0 ? w.stdout + d.untrackedText : d.text;
 }
 function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
 // The residue a surfaced session reports: its blocks and the failures per verdict since the last PASS, and the last
@@ -1771,7 +1786,7 @@ function gate(argv) {
     return 0;
   }
   say('JUDGE');
-  if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(d.text); }
+  if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(wideDiff(root, d)); }
   return 0;
 }
 // A verdict is held to its lines (D23). Each is one located failure in the protocol's form — pack · F<n> · file:line ·
@@ -1953,9 +1968,9 @@ function pack(argv) {
     for (const r of rows) out(r.name + '  ' + r.domain);
     return 0;
   }
-  const name = argv._[1];
-  if (!/^[a-z][a-z0-9-]*$/.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
-  out(readText(besideMe('packs', name + '.md', 'pack'))); return 0;
+  const names = argv._.slice(1);                                      // several names, one command (D30)
+  for (const name of names) if (!/^[a-z][a-z0-9-]*$/.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
+  out(names.map(name => readText(besideMe('packs', name + '.md', 'pack'))).join('\n')); return 0;
 }
 // A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry
 // `message.content`, a list of blocks — `text`, and `tool_use` with a `name` and an `input`. Printed in order: the
@@ -2014,7 +2029,7 @@ const USAGE = [
   '  docket spec-check [--all]           token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
   '  docket index                        the whole parse as JSON',
   '  docket query <term>                 rulings whose heading or body match, with edges and addenda',
-  '  docket governs <id>                 edges in and out with their clauses, addenda, code cites',
+  '  docket governs <id> [<id>…]         edges in and out with their clauses, addenda, code cites',
   '  docket principles                   the principle list',
   '  docket append --title --issue --principle [--edge "<verb> <id>"]... --body   a new entry, checked',
   '  docket append --addendum <id> --text "..."   a dated addendum under an entry',
@@ -2028,7 +2043,7 @@ const USAGE = [
   '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
   '  docket stop [--wait <s>] [--permission "<rule>"]   stdin: the stop hook\'s input; blocks a governed stop no fresh verdict judged, or one a fresh FAIL or STALE judged (the host binds it beside the judge)',
   '  docket protocol                     print judge/PROTOCOL.md',
-  '  docket pack <name> | --list         print a pack, or the packs with their domains',
+  '  docket pack <name>… | --list        print packs, or the packs with their domains',
   '  docket transcript <path> [--last n] the assistant text and tool calls of a JSON-lines message log',
   '',
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',

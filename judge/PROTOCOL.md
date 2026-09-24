@@ -18,7 +18,7 @@ D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
 |---|---|
 | a working tree | the host's current directory |
 | the ledger and the spec documents | discovery, `docs/FORMAT.md` (1) |
-| the packs | `docket pack --list`, then `docket pack <name>`: the files beside the core, printed, because the judge reads nothing outside the project |
+| the packs | `docket pack --list`, then `docket pack <name> <name> …`: the files beside the core, printed, because the judge reads nothing outside the project |
 | the diff since the last PASS, and the files it touches | `docket gate --session <id> --diff` |
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
@@ -75,6 +75,12 @@ redirection — a host permits that shape and no other.
 
 ## The seven steps, in order, and the order is the point
 
+A host may stop a judge after a fixed number of turns, and every command and
+every file read is one; a judge stopped before step 6 has judged nothing. So
+the commands print what a judgement needs: the diff `gate` prints shows each
+touched function whole, and `pack` and `governs` each take every name at once.
+Read a file only for what they leave out (D30).
+
 1. **`docket gate --session <id> --diff`** — after one look at the host's re-entry flag:
    a stop already blocked once in this turn is allowed before anything else.
    `SKIP` → allow the stop at once (D10).
@@ -84,7 +90,8 @@ redirection — a host permits that shape and no other.
    `JUDGE <hash> <files…>` → continue with those files; keep the hash for step 6.
    The diff follows that line, and it is the diff every step below reads.
 2. **Domains and packs.** From the files, determine the domains touched and read
-   the matching packs (D12; each pack's own `Domain` line gives its globs). A
+   the matching packs in one command, `docket pack <name> <name> …` (D12; each
+   pack's own `Domain` line gives its globs). A
    change to the ledger always adds `packs/decisions.md`. A pack scores only the
    governed files in the diff.
 3. **Score every pack feature against the diff and the repository before
@@ -92,9 +99,9 @@ redirection — a host permits that shape and no other.
    reading; record PASS or FAIL with `file:line`, the ruling id where one
    applies, and the feature id. Reason: reading the maker's account first is
    checking homework with the answer key.
-4. **`docket governs <id>`** for every ruling cited in the touched regions (the
-   ids `near` would have printed for each hunk); it prints the ruling's
-   `Reason:` sentence beneath its heading, then its edges. Check the diff against each
+4. **`docket governs <id> <id> …`**, once, with every ruling cited in the touched
+   regions (the ids `near` would have printed for each hunk); for each it prints
+   the ruling's `Reason:` sentence beneath its heading, then its edges. Check the diff against each
    ruling's clauses and against every in-edge's clause: a later ruling may have
    superseded the clause the diff breaks, or waived it for this case. For each
    ruling the diff contradicts, read its `Reason:` sentence and ask one more

@@ -335,6 +335,14 @@ const SEC = String.fromCharCode(0xa7);
   ok('governs R4 renders a populated out-edge list: the header with no issue, then the edge with its clause text, and an empty in-edge section', g4.code === 0 && /^R4  Fold similarity: shape held, size uniform  \(test\/fixture\/DECISIONS\.md:\d+\)\nReason: a fold that admits by size splits when a [^\n]*\nOut-edges \(what R4 does to earlier rulings\):\n  R4 supersedes R3  — "supersedes R3"\nIn-edges \(what later rulings do to R4\):\n  none\n/.test(g4.out), g4.out);
   const g2 = docket(['governs', 'R3'], { cwd: FIX });
   ok('governs excludes ledger documents from code cites', !/history\//.test(g2.out) && /test\/fixture\/app\.js:95/.test(g2.out), g2.out);
+  {
+    const one = [docket(['governs', 'R6'], { cwd: FIX }).out, docket(['governs', 'R3'], { cwd: FIX }).out], both = docket(['governs', 'R6', 'R3'], { cwd: FIX });
+    ok('governs takes several ids and prints each block as one id prints it, a blank line between, in the order given (D30)', both.code === 0 && both.out === one[0].replace(/\n$/, '') + '\n\n' + one[1], both.out.slice(0, 200));
+    const bj = JSON.parse(docket(['governs', 'R6', 'R3', '--json'], { cwd: FIX }).out);
+    ok('…and with --json, an array of the objects one id gives, in order', Array.isArray(bj) && bj.length === 2 && bj[0].ruling.id === 'R6' && bj[1].ruling.id === 'R3', JSON.stringify(bj).slice(0, 200));
+    const bu = docket(['governs', 'R6', 'R99'], { cwd: FIX });
+    ok('…and an unknown id among them refuses the whole, exit 2, printing none', bu.code === 2 && bu.out === '' && /no ruling R99 in test\/fixture\/DECISIONS\.md/.test(bu.err), bu.out + bu.err);
+  }
   const g99 = docket(['governs', 'R99'], { cwd: FIX });
   ok('governs of an unknown id names the ledger and exits 2', g99.code === 2 && /no ruling R99 in test\/fixture\/DECISIONS\.md/.test(g99.err), g99.err);
   const gR2 = docket(['governs', 'R2'], { cwd: FIX });
@@ -1038,7 +1046,7 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['query'], { cwd: FIX });
   ok('query without a term is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket query <term>', r.err);
   r = docket(['governs'], { cwd: FIX });
-  ok('governs without an id is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket governs <id>', r.err);
+  ok('governs without an id is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket governs <id> [<id>…]', r.err);
   const rq = tempRepo(), rqCwd = path.join(rq, 'test', 'fixture');
   r = docket(['append', '--issue', '1', '--principle', 'Capture precedes structure', '--body', 'x. Reason: r.'], { cwd: rqCwd });
   ok('append without --title is refused, exit 2', r.code === 2 && /^append: --title is required/.test(r.err), r.err);
@@ -2318,6 +2326,8 @@ const SEC = String.fromCharCode(0xa7);
     const permissive = [/(proceed|continue|go ahead|treat|take|read)\w* (it )?(as|on|after|when|if) (silence|silent|no (answer|reply|response)|a pause|time)/i, /model (may|can|is allowed to|should) confirm/i, /confirm(ed|s|ation)? (on|after|by) (silence|a pause|no reply|timeout)/i, /(assume|imply|infer)\w* (confirmation|consent|approval)/i];
     for (const [i, re] of permissive.entries()) ok('neither intake carries a permissive phrasing (' + (i + 1) + ' of ' + permissive.length + ', a list, not the unbounded property): ' + re.source.slice(0, 60), !re.test(RULE) && !re.test(CONST), (RULE + CONST).match(re));
     ok('RULE.md asks the five questions in order and escalates per D18: one clarification, one checklist, no third', /^1\. \*\*What changed\*\*/m.test(RULE) && /^5\. \*\*The ruling, in prose, with its reason\*\*/m.test(RULE) && /^## Escalation \(D18\)/m.test(RULE) && /exactly one clarification/.test(RULE) && /restated as a checklist/.test(RULE) && /There is no\nthird attempt/.test(RULE), 'a question or an escalation step is missing');
+    ok('RULE.md takes an addendum — the route a STALE verdict gives — behind a block of its own that only the person answers, and says a route is not a confirmation (D31)', /^## An addendum$/m.test(RULE) && /`ADDENDUM — PLEASE CONFIRM`/.test(RULE) && /nothing is written before it/.test(RULE) && /^    docket append --addendum <id> --text "<why>"$/m.test(RULE) && /A route is not a confirmation/.test(RULE), 'the addendum block is missing');
+    ok('skills/rule passes its arguments to the intake: none for a ruling, --addendum <id> "<why>" for an addendum (D31)', /The arguments given: `\$ARGUMENTS`/.test(read(path.join(ROOT, 'skills', 'rule', 'SKILL.md'))) && /`--addendum <id> "<why>"`: an addendum/.test(read(path.join(ROOT, 'skills', 'rule', 'SKILL.md'))), 'the skill ignores its arguments');
     ok('RULE.md sends the reader to docket query for the rulings the change touches, and to docket append on confirmation', /docket query <the nouns of the answer>/.test(RULE) && /^    docket append --title/m.test(RULE), 'query or append not named');
     ok('CONSTITUTE.md asks the four gated questions with their refusals, and offers no default feeling', /^1\. \*\*What is this\?\*\*/m.test(CONST) && /^2\. \*\*Who is it for\?\*\*/m.test(CONST) && /^3\. \*\*What feeling must survive every iteration\?\*\*/m.test(CONST) && /^4\. \*\*What will it refuse to do\?\*\*/m.test(CONST) && /No default\n\s*is offered/.test(CONST) && /"general\n\s*audience", "everyone"/.test(CONST), 'a question, a refusal or the no-default sentence is missing');
     ok('CONSTITUTE.md refuses a category for the first answer and a feature for the third, with the examples a reader can match', /Refused: a category \("a productivity app", "a tool for notes"\), a list of\n\s*features, more than one sentence\./.test(CONST) && /feature \("fast sync", "dark mode" — a feature is something the thing does;/.test(CONST) && /Refused: fewer than three, a repeat, a refusal that is a feature in/.test(CONST), 'a semantic refusal is missing');
@@ -2328,7 +2338,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('neither "On confirmation" section releases the write on time or silence, in any wording of the list', !/within a minute|no reply|after a (pause|wait|minute)|if (silent|nothing)|time(s|out)? (out|passes)/i.test((block || '') + (cblock || '')), 'a time release');
     ok('CONSTITUTE.md’s own escalation says the three steps, not only that it cites D18', /^## Escalation \(D18\)/m.test(CONST) && /exactly one clarification/.test(CONST) && /restated as a checklist/.test(CONST) && /There\s+is no third attempt/.test(CONST), 'an escalation step is missing from CONSTITUTE.md');
     ok('RULE.md’s questions 2–4 each carry their refusal rule', /^2\. \*\*The issue or context\*\*[\s\S]*?Refused: "cleanup", "misc", "various"\./m.test(RULE) && /^3\. \*\*The principle\*\*[\s\S]*?Refused: a principle not on\s+the list, or none\./m.test(RULE) && /^4\. \*\*Every ruling it touches, with a verb\*\*[\s\S]*?Refused: a ruling the query surfaced that the answer neither\s+names\s+nor dismisses with a reason\./m.test(RULE), 'a refusal rule is missing');
-    ok('RULE.md sends an addendum and a baseline rewrite through the same block', /docket append --addendum <id> --text/.test(RULE) && /docket append --baseline/.test(RULE) && /follow the same path behind the same block\./.test(RULE), 'the sentence is missing');
+    ok('RULE.md sends a baseline rewrite through the entry’s block, and an addendum through a block of its own', /docket append --addendum <id> --text/.test(RULE) && /docket append --baseline/.test(RULE) && /follows the same path behind the same block; an\s+addendum has a block of its own, below\./.test(RULE), 'the sentence is missing');
     const keys = ['"name"', '"what"', '"who"', '"role"', '"knows"', '"doesntKnow"', '"feeling"', '"refuses"', '"prefix"'];
     ok('CONSTITUTE.md gives the JSON shape with every key constitute reads: ' + keys.join(' '), keys.every(k => CONST.includes(k)) && /docket constitute --answers <that file>/.test(CONST), keys.filter(k => !CONST.includes(k)).join(','));
     const core = read(CORE);
@@ -2356,7 +2366,7 @@ const SEC = String.fromCharCode(0xa7);
     const gj = JSON.parse(docket(['governs', 'D18', '--json']).out);
     ok('D18’s body states the escalation and the confirm rule the intakes follow', /one clarification/.test(gj.ruling.body) && /restated as a checklist/.test(gj.ruling.body) && /no third attempt/.test(gj.ruling.body) && /Silence is not confirmation/.test(gj.ruling.body) && /\bReason: /.test(gj.ruling.body), gj.ruling.body.slice(0, 300));
     ok('USAGE lists the three subcommands', ['docket diff <revA> <revB>', 'docket diff --files <a> <b>', 'docket vendor <dir>', 'docket constitute --answers <json>'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
-    ok('USAGE lists gate, verdict, protocol, pack and transcript', ['docket gate --session <id> [--diff]', 'docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]', 'docket protocol', 'docket pack <name> | --list', 'docket transcript <path> [--last n]'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
+    ok('USAGE lists gate, verdict, protocol, pack and transcript', ['docket gate --session <id> [--diff]', 'docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]', 'docket protocol', 'docket pack <name>… | --list', 'docket transcript <path> [--last n]'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
     const g19 = docket(['governs', 'D19']);
     const out19 = (g19.out.match(/^Out-edges[^\n]*\n([\s\S]*?)(?=^In-edges)/m) || [])[1] || '';
     ok('D19 is in the ledger, extends D15 and D8 (in the Out-edges section), and records the five scenarios, the stale rate, the mechanical half’s wait and the measurement’s cap', g19.code === 0 && /^\s+D19 extends D15/m.test(out19) && /^\s+D19 extends D8/m.test(out19) && (() => { const b = JSON.parse(docket(['governs', 'D19', '--json']).out).ruling.body; return /Violation:/.test(b) && /Clean:/.test(b) && /Stale:/.test(b) && /Number:/.test(b) && /Amend:/.test(b) && /two of the four scored runs/.test(b) && /two hundred and seventy seconds/.test(b) && /twelve turns per session/.test(b) && /no verdict of it counts \(D15\)/.test(b); })(), g19.out.slice(0, 300));
@@ -2384,6 +2394,11 @@ const SEC = String.fromCharCode(0xa7);
     const hash = g.out.split(' ')[1];
     g = docket(['gate', '--session', 's1', '--diff'], { cwd: d });
     ok('gate --diff prints the diff it hashed beneath the JUDGE line, as git prints it', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\ndiff --git a\/test\/fixture\/app\.js b\/test\/fixture\/app\.js\n/.test(g.out) && /^\+const later = 1; \/\/ R2$/m.test(g.out), g.out.slice(0, 300));
+    { const w = tempRepo(); const f = path.join(w, 'test', 'fixture', 'app.js');
+      fs.writeFileSync(f, read(f).replace('  return line;\n}', '  return line; // reviewed\n}'));
+      const gw = docket(['gate', '--session', 'w', '--diff'], { cwd: w }), gp = docket(['gate', '--session', 'w'], { cwd: w });
+      ok('gate --diff shows the touched function whole — its first line, far above the change, is printed — and the hash is the one gate prints without it (D30)', /^ function relate\(a, b\) \{$/m.test(gw.out) && /^\+  return line; \/\/ reviewed$/m.test(gw.out) && gw.out.split('\n')[0] === gp.out.trim(), gw.out.slice(0, 400));
+      fs.rmSync(w, { recursive: true, force: true }); }
     const gj = JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out);
     ok('gate --json carries the decision, the session, the hash and the files', gj.decision === 'JUDGE' && gj.session === 's1' && gj.hash === hash && gj.files.join() === 'test/fixture/app.js', JSON.stringify(gj));
     let v = docket(['verdict', 'FAIL', '--hash', hash, '--failures', '3', '--session', 's1', '--reason', held(3)], { cwd: d });
@@ -2750,6 +2765,8 @@ const SEC = String.fromCharCode(0xa7);
     r = docket(['pack', '--list']);
     ok('docket pack --list names the four packs with their Domain lines, in name order', r.code === 0 && /^code  everything that is not a spec document/m.test(r.out) && /^decisions  the ledger/m.test(r.out) && /^design  `\*\.css`, `\*\.html`, `UIUX\.md`, `PRD\.md`$/m.test(r.out) && /^prose  `\*\.md` except a ledger/m.test(r.out) && r.out.split('\n').filter(Boolean).length === 4, r.out);
     for (const n of ['code', 'design', 'prose', 'decisions']) { const p = docket(['pack', n]); ok('docket pack ' + n + ' prints packs/' + n + '.md, byte for byte', p.code === 0 && p.out === read(path.join(ROOT, 'packs', n + '.md')), p.code + ' ' + p.err); }
+    { const pc = docket(['pack', 'code', 'decisions']);
+      ok('docket pack takes several names and prints each file byte for byte, one after another, in the order given (D30)', pc.code === 0 && pc.out === read(path.join(ROOT, 'packs', 'code.md')) + '\n' + read(path.join(ROOT, 'packs', 'decisions.md')), pc.code + ' ' + pc.err); }
     r = docket(['pack', '../judge/PROTOCOL']);
     ok('pack refuses a name that is not a plain pack name, exit 2', r.code === 2 && /a pack is named by its file/.test(r.err), r.code + ' ' + r.err);
     r = docket(['pack', 'nosuch']);
@@ -2796,6 +2813,7 @@ const SEC = String.fromCharCode(0xa7);
     // A binding is a few lines that point at a core file (D13, D20). The rules the judge follows — the four cases, the
     // never-record rule, the command shape — are the protocol's, printed by the core; the prompt names the core and
     // the two things only the host knows: the hook input, and what a missing breadcrumb means.
+    ok('the Stop prompt tells the judge the host’s cap, the one fact of its budget only the host knows (D30)', /The host stops you at fifty messages, about two per tool call\./.test(JSON.parse(read(path.join(ROOT, 'hooks', 'hooks.json'))).hooks.Stop[0].hooks[0].prompt), 'the prompt is silent on the cap');
     ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, the first command in the one shape the permission matches, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /Run `node <that path> protocol` with the path written out/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && /with your file tool/.test(pr) && /no \$\( \), no variable, no cd or other prefix: your one permission matches that shape alone/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
     ok('…and says what a denied command means — one of the shape the permission matches, not any command the judge tried: the stop does not stand, and the reason is the one line the mechanical half also gives (D25)', /If a command of that shape is denied, the stop does not stand/.test(pr) && /the judge could not run the core/.test(pr), pr);
     // the core's trail (D25): off by default, one line per run where a .docket/ exists, never where none does
@@ -2977,6 +2995,17 @@ const SEC = String.fromCharCode(0xa7);
         GOOD_R);
       ok('judge.sh reads the stale case’s route on R7’s own line: an addendum route on another ruling’s line is not a pass', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
       ok('…and the number case’s route on R5’s own line: a supersede route on another ruling’s line is not a pass', /\(n\) number     0 of 1/.test(r.stdout) && /the supersede route: no /.test(r.stdout), r.stdout);
+    }
+    // the stale case's maker that writes the addendum itself, the core's path quoted: printed, not scored (D8, D31)
+    {
+      const WROTE = 'printf "%s\\n" "> Addendum 2026-09-24: relations are marks now" >> DECISIONS.md; ' + say([turnText('Reviewed.'), blockTurn(STALE7), toolTurn('Bash', { command: 'node "/p/bin/docket.js" append --addendum R7 --text "relations are marks now"' }), result()], { verdict: 'STALE', reason: STALE7 });
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        WROTE,
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        GOOD_R);
+      ok('judge.sh prints, for the stale case, that the maker wrote to the ledger and that its append ran with the core’s path quoted, and scores the judge alone', /the maker wrote to the ledger: yes \(append ran: yes\)/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout), r.stdout);
     }
     // a host that never ran the judge anywhere: nothing judged, nothing met
     r = runJudge(say([turnText('Reviewed.'), result()]), say([turnText('Renamed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Nothing.'), result()]));

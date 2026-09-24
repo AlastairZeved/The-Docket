@@ -63,6 +63,12 @@ as `DOCKET_PLUGIN_ROOT`, and `stop` is given the permission's spelling with
 `--permission`, so the core names neither the host's variable nor its rule
 syntax (D13, D20).
 
+A host may also cap the subagent's turns. The host bound here stops an agent
+hook at its fiftieth turn, counting every message the agent writes — about two
+for each tool call — and a judge stopped there records nothing, so the stop
+falls to the mechanical half's bound. The protocol's commands print what a
+judgement needs in few calls (D30).
+
 ## What a binding may contain
 
 A hook declaration per call, an agent declaration for the judge that points at
