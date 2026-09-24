@@ -448,6 +448,9 @@ function loadContext(root, opts) {
   let files = trackedFiles(root);
   if (files === null) files = walkFiles(root, [], root);
   if (opts.includeUntracked) files = files.concat(untrackedFiles(root));
+  // The judge's own state is never a governed file, whatever the project's .gitignore says: its verdicts and its trail
+  // name rulings, and read as governed they would move the diff the judge is judging with every command it runs (D26).
+  files = files.filter(f => !rel(root, f).split(path.sep).includes('.docket'));
   const ledgers = new Map();
   const entries = [];
   const vendored = [];
@@ -1655,7 +1658,7 @@ function sessionId(argv) {
 function headGoverned(root, have) {
   const ch = sh('git', ['diff', 'HEAD', '--relative', '--name-only', '-z'], root);
   if (ch.status !== 0) return [];
-  const cand = ch.stdout.split('\0').filter(p => p && !have.has(p));
+  const cand = ch.stdout.split('\0').filter(p => p && !have.has(p) && !p.split('/').includes('.docket'));
   if (!cand.length) return [];
   const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], root);
   const atHead = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);

@@ -2486,6 +2486,15 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate', '--session', 'g'], { cwd: dg5 });
     ok('gate: a change to the ledger alone → JUDGE naming the ledger', /^JUDGE [0-9a-f]{64} test\/fixture\/DECISIONS\.md\n$/.test(g.out), g.out);
     for (const x of [dg1, dg2, dg3, dg4, dg5]) fs.rmSync(x, { recursive: true, force: true });
+    // the judge's own state is never in the diff, even in a project that does not ignore it (D26)
+    const dk = tmpDir('dotdocket-'); fs.cpSync(FIX, dk, { recursive: true });
+    git(dk, ['init', '-q', '-b', 'main']); git(dk, ['add', '-A']); git(dk, ['commit', '-qm', 'fixture']);
+    fs.appendFileSync(path.join(dk, 'app.js'), 'const k = 1; // R2\n');
+    const before = docket(['gate', '--session', 'k'], { cwd: dk, env: { CLAUDE_PROJECT_DIR: '' } }).out;
+    fs.mkdirSync(path.join(dk, '.docket')); fs.writeFileSync(path.join(dk, '.docket', 'verdicts.jsonl'), '{"verdict":"FAIL","reason":"code · F3 · app.js:1 · R2 x · reason holds · y"}\n'); fs.writeFileSync(path.join(dk, '.docket', 'trail.log'), '2026-09-24T00:00:00.000Z governs R5\n');
+    g = docket(['gate', '--session', 'k'], { cwd: dk, env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('gate: the judge’s own .docket/ is never a governed file, even where the project does not ignore it — its verdicts and trail name rulings, and the hash stays the diff’s (D26)', /^JUDGE [0-9a-f]{64} app\.js\n$/.test(g.out) && g.out === before, before + ' | ' + g.out);
+    fs.rmSync(dk, { recursive: true, force: true });
     // a project with no ledger: nothing is governed, so the gate skips and no state is written
     const nl = tmpDir('nolegder-'); fs.writeFileSync(path.join(nl, 'a.js'), 'x();\n'); git(nl, ['init', '-q', '-b', 'main']); git(nl, ['add', '-A']); git(nl, ['commit', '-qm', 'x']);
     fs.appendFileSync(path.join(nl, 'a.js'), 'y();\n');
@@ -2675,7 +2684,7 @@ const SEC = String.fromCharCode(0xa7);
     // A binding is a few lines that point at a core file (D13, D20). The rules the judge follows — the four cases, the
     // never-record rule, the command shape — are the protocol's, printed by the core; the prompt names the core and
     // the two things only the host knows: the hook input, and what a missing breadcrumb means.
-    ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, `node <core> protocol`, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /node <core> protocol/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && /with your file tool/.test(pr) && /no \$\( \), no variable, no cd or other prefix: your one permission matches that shape alone/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
+    ok('the Stop prompt is a few lines that point at the core: under 900 characters, naming .docket/core, the first command in the one shape the permission matches, the hook input placeholder, and the two missing-breadcrumb cases, and carrying none of the protocol’s own rules', pr.length < 900 && /\.docket\/core/.test(pr) && /Run `node <that path> protocol` with the path written out/.test(pr) && /\$ARGUMENTS/.test(pr) && /no DECISIONS\.md anywhere under the project the stop stands/.test(pr) && /the session did not start with the plugin loaded/.test(pr) && /with your file tool/.test(pr) && /no \$\( \), no variable, no cd or other prefix: your one permission matches that shape alone/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr.length + ': ' + pr.slice(0, 200));
     ok('…and says what a denied command means — one of the shape the permission matches, not any command the judge tried: the stop does not stand, and the reason is the one line the mechanical half also gives (D25)', /If a command of that shape is denied, the stop does not stand/.test(pr) && /the judge could not run the core/.test(pr), pr);
     // the core's trail (D25): off by default, one line per run where a .docket/ exists, never where none does
     {
