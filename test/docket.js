@@ -2624,6 +2624,29 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(d, { recursive: true, force: true });
   }
 
+  // ── one root for the stop's two halves (D28): a session started below the repository's root ──
+  {
+    const r0 = tmpDir('nested-'), pd = path.join(r0, 'proj');
+    fs.mkdirSync(pd);
+    fs.writeFileSync(path.join(pd, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. One ruling\nPrinciple: One.\nReason: r.\n');
+    fs.writeFileSync(path.join(pd, 'a.js'), 'x(); // R1\n');
+    sh('git', ['init', '-q', '-b', 'main'], r0);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], r0);
+    sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'n'], r0);
+    fs.appendFileSync(path.join(pd, 'a.js'), 'y(); // R1\n');
+    const judge = (args) => docket(args, { cwd: pd, env: { CLAUDE_PROJECT_DIR: '' } });                    // the judge's shell: no project directory
+    const hook = (args, input) => docket(args, { cwd: pd, input, env: { CLAUDE_PROJECT_DIR: pd } });      // a command hook: the subdirectory named
+    const gj = JSON.parse(judge(['gate', '--session', 'n', '--json']).out);
+    const gh = JSON.parse(hook(['gate', '--session', 'n', '--json']).out);
+    ok('gate below the repository’s root names one diff whether or not the host names the subdirectory as the project (D28)', gj.decision === 'JUDGE' && gh.decision === 'JUDGE' && gj.hash === gh.hash && gj.files.join() === 'proj/a.js' && gh.files.join() === 'proj/a.js', JSON.stringify([gj, gh]));
+    judge(['verdict', 'PASS', '--hash', gj.hash, '--failures', '0', '--session', 'n']);
+    const s = hook(['stop', '--wait', '0'], JSON.stringify({ session_id: 'n' }));
+    ok('…and stop, run as the host runs a command hook, reads the PASS the judge recorded without the variable: one state for both halves', s.code === 0 && s.out === '', s.out);
+    ok('…a state kept once, under the repository’s root', fs.existsSync(path.join(r0, '.docket', 'verdict.json')) && !fs.existsSync(path.join(pd, '.docket', 'verdict.json')), 'two states');
+    ok('…and status in the subdirectory reports that verdict', /^Last verdict: PASS at /m.test(hook(['status']).out), hook(['status']).out);
+    fs.rmSync(r0, { recursive: true, force: true });
+  }
+
   // ── stop: the mechanical half, scripted — refuses a governed stop no fresh verdict judged, and nothing else ──
   {
     const d = tempRepo();

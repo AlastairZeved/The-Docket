@@ -128,6 +128,16 @@ function enumerationRoot(cwd) {
   const lp = findLedger(path.join(cwd, 'x'), path.parse(path.resolve(cwd)).root);
   return lp ? ledgerHome(lp) : path.resolve(cwd);
 }
+// The root the stop's commands share — gate, verdict and stop, and the state, log and trail under its .docket/ (D28):
+// the git root of `cwd` whatever project directory the host names, since the host names one to its command hooks and
+// none to the judge's shell, and the stop's two halves must read one state. Outside a repository, the enumeration root
+// without the host's variable.
+function stopRoot(cwd) {
+  const g = gitRoot(cwd);
+  if (g) return g;
+  const lp = findLedger(path.join(cwd, 'x'), path.parse(path.resolve(cwd)).root);
+  return lp ? ledgerHome(lp) : path.resolve(cwd);
+}
 
 // The nearest DECISIONS.md or docs/DECISIONS.md walking up from `filePath`'s
 // directory to `root` inclusive; null when there is none (the file is ungoverned).
@@ -1313,7 +1323,7 @@ function status(argv) {
   const cited = new Set(codeCites(ctx, ledger).map(c => c.id));
   const uncited = ledger.rulings.filter(r => !cited.has(r.id)).map(r => r.id);
   const pend = pendingAddenda(ledger);
-  const st = loadState(root);
+  const st = loadState(stopRoot(cwd));                                 // the verdict the stop's commands keep (D28)
   const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show; a verdict naming a session the file never recorded is not surfaced
   const check_ = runCheck(root, { ctx });
   const spec_ = runSpecCheck(root, ctx, lp);
@@ -1741,7 +1751,7 @@ function reentryMarked(sess, hash) {
   return !!(m && typeof m === 'object' && m.hash === hash && Date.now() - Date.parse(m.at) < STOP_WAIT * 1000);   // younger than the judge's timeout (D22)
 }
 function gate(argv) {
-  const root = enumerationRoot(process.cwd());
+  const root = stopRoot(process.cwd());                               // D28
   const id = sessionId(argv);
   const st = loadState(root);
   const d = governedDiff(root);
@@ -1818,7 +1828,7 @@ function holdToLines(root, v, failures, lines) {
 function verdict(argv) {
   const v = (argv._[1] || '').toUpperCase();
   if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> [--session <id>] [--reason "<the located failures>"]', 2);
-  const root = enumerationRoot(process.cwd());
+  const root = stopRoot(process.cwd());                               // D28
   const id = sessionId(argv);
   const failures = Number(flag(argv, '--failures') || 0);
   if (!Number.isInteger(failures) || failures < 0) die('verdict: --failures must be a non-negative integer', 2);
@@ -1867,7 +1877,7 @@ function stop(argv) {
   const waitRaw = flag(argv, '--wait');
   const waitS = waitRaw === null ? STOP_WAIT : Number(waitRaw);
   if (!(Number.isInteger(waitS) && waitS >= 0)) die('stop: --wait takes a whole number of seconds', 2);
-  const root = enumerationRoot(process.cwd());
+  const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
   const id = flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default';
   const d = governedDiff(root);
   const st0 = loadState(root);
@@ -2084,7 +2094,7 @@ function witness(argv) {
 function leaveTrail() {
   if (!process.env.DOCKET_TRAIL) return;
   try {
-    const d = path.join(enumerationRoot(process.cwd()), '.docket');
+    const d = path.join(stopRoot(process.cwd()), '.docket');         // with the state it measures (D28)
     if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
   } catch (e) { /* the trail is the measurement's; the command runs whatever it does */ }
 }

@@ -23,7 +23,9 @@ agent that is about to edit:
 `tool_name` is `Edit` or `Write`; for `Write`, `tool_input` carries `file_path`
 and `content`. `near` prints the governed list (D2, D7) or nothing; it never
 denies (D1). Set `CLAUDE_PROJECT_DIR` to the project root if the host knows it;
-else the core uses the git root.
+else the core uses the git root. The stop's commands — `gate`, `verdict` and
+`stop` — use the git root either way, so the judge and the stop's mechanical half
+read one state whichever of them the host tells the project directory (D28).
 
 **2. At session start** — show `docket status` to the agent:
 

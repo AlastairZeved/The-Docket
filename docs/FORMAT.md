@@ -27,6 +27,15 @@ declares that subtree ungoverned — none of the seven checks runs on its files 
 and `check` says so with an info line. A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
+The stop's commands take one root whatever the variable says: `gate`, `verdict`
+and `stop`, and the state, verdict log and trail they keep under `.docket/`,
+root at the git root of the working directory, else, outside a repository, as
+above without the variable. The host names a project directory to its command
+hooks and none to the judge's shell, so a root read from the variable would give
+the stop's two halves two states in a session started below the repository's
+root (D28). The core's breadcrumb, `.docket/core`, stays in the project
+directory, where the judge is told to look.
+
 The **spec documents** `UIUX.md` and `PRD.md` are looked for in the ledger's own
 directory and nowhere else. The first section of `PRD.md` (the spec heading
 numbered 1) is where a project's principles live; a ledger with no `PRD.md`
@@ -512,7 +521,7 @@ repository before or after the diff — a range or several will do (D27); STALE 
 refused unless every line is a stale one and FAIL when every line is; a PASS
 carries no reason (D23).
 
-The state lives in `.docket/verdict.json` under the root: `last` (verdict, hash,
+The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
 failures, time, session, the reason it was recorded with, and `counted: false`
 on a verdict not counted), `lastPassHash`,
 and `sessions`, one entry per identifier with `blocks`, `history`, `surfaced` and,
