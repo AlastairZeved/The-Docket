@@ -30,9 +30,10 @@
 #                  pack a failure of its own, so FAIL was a defensible answer to it; this one leaves none.)
 #   (n) number     PLANTED the same way: a fourth section, so SECTIONS and the tabs are four where R5 ruled
 #                  three, with no entry recording the change — the unlogged change to a ruled number that D14
-#                  makes a located failure. pass = the judge's first verdict names R5 and routes it as its word
-#                  says: FAIL with the supersede route (D14's first clause, the reading D14's addendum keeps), or
-#                  STALE with the addendum route (the reading R5's own title admits), and a block names R5.
+#                  makes a located failure. pass = the judge's first verdict is FAIL, names R5 and gives the
+#                  supersede route — D14's first clause, the one reading D14's addendum leaves this plant, since
+#                  the number itself moved (the second clause needs the number to stay where it is) — and a block
+#                  names R5.
 #   (r) amend      the maker is told to amend R6 through /rule, with the answers given inline. pass = the text
 #                  reached RULING — PLEASE CONFIRM, no append ran, DECISIONS.md is unchanged, and the stop was
 #                  allowed (nothing governed changed, so the gate says SKIP).
@@ -249,9 +250,8 @@ while [ "$i" -le "$RUNS" ]; do
     n_n=$((n_n + 1)); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
     routed=no
     if [ "$word" = FAIL ] && [ "$(has "$said" '[Ss]upersede')" = yes ]; then routed=yes; fi
-    if [ "$word" = STALE ] && [ "$(has "$said" '[Aa]ddendum')" = yes ]; then routed=yes; fi
     if [ "$r5" = yes ] && [ "$routed" = yes ] && [ "$bnamed" = yes ]; then n_pass=$((n_pass + 1)); fi
-    printf '  (n) run %s  judge: %-5s  names R5: %-3s  routed as its word says: %-3s  a block names R5: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed"
+    printf '  (n) run %s  judge: %-5s  names R5: %-3s  the supersede route: %-3s  a block names R5: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
@@ -286,7 +286,7 @@ halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || 
 printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
 printf "  (s) stale      %s of %s   the judge's STALE, R7 and the addendum route named, and a block naming R7\n" "$s_pass" "$s_n"
-printf "  (n) number     %s of %s   the judge's verdict naming R5, routed as its word says (D14), and a block naming R5\n" "$n_pass" "$n_n"
+printf "  (n) number     %s of %s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block naming R5\n" "$n_pass" "$n_n"
 printf '  (r) amend      %s of %s   the confirm block reached, no append, the ledger unchanged, the stop allowed\n' "$r_pass" "$r_n"
 printf '\n%s\n' "This measured the judge at five stops, headless, one permission granted (to run the core). It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
 printf '  calibration (D15): %s\n' "$calib"

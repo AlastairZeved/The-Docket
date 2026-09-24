@@ -138,7 +138,10 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    STALE is the verdict only when every failure is a stale one. A stale
    contradiction is never itself the FAIL (D7): it keeps its addendum route
    whatever the verdict, and the verdict is FAIL for the other failures.
-   Record it: `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id> --reason "<the located failures, one per line>"`.
+   Record it: `docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> --session <id> --reason '<the located failures, one per line>'`.
+   The lines go in that one argument, inside single quotes, one line per line: the
+   shell runs the core and nothing else, so no file, heredoc or variable can carry
+   them, and a route's own double quotes sit inside the single ones as they are.
    `--failures` is the number of those lines, and the verdict follows from them:
    STALE when every line says `reason gone` or `cite stale`, FAIL when any does
    not. The core refuses a record that disagrees with its own lines, a line not in

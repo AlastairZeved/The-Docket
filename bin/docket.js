@@ -58,7 +58,11 @@ const INVALID_ROLES = ['general audience', 'everyone', 'anyone', 'non-technical'
 function out(s) { const t = plain(s); process.stdout.write(t.endsWith('\n') ? t : t + '\n'); }
 // A reader that stops reading (`docket check | head -1`) is not a failure of the ledger: end quietly, exit 0.
 process.stdout.on('error', e => { if (e && e.code === 'EPIPE') process.exit(0); throw e; });
-function die(msg, code) { process.stderr.write(plain(msg) + '\n'); process.exit(code === undefined ? 2 : code); }
+let TRAIL = null;                                                      // the trail this run wrote to, when DOCKET_TRAIL is set (D25)
+function die(msg, code) {
+  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + plain(msg).replace(/\s+/g, ' ').slice(0, 400) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
+  process.stderr.write(plain(msg) + '\n'); process.exit(code === undefined ? 2 : code);
+}
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
 function readText(p) { return fs.readFileSync(p, 'utf8'); }
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
@@ -1770,20 +1774,28 @@ const LOCATED_SEP = ' · ';
 // The answer to the reason question carries its evidence (D27): a field of its own, `reason holds: <the premise> (<file:line>)`
 // or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff
 // and never a ledger — a ruling's words record what was decided, not whether its premise is still true.
-const ANSWER_RE = /^reason (holds|gone)\s*:\s*(.*?)\s*\(([^()]+?):(\d+)\)$/i;
+// The answer's field: the token, the premise in words, and its line in parentheses anywhere in the field — one
+// location or several, each `<file>:<line>` or `<file>:<first>-<last>`, with words beside them if the judge adds
+// some, each a line of the file as the diff leaves it or as it stood at HEAD.
+const LOC_RE = /([^\s(),;]+?):(\d+)(?:\s*[-–]\s*(\d+))?/g;
+function lineCount(text) { return text === null ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0); }
 function evidenceOf(root, fields, at) {
   const a = fields.map(x => x.trim()).find(x => /^reason (?:holds|gone)\b/i.test(x));
-  const m = a ? a.match(ANSWER_RE) : null;
-  if (!m || !/\S/.test(m[2])) die(at + ' answers the reason question without its evidence: the answer is a field of its own, `reason holds: <the premise, as the code the diff leaves shows it> (<file:line>)` or `reason gone: <what the diff changed> (<file:line>)` (protocol step 4, D27)', 2);
-  const p = m[3].trim(), n = Number(m[4]), abs = path.resolve(root, p);
-  const where = p + ':' + m[4];
-  if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
-  if (path.basename(abs) === 'DECISIONS.md') die(at + ' points its evidence into a ledger (' + where + '): a ruling\'s words record what was decided, not whether its premise is still true; point at the line of the code or document that shows it (D27)', 2);
-  let text = null;
-  if (isFile(abs)) { try { text = fs.readFileSync(abs, 'utf8'); } catch (e) { text = null; } }
-  else if (!fs.existsSync(abs)) { const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) text = h.stdout; }
-  const count = text === null ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
-  if (!(n >= 1 && n <= count)) die(at + ' points its evidence at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
+  const groups = a ? [...a.matchAll(/\(([^()]*)\)/g)].filter(g => /:\d/.test(g[1])) : [];
+  const g = groups.length ? groups[groups.length - 1] : null;
+  const premise = a && g ? a.replace(g[0], ' ').replace(/^reason (?:holds|gone)\b[\s:—–-]*/i, '').trim() : '';
+  const locs = g ? [...g[1].trim().matchAll(LOC_RE)] : [];
+  if (!a || !g || !/[\p{L}\p{N}]/u.test(premise) || !locs.length) die(at + ' answers the reason question without its evidence' + (a ? ' (read: "' + a + '")' : '') + ': the answer is a field of its own, `reason holds: <the premise, as the code the diff leaves shows it> (<file:line>)` or `reason gone: <what the diff changed> (<file:line>)`; a range `<file:first-last>`, or several locations with commas, will do (protocol step 4, D27)', 2);
+  for (const L of locs) {
+    const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
+    if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
+    if (path.basename(abs) === 'DECISIONS.md') die(at + ' points its evidence into a ledger (' + where + '): a ruling\'s words record what was decided, not whether its premise is still true; point at the line of the code or document that shows it (D27)', 2);
+    let now = null, then = null;
+    if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
+    const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
+    const count = Math.max(lineCount(now), lineCount(then));
+    if (!(first >= 1 && last >= first && last <= count)) die(at + ' points its evidence at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
+  }
 }
 function holdToLines(root, v, failures, lines) {
   if (!lines.length) die('verdict: a ' + v + ' names its located failures: --reason "<one per line: pack · F<n> · file:line · what · route>"', 2);
@@ -2075,7 +2087,7 @@ function leaveTrail() {
   if (!process.env.DOCKET_TRAIL) return;
   try {
     const d = path.join(enumerationRoot(process.cwd()), '.docket');
-    if (isDir(d)) fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n');
+    if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
   } catch (e) { /* the trail is the measurement's; the command runs whatever it does */ }
 }
 function main() {
