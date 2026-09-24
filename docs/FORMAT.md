@@ -478,3 +478,34 @@ An `old_string` of more than one line covers the lines from its first to its las
 the window is ±20 around the whole of it, the header names the span as
 `file:first–last`, and a line inside the span is at distance 0 — the rulings
 cited in the text being replaced are what the edit most needs to know.
+
+## 16. The gate, the verdict file and the core's breadcrumb (D10, D11)
+
+`docket gate --session <id>` decides mechanically whether a stop is judged. Its
+hash is the SHA-256 of `git diff HEAD` over every governed file and every ledger
+under the root, followed by, for each untracked governed file in path order, a
+line `+++ <path>` and the file's content. `SKIP` when that text is empty, when its
+hash equals the last PASS's, or when the session is surfaced; `SURFACE` when the
+session has been blocked five times since the last PASS or its located failures
+have not fallen across the last two verdicts after the third block, with the
+residue printed beneath and the session marked surfaced; else `JUDGE <hash>
+<files…>`, and with `--diff` the text itself beneath. `docket verdict` records
+the judge's answer; a PASS resets the session's block count and remembers the
+hash, a FAIL or STALE bumps the count and appends the failure count to the
+session's history; a changed hash never resets anything.
+
+The state lives in `.docket/verdict.json` under the root: `last` (verdict, hash,
+failures, time, session, and the reason it was recorded with), `lastPassHash`,
+and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`.
+A file that is missing, half-written or hand-edited is read as what it holds and
+nothing more. `.docket/` is ignored by git, and a constituted project is told to
+ignore it too.
+
+`.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
+that last ran as the host's own hook in this project — written by `near` and
+`status` only when the host names a plugin root that contains the running file,
+and only where a ledger governs; rewritten only when it changes. The judge a host
+runs at a stop is given no word of where the plugin is, so it finds the core
+here, and everything else it reads it asks the core to print. A host's hook
+agent working in a project with a ledger and no breadcrumb blocks the stop once,
+naming the cause; one working in a project with neither allows it.

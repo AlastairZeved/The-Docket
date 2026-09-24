@@ -40,6 +40,18 @@ write tool. Where the host lets a subagent run on a model other than the
 maker's, bind it that way (D8): shared training is shared blind spots. Name no
 model in the binding; let the host choose.
 
+Two things a host may not give that subagent, and what the core does about
+each. It may not tell the subagent where the plugin is: so the core, whenever
+it runs as the host's own hook in a governed project (calls 1 and 2), writes its
+absolute path to the project's `.docket/core`, and the subagent reads that
+(`docs/FORMAT.md` 16). It may not let the subagent read outside the project: so
+the core prints the protocol, the packs, the diff and the transcript itself
+(`protocol`, `pack`, `gate --diff`, `transcript`), and the one permission the
+judge needs is to run the core — in the host bound here, the rule
+`Bash(node *docket.js*)`, with no space before the closing parenthesis, so that a
+quoted path matches too. A subagent that cannot run the core cannot judge, and
+must say so rather than allow the stop in silence.
+
 ## What a binding may contain
 
 A hook declaration per call, an agent declaration for the judge that points at

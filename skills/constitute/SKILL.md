@@ -2,7 +2,7 @@
 name: constitute
 description: Give a new project its spine before the first line — four gated questions, a confirm block, then PRD, UIUX and DECISIONS written and the witness vendored.
 disable-model-invocation: true
-allowed-tools: Bash(node *docket.js *)
+allowed-tools: Bash(node *docket.js*)
 ---
 
 # /constitute

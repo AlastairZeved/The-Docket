@@ -23,6 +23,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "timeout": 300,
+            "prompt": "You are the docket's judge at this stop. The condition to verify: the judge's protocol, followed to its end on this stop, returns PASS. It is not met when the protocol returns FAIL or STALE, and your reason is then the verdict's Failures lines with their fix routes, as the protocol shapes them. Hook input: $ARGUMENTS\nBefore anything: if stop_hook_active in the hook input is true, this stop follows a block in this same turn, and the condition is met \u2014 say so at once. Otherwise read the file .docket/core in the project directory (the hook input's cwd): it holds one line, the absolute path of the core, docket.js. If .docket/core is missing and no DECISIONS.md exists anywhere under the project, the project is not under the docket and the condition is met. If it is missing and a DECISIONS.md exists, the condition is not met, and the reason is: the docket's core is not recorded in .docket/core \u2014 start the session with the plugin loaded, so that its session hook writes it. With the core in hand, run `node <core> protocol` and follow what it prints, step by step and in its order, running every command it names as `node <core> \u2026` and nothing else; the session identifier is the hook input's session_id, the transcript is its transcript_path, and the maker's last message is its last_assistant_message. You write no file and edit nothing."
+          }
+        ]
+      }
     ]
   }
 }

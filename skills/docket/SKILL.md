@@ -1,7 +1,7 @@
 ---
 name: docket
 description: Read the ledger of rulings that governs this codebase — the docket, a search, or everything that bears on one ruling.
-allowed-tools: Bash(node *docket.js *)
+allowed-tools: Bash(node *docket.js*)
 ---
 
 # /docket

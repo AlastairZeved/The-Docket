@@ -1,7 +1,7 @@
 ---
 name: rule
 description: Record a decision where it will be found — five questions, a confirm block only you can answer, then one entry appended to the ledger and checked.
-allowed-tools: Bash(node *docket.js *)
+allowed-tools: Bash(node *docket.js*)
 ---
 
 # /rule

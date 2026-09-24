@@ -22,6 +22,8 @@
 // 13  vendor               the witness copied to where the law lives (D9)
 // 14  constitute           a spine before the first line (D9, D13)
 // 15  intake               an intake file, printed for a skill to splice
+// 16  gate/verdict         the mechanical gate and the verdict file (D10, D11)
+// 17  protocol/pack/transcript   what the judge reads, printed by the core
 //
 // Exit codes: 0 success · 1 a failed check · 2 usage error.
 
@@ -555,6 +557,7 @@ function near(argv) {
   const pr = projectRoot(startDir);
   const lp = findLedger(file, pr || path.parse(path.resolve(startDir)).root);
   if (!lp) return 0;                                                   // ungoverned tree: silent
+  recordCore(pr || ledgerHome(lp));                                    // the judge finds the core through this file (16)
   if (isLedgerDoc(file)) return 0;                                     // FORMAT.md 8: the ledger is amended through append; a direct edit is check 7's business
   if (isSelfCopy(file)) return 0;                                      // D9: the vendored witness cites another ledger; a list from it would be wrong, so there is none
   if (!isFile(file)) return 0;                                         // D7: a Write of a new file is silent
@@ -1240,8 +1243,9 @@ function pendingAddenda(ledger) {
 }
 function status(argv) {
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
+  const below = lp ? [] : ledgersBelow(cwd, root);                    // a walk goes up: a ledger below is named, not found
+  if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
   if (!lp) {                                                          // no ledger governs the working directory
-    const below = ledgersBelow(cwd, root);                            // a walk goes up: a ledger below is named, not found
     const groot = gitRoot(cwd);
     const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', 'HEAD'], groot) : null;
     const gone = ls && ls.status === 0 ? ls.stdout.split('\n').filter(p => /(^|\/)DECISIONS\.md$/.test(p) && !isFile(path.join(groot, p))) : [];
@@ -1540,7 +1544,7 @@ function constitute(argv) {
     '`node test/docket.js governs <id>` for each ruling that comes back. A decision is recorded as a new',
     'entry, never as an edit to an old one. Run `node test/docket.js` before you stop: it is the witness,',
     'and CI runs the same command. The witness reads tracked files: add and commit docs/ and test/ first, or it',
-    'reads nothing and says so.',
+    'reads nothing and says so. Add `.docket/` to .gitignore: the judge keeps its verdicts there.',
   ].join('\n');
   if (argv.json) {
     out(JSON.stringify({ name, dir: rel(process.cwd(), dir) || '.', prefix: a.prefix, written: written.map(f => rel(dir, f)), entry: entry.trimEnd(), ciStep: CI_STEP, agentSection: section, ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2));
@@ -1576,6 +1580,181 @@ function intake(argv) {
   return 0;
 }
 
+// ─── 16. gate and verdict: the mechanical gate, the verdict file (D10, D11) ──
+
+// The judge is a subagent the host runs at a stop. The host gives it a shell and the project directory and nothing
+// else: not where the plugin is, in its prompt or in its environment, and no reading outside the project. So the core,
+// when it runs as the plugin's own hook — the host sets CLAUDE_PLUGIN_ROOT for a command hook, and this file is under
+// it — leaves its own path in the project, at .docket/core, and the judge reads that. Written only where a ledger
+// governs (an ungoverned project gets no .docket/), and rewritten only when it changes. A maker can overwrite it: that
+// is a visible Write in its transcript, the boundary the protocol gives a forged verdict.
+function recordCore(root) {
+  const pr = process.env.CLAUDE_PLUGIN_ROOT;
+  if (!pr) return;
+  const me = path.resolve(__filename);
+  if (!me.startsWith(path.resolve(pr) + path.sep)) return;
+  const p = path.join(root, '.docket', 'core');
+  try {
+    if (isFile(p) && readText(p) === me + '\n') return;
+    fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, me + '\n');
+  } catch (e) { /* a tree that cannot be written to: the judge says the file is missing */ }
+}
+function sessionId(argv) {
+  const s = flag(argv, '--session');
+  if (s) return s;
+  if (process.env.DOCKET_SESSION) return process.env.DOCKET_SESSION;
+  return 'default';
+}
+// The diff the judge reads and the gate hashes: `git diff HEAD` over every governed file and every ledger, then, for
+// each untracked governed file in path order, a line `+++ <path>` and its content. Empty when nothing governed moved.
+function governedDiff(root) {
+  const ctx = loadContext(root, { includeUntracked: true });
+  const tracked = new Set(trackedFiles(root) || []);
+  const files = new Set();
+  for (const [lp, ledger] of ctx.ledgers) { files.add(lp); for (const f of governedFiles(ctx, ledger)) files.add(f); }
+  const rels = Array.from(files).map(f => rel(root, f)).sort();
+  const trackedRels = rels.filter(r => tracked.has(path.join(root, r)));
+  const untrackedRels = rels.filter(r => !tracked.has(path.join(root, r)));
+  let diffText = '', touched = [];
+  if (trackedRels.length) {
+    const r = sh('git', ['diff', 'HEAD', '--'].concat(trackedRels), root);
+    if (r.status === 0) {
+      diffText = r.stdout;
+      const n = sh('git', ['diff', 'HEAD', '--name-only', '--'].concat(trackedRels), root);
+      touched = n.stdout.split('\n').map(s => s.trim()).filter(Boolean);
+    } else {                                                           // no commit yet: everything governed is new
+      for (const f of trackedRels) diffText += '+++ ' + f + '\n' + readText(path.join(root, f));
+      touched = trackedRels.slice();
+    }
+  }
+  let untrackedText = '';
+  for (const f of untrackedRels) { untrackedText += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
+  const text = diffText + untrackedText;
+  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text };
+}
+function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
+function gate(argv) {
+  const root = enumerationRoot(process.cwd());
+  const id = sessionId(argv);
+  const st = loadState(root);
+  const d = governedDiff(root);
+  const sess = Object.assign(freshSession(), st.sessions[id] || {});
+  const say = (decision, extra) => { if (argv.json) out(JSON.stringify(Object.assign({ decision, session: id, hash: d.hash, files: d.touched }, extra || {}), null, 2)); };
+  if (d.empty || d.hash === st.lastPassHash) { say('SKIP', { reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff' }); if (!argv.json) out('SKIP'); return 0; }   // D10
+  if (sess.surfaced) { say('SKIP', { reason: 'this session is surfaced until a PASS or a new session' }); if (!argv.json) out('SKIP'); return 0; }   // D11
+  const h = sess.history;
+  const stuck = sess.blocks >= THIRD_CYCLE && h.length >= 2 && h[h.length - 1] >= h[h.length - 2];   // failures not falling after the third block
+  if (sess.blocks >= BLOCK_CAP || stuck) {                                                          // D11
+    sess.surfaced = true; st.sessions[id] = sess; saveState(root, st);
+    const L = ['SURFACE'];
+    L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
+    if (st.last) {
+      L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')');
+      if (st.last.reason) for (const line of String(st.last.reason).split('\n')) if (line.trim()) L.push('  ' + line.trim());
+    }
+    L.push('report this to the user verbatim, then stop again');
+    say('SURFACE', { residue: L.slice(1, -1) }); if (!argv.json) out(L.join('\n'));
+    return 0;
+  }
+  say('JUDGE');
+  if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(d.text); }
+  return 0;
+}
+function verdict(argv) {
+  const v = (argv._[1] || '').toUpperCase();
+  if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> [--session <id>] [--reason "<the located failures>"]', 2);
+  const root = enumerationRoot(process.cwd());
+  const id = sessionId(argv);
+  const failures = Number(flag(argv, '--failures') || 0);
+  if (!Number.isInteger(failures) || failures < 0) die('verdict: --failures must be a non-negative integer', 2);
+  if (v === 'PASS' && failures !== 0) die('verdict: a PASS has no located failures; this names ' + failures, 2);
+  if (v !== 'PASS' && failures === 0) die('verdict: a ' + v + ' names at least one located failure; --failures is 0', 2);
+  const hash = flag(argv, '--hash') || governedDiff(root).hash;
+  const reason = flag(argv, '--reason');
+  if (reason !== null && UNSAFE_RE.test(reason)) die('verdict: --reason carries a control or bidi character', 2);
+  const st = loadState(root);
+  const sess = Object.assign(freshSession(), st.sessions[id] || {});
+  st.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
+  if (reason) st.last.reason = reason;
+  if (v === 'PASS') { st.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; }   // reset only on PASS (D11); a changed hash never resets
+  else { sess.blocks += 1; sess.history.push(failures); }
+  st.sessions[id] = sess;
+  saveState(root, st);
+  if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash }, null, 2)); return 0; }
+  out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
+  return 0;
+}
+
+// ─── 17. protocol, pack, transcript: what the judge reads, printed by the core ─
+
+// The judge's shell is allowed one thing — this program — and it may read nothing outside the project. So the protocol,
+// the packs and the maker's transcript reach it through here. The vendored copy carries neither judge/ nor packs/ and
+// says so, as intake does.
+function besideMe(dir, file, what) {
+  const p = path.join(__dirname, '..', dir, file);
+  if (!isFile(p)) die(what + ': ' + dir + '/' + file + ' is not beside this file\'s bin/ — it lives in the plugin; the vendored witness at test/docket.js carries none', 2);
+  return p;
+}
+function protocol(argv) { out(readText(besideMe('judge', 'PROTOCOL.md', 'protocol'))); return 0; }
+function pack(argv) {
+  const dir = path.join(__dirname, '..', 'packs');
+  if (has(argv, '--list') || !argv._[1]) {
+    if (!isDir(dir)) die('pack: packs/ is not beside this file\'s bin/ — the packs live in the plugin; the vendored witness at test/docket.js carries none', 2);
+    const names = fs.readdirSync(dir).filter(f => /\.md$/.test(f)).sort();
+    const rows = names.map(f => { const m = /^Domain:\s*(.+)$/m.exec(readText(path.join(dir, f))); return { name: f.replace(/\.md$/, ''), domain: m ? m[1].trim() : '' }; });
+    if (argv.json) { out(JSON.stringify(rows, null, 2)); return 0; }
+    for (const r of rows) out(r.name + '  ' + r.domain);
+    return 0;
+  }
+  const name = argv._[1];
+  if (!/^[a-z][a-z0-9-]*$/.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
+  out(readText(besideMe('packs', name + '.md', 'pack'))); return 0;
+}
+// A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry
+// `message.content`, a list of blocks — `text`, and `tool_use` with a `name` and an `input`. Printed in order: the
+// assistant's text, and each tool call as one line naming the tool and its command or file. A line that is not JSON,
+// or a file that is not such a log, is printed as it is. `--last <n>` keeps the last n assistant turns.
+function transcript(argv) {
+  const given = argv._[1];
+  if (!given) die('usage: docket transcript <path> [--last <n>]', 2);
+  const p = path.resolve(process.cwd(), given);
+  if (!isFile(p)) die('transcript: cannot read ' + given, 2);
+  const last = flag(argv, '--last'); const keep = last === null ? Infinity : Number(last);
+  if (!(Number.isInteger(keep) && keep > 0) && last !== null) die('transcript: --last takes a positive integer', 2);
+  const lines = splitLines(readText(p)); const turns = []; let plain_ = true;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let o = null; try { o = JSON.parse(line); } catch (e) { o = null; }
+    if (!o || typeof o !== 'object') { turns.push({ raw: line }); continue; }
+    plain_ = false;
+    const m = o.message && typeof o.message === 'object' ? o.message : null;
+    const role = o.type === 'assistant' || (m && m.role === 'assistant') ? 'assistant' : (o.type === 'user' || (m && m.role === 'user') ? 'user' : null);
+    if (!role || !m) continue;
+    const blocks = Array.isArray(m.content) ? m.content : (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : []);
+    const L = [];
+    for (const b of blocks) {
+      if (!b || typeof b !== 'object') continue;
+      if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) L.push(b.text.trim());
+      if (b.type === 'tool_use') { const inp = b.input || {}; L.push('[' + b.name + '] ' + (inp.command || inp.file_path || inp.pattern || inp.prompt || '').toString().split('\n')[0]); }
+    }
+    if (L.length) turns.push({ role, lines: L });
+  }
+  if (plain_ && turns.every(t => t.raw !== undefined)) { out(lines.join('\n')); return 0; }
+  const aTurns = turns.filter(t => t.role === 'assistant');
+  const start = keep === Infinity ? 0 : Math.max(0, aTurns.length - keep);
+  const firstKept = aTurns[start];
+  const outL = [];
+  let seen = 0;
+  for (const tn of turns) {
+    if (tn.raw !== undefined) { if (keep === Infinity) outL.push(tn.raw); continue; }
+    if (tn.role === 'assistant') { if (tn === firstKept) seen = 1; if (!seen && keep !== Infinity) continue; }
+    else if (!seen && keep !== Infinity) continue;
+    outL.push((tn.role === 'assistant' ? '── assistant' : '── user') + '\n' + tn.lines.join('\n'));
+  }
+  out(outL.join('\n'));
+  return 0;
+}
+
 // ─── 11. cli ────────────────────────────────────────────────────────────────
 
 const USAGE = [
@@ -1598,12 +1777,17 @@ const USAGE = [
   '  docket vendor <dir>                 copy the witness to <dir>/test/docket.js and print the CI step',
   '  docket constitute --answers <json>  a new project\'s PRD, UIUX and DECISIONS from the four answers, the witness vendored, check run (--target <dir>)',
   '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
+  '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the diff since the last PASS, decided mechanically (D10, D11); --diff prints it',
+  '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
+  '  docket protocol                     print judge/PROTOCOL.md',
+  '  docket pack <name> | --list         print a pack, or the packs with their domains',
+  '  docket transcript <path> [--last n] the assistant text and tool calls of a JSON-lines message log',
   '',
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
-const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target']);
-const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help']);
+const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last']);
+const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
 const OPTIONS = {
@@ -1611,6 +1795,7 @@ const OPTIONS = {
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: [],
+  gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: [], pack: ['--json', '--list'], transcript: ['--last'],
 };
 function parseArgv(args) {
   const raw = args.slice();
@@ -1660,7 +1845,7 @@ function main() {
   const argv = parseArgv(process.argv.slice(2));
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
-  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake };
+  const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript };
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
   if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);
