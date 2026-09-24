@@ -34,9 +34,8 @@ as a field of its own after what the diff breaks and before the route, with the
 line that shows it: `reason holds: <the premise> (<file:line>)` where the code the
 diff leaves still makes the premise true, or `reason gone: <what changed>
 (<file:line>)` where the diff makes it false (and `cite stale` for a cite left on
-code that no longer implements its ruling); the line is never a ledger's. A code
-line that names a ruling and says neither, or says one without its line, is
-refused when it is recorded.
+code that no longer implements its ruling). A code line that names a ruling and
+says neither, or says one without its line, is refused when it is recorded.
 
 **F4 — no test skipped, disabled or deleted.**
 How scored: read the diff for `skip`, `xit`, `only`, `.skip(`, `.only(`, a

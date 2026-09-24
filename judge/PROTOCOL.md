@@ -69,8 +69,9 @@ cause; a command denied — the reason is one line, that the judge could not run
 the core; and an answer given without having run the protocol is not an answer.
 
 `docket` in this file and in the packs is `node <core>`, the core named above:
-run every command exactly in that shape, from the project directory, never
-prefixed with `cd` or anything else — a host permits that shape and no other.
+run every command exactly in that shape, from the project directory, with
+nothing before it and nothing after it — no `cd`, no `;`, `&&` or `|`, no
+redirection — a host permits that shape and no other.
 
 ## The seven steps, in order, and the order is the point
 
@@ -118,10 +119,10 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    `reason gone: <what changed> (<file:line>)`, the line of the diff, or of what it
    leaves, that makes it false — and, for a cite that no longer points at code that
    implements its ruling, `cite stale`. The line is one of a file in the
-   repository, before or after the diff, and never a ledger: a ruling's words
-   record what was decided, not whether its premise is still true. A code line
-   that names a ruling and answers neither way, or answers without its line, is
-   refused when it is recorded (D23, D27).
+   repository, before or after the diff; the code's line says more than the
+   ledger's, which records what was decided and not whether it is still true. A
+   code line that names a ruling and answers neither way, or answers without its
+   line, is refused when it is recorded (D23, D27).
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
@@ -145,7 +146,9 @@ prefixed with `cd` or anything else — a host permits that shape and no other.
    `--failures` is the number of those lines, and the verdict follows from them:
    STALE when every line says `reason gone` or `cite stale`, FAIL when any does
    not. The core refuses a record that disagrees with its own lines, a line not in
-   the located form, and a PASS that carries a reason (D23).
+   the located form, and a PASS that carries a reason (D23), and says why: correct
+   the line it names and record again. A refusal is the core working, not failing;
+   the judging is not done until a record is made.
 7. **Return.**
    PASS → allow the stop.
    FAIL → block, with the located failures and their fix routes: change the

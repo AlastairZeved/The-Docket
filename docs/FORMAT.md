@@ -508,9 +508,9 @@ or STALE carries `--reason`, one located failure per line in the protocol's form
 as many lines as `--failures` says; a code-pack line that names a ruling answers,
 in a field of its own, `reason holds: <the premise> (<file:line>)`, `reason gone:
 <what changed> (<file:line>)` or `cite stale`, the line one of a file in the
-repository before or after the diff and never a ledger's (D27); STALE is refused
-unless every line is a stale one and FAIL when every line is; a PASS carries no
-reason (D23).
+repository before or after the diff — a range or several will do (D27); STALE is
+refused unless every line is a stale one and FAIL when every line is; a PASS
+carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the root: `last` (verdict, hash,
 failures, time, session, the reason it was recorded with, and `counted: false`

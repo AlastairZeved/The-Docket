@@ -2550,8 +2550,8 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and a line of a file that is in the repository neither before nor after the diff', v.code === 2 && /points its evidence at nowhere\.js:3, which is not a line of a file in this repository/.test(v.err), v.err);
     v = vd('FAIL', 1, ans('reason holds: the lot still reads positions (test/fixture/app.js:99999)'));
     ok('…and a line past the end of its file', v.code === 2 && /test\/fixture\/app\.js:99999, which is not a line/.test(v.err), v.err);
-    v = vd('FAIL', 1, ans('reason holds: positions stay read-only (test/fixture/DECISIONS.md:20)'));
-    ok('…and a line of a ledger: a ruling’s words are not evidence that its premise still holds', v.code === 2 && /points its evidence into a ledger \(test\/fixture\/DECISIONS\.md:20\)/.test(v.err), v.err);
+    v = vd('FAIL', 1, ans('reason holds: positions stay read-only (test/fixture/DECISIONS.md:9999)'));
+    ok('…and a line past the end of a ledger', v.code === 2 && /which is not a line of a file/.test(v.err), v.err);
     v = vd('FAIL', 1, ans('reason holds: the lot still reads positions (../../etc/hosts:1)'));
     ok('…and a line outside the repository', v.code === 2 && /points its evidence outside the repository/.test(v.err), v.err);
     v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only; reason holds: said inside what the diff breaks (test/fixture/app.js:40) · change the code');
@@ -2565,6 +2565,7 @@ const SEC = String.fromCharCode(0xa7);
       ['the line before the words', 'reason holds (test/fixture/app.js:40): the lot still reads positions'],
       ['a line past the tree’s end that HEAD had', 'reason holds: the lot still reads positions (test/fixture/app.js:260)'],
       ['a range with words beside it', 'reason holds: the lot still reads positions (test/fixture/app.js:40-44 reads each note’s place)'],
+      ['a line of the ledger', 'reason holds: positions stay read-only (test/fixture/DECISIONS.md:20)'],
     ]) {
       const dv = tempRepo();
       fs.appendFileSync(path.join(dv, 'test', 'fixture', 'app.js'), 'const v2 = 1; // R2\n');
@@ -2789,7 +2790,7 @@ const SEC = String.fromCharCode(0xa7);
       fs.rmSync(dt, { recursive: true, force: true }); fs.rmSync(nt, { recursive: true, force: true });
     }
     const PRT = read(path.join(ROOT, 'judge', 'PROTOCOL.md'));
-    ok('the protocol names the four cases in which a stop stands and no other, the never-record rule, and the one command shape `docket` means', /^## When the stop stands$/m.test(PRT) && /In four cases, and in no other/.test(PRT) && /the host's re-entry flag is set/.test(PRT) && /`docket gate` printed SKIP/.test(PRT) && /printing `verdict recorded: PASS`/.test(PRT) && /never\s+runs the verdict command to make the fourth case true/.test(PRT) && /`docket` in this file and in the packs is `node <core>`/.test(PRT) && /never\s+prefixed with `cd`/.test(PRT), 'the protocol does not say');
+    ok('the protocol names the four cases in which a stop stands and no other, the never-record rule, and the one command shape `docket` means', /^## When the stop stands$/m.test(PRT) && /In four cases, and in no other/.test(PRT) && /the host's re-entry flag is set/.test(PRT) && /`docket gate` printed SKIP/.test(PRT) && /printing `verdict recorded: PASS`/.test(PRT) && /never\s+runs the verdict command to make the fourth case true/.test(PRT) && /`docket` in this file and in the packs is `node <core>`/.test(PRT) && /with\s+nothing before it and nothing after it — no `cd`, no `;`, `&&` or `\|`, no\s+redirection/.test(PRT), 'the protocol does not say');
     ok('the protocol says the judge never records a verdict to release a stop, and that a surfaced session is released by a PASS naming it with --session', /It never records a verdict to release a stop/.test(PRT) && /`docket verdict PASS\s+--session <id> --hash <hash> --failures 0`, naming that session/.test(PRT), 'the protocol does not say');
     ok('the protocol, the binding page and FORMAT.md 16 each name the stop’s mechanical half and what it refuses', /## The stop's mechanical half/.test(read(path.join(ROOT, 'judge', 'PROTOCOL.md'))) && /binds\s+`docket stop` beside it on the same event/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /`docket stop` is the stop's mechanical half/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'a document is silent');
     ok('USAGE lists stop, and the section map names it', /docket stop \[--wait <s>\]/.test(docket(['help']).out) && /^\/\/ 16  gate\/verdict\/stop/m.test(read(CORE)), 'stop is not listed');

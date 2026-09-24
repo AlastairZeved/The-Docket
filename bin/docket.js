@@ -1772,8 +1772,7 @@ function gate(argv) {
 // that skipped the question.
 const LOCATED_SEP = ' · ';
 // The answer to the reason question carries its evidence (D27): a field of its own, `reason holds: <the premise> (<file:line>)`
-// or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff
-// and never a ledger — a ruling's words record what was decided, not whether its premise is still true.
+// or `reason gone: <what changed> (<file:line>)`, the location a line of a file in the repository before or after the diff.
 // The answer's field: the token, the premise in words, and its line in parentheses anywhere in the field — one
 // location or several, each `<file>:<line>` or `<file>:<first>-<last>`, with words beside them if the judge adds
 // some, each a line of the file as the diff leaves it or as it stood at HEAD.
@@ -1789,7 +1788,6 @@ function evidenceOf(root, fields, at) {
   for (const L of locs) {
     const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
     if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
-    if (path.basename(abs) === 'DECISIONS.md') die(at + ' points its evidence into a ledger (' + where + '): a ruling\'s words record what was decided, not whether its premise is still true; point at the line of the code or document that shows it (D27)', 2);
     let now = null, then = null;
     if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
     const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;

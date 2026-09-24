@@ -182,7 +182,7 @@ trail() {                         # every command the core ran in the scratch pr
     try { L = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean); } catch (e) {}
     if (!L.length) { process.stdout.write("      trail: none — the core never ran in the project\n"); process.exit(0); }
     const t0 = Date.parse(L[0].split(" ")[0]);
-    const s = L.map(l => { const [t, cmd, arg] = l.split(" "); return (cmd || "witness") + (arg && !arg.startsWith("-") && /^(pack|governs|verdict)$/.test(cmd) ? " " + arg : "") + " +" + Math.round((Date.parse(t) - t0) / 1000) + "s"; }).join(" · ");
+    const s = L.map(l => { if (/^\s+refused/.test(l)) return "refused"; const [t, cmd, arg] = l.split(" "); return (cmd || "witness") + (arg && !arg.startsWith("-") && /^(pack|governs|verdict)$/.test(cmd) ? " " + arg : "") + " +" + Math.round((Date.parse(t) - t0) / 1000) + "s"; }).join(" · ");
     process.stdout.write("      trail: " + (s.length > 400 ? s.slice(0, 400) + " …" : s) + "\n");
   ' "$1/.docket/trail.log" 2>/dev/null
 }
