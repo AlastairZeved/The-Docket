@@ -534,8 +534,9 @@ nothing more. `.docket/` is ignored by git, and a constituted project is told to
 ignore it too.
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,
-with its hook input on stdin — of which it reads `session_id`, `stop_hook_active`
-and `cwd`, and the judge `transcript_path` — and gives it, with `--judge`, the command that
+with its hook input on stdin — of which it reads the session's identifier, whether
+this stop follows a block in the same turn and the project directory, and the judge
+the transcript's path — and gives it, with `--judge`, the command that
 starts the host's agent as the judge — headless, a session of its own that reads
 its prompt on stdin — and, with `--permission`, the spelling of the one rule that
 command grants it. It allows at once when the host's re-entry flag is set, when
