@@ -232,16 +232,21 @@ and a sixth time by `SURFACE`; either way the stop after `SURFACE` is allowed.
 The re-entry flag the host passes is its word that this stop follows a block in
 the same turn, and D11 honours it: a session is blocked at most once per turn,
 so the stops counted above are one per turn, with the maker's work between them.
-The block counter — one block per judged cycle that failed, FAIL or STALE — is
-per session, reset only by a PASS, never by a changed hash; it counts the five
-judged blocks, not the surfacing stop, and the plateau test above is made at
-every stop from the fourth on, not once. `gate` itself records the session
+The block counter — one block per judged cycle that failed, FAIL or STALE, or
+that ended with no verdict recorded (D38) — is per session, reset only by a
+PASS, never by a changed hash; it counts the five judged blocks, not the
+surfacing stop, and the plateau test above is made at every stop from the
+fourth on, not once. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
 by a new session, or by a PASS the human records with `docket verdict PASS
 --session <id> --hash <hash> --failures 0`, naming that session (`status` names
-it), after judging the residue themselves; nothing the maker does alone
-releases it. The session identifier is
+it), after judging the residue themselves. The core cannot tell who records it:
+the same command run by the maker releases the session too, and its next stop is
+judged afresh; the boundary is the permission to run the core, which the binding
+gives the judge's session and the maker's only inside the docket's own skills
+(D37), and the call's place in the maker's transcript, as for a forged verdict
+below. The session identifier is
 whatever the host passes; the state file keeps one block count, one failure
 history and the surfaced mark per identifier.
 
@@ -274,7 +279,9 @@ a PASS allows the stop; a FAIL or STALE recorded for this diff since the judge
 started is the block, with the recorded lines and their route; anything else — a
 judge that recorded nothing, was refused, or was stopped at its bound — blocks
 the stop once, saying so, and the stop that follows in the same turn is allowed
-(D11). So a judge that answers without running anything records nothing, and its
+(D11); that block counts toward the session's five as a recorded one does, so a
+judge that never records surfaces the session as one that never passes does
+(D38). So a judge that answers without running anything records nothing, and its
 silence cannot pass for a PASS: the stop reads the record, not the judge's words.
 The judge's own output is kept in `.docket/judge.log` for a person to read. The
 judge never calls `stop` (D37).
@@ -282,8 +289,9 @@ judge never calls `stop` (D37).
 ## Cost
 
 One judge per stop that touched a governed file, and at most five per session
-between passes (D11); the surfacing block that may follow the fifth costs no
-judge, so a session is denied at most six stops, five judged and one surfacing,
+between passes, whether each records a FAIL, a STALE or nothing (D11, D38); the
+surfacing block that may follow the fifth costs no judge, so a session is
+denied at most six stops, five judged and one surfacing,
 before its next stop is allowed. Each judge is a session of its own, of the
 host's agent on the model the host gives it, and the maker waits at the stop
 while it runs. A stop that touched nothing governed costs the gate's mechanical

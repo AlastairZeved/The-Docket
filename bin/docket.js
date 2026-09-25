@@ -583,6 +583,7 @@ function near(argv) {
   recordCore(pr || ledgerHome(lp));                                    // the judge finds the core through this file (16)
   if (isLedgerDoc(file)) return 0;                                     // FORMAT.md 8: the ledger is amended through append; a direct edit is check 7's business
   if (isSelfCopy(file)) return 0;                                      // D9: the vendored witness cites another ledger; a list from it would be wrong, so there is none
+  if (rel(pr || ledgerHome(lp), file).split('/').includes('.docket')) return 0;   // D26: the judge's state is outside the governed set, the window's as the walk's
   if (!isFile(file)) return 0;                                         // D7: a Write of a new file is silent
   if (!isTextFile(file)) return 0;                                     // FORMAT.md 1, 15: a governed file is a text file; a binary one check never sees is never reported as governed
   const ledger = loadLedger(lp);
@@ -1788,11 +1789,12 @@ function touchedRulings(root, d) {
   return found;
 }
 function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
-// The residue a surfaced session reports: its blocks and the failures per verdict since the last PASS, and the last
-// verdict with the lines it was recorded with (D11). The gate prints it at SURFACE, and `stop` relays it (D22).
+// The residue a surfaced session reports: its blocks since the last PASS, how many of them had no verdict recorded (D38),
+// the failures per verdict, and the last verdict with the lines it was recorded with (D11). The gate prints it at SURFACE,
+// and `stop` relays it (D22).
 function residueLines(st, sess) {
-  const h = sess.history, L = [];
-  L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
+  const h = sess.history, L = [], none = sess.blocks - h.length;
+  L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS' + (none > 0 ? ', ' + none + ' of them with no verdict recorded' : '') + '; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
   if (st.last) {
     L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')');
     if (st.last.reason) for (const line of String(st.last.reason).split('\n')) if (line.trim()) L.push('  ' + line.trim());
@@ -1936,8 +1938,9 @@ function verdict(argv) {
 // `--permission`: the rule that command grants the judge. A stop the protocol says stands with no judge is allowed at once;
 // for any other the core starts the judge with the prompt below, waits for it to end, up to `--wait` seconds, and reads
 // its record: the judge's answer is that record and nothing else it says. A judge that ends with none — refused, stopped
-// at its own limit, or at the bound — does not let the stop stand, once, and the block says so. The judge's own output is
-// kept in .docket/judge.log for a person to read; the stop judges nothing and writes nothing else.
+// at its own limit, or at the bound — does not let the stop stand, once, and the block says so and counts as one of the
+// session's five (D38). The judge's own output is kept in .docket/judge.log for a person to read; the stop judges nothing,
+// and writes nothing else but that count.
 function surfacedReason(st, sess, tail) {
   return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since the last PASS.\n' + residueLines(st, sess).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
 }
@@ -1986,9 +1989,14 @@ function stop(argv) {
     out(JSON.stringify({ decision: 'block', reason }));
     return 0;
   }
+  // A block with no record is a block (D38): it counts toward the session's five as a recorded one does, so a judge that
+  // never records surfaces the session, and its residue reaches the person, as a judge that never passes does (D11).
+  const sess = Object.assign(freshSession(), st.sessions[id] || {});
+  sess.blocks += 1; st.sessions[id] = sess;
+  try { saveState(root, st); } catch (e) { /* the block stands without its count */ }
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
   // whose job it is, what to do — nothing, then stop again — and where a person finds the judge's own words.
-  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. If it recurs turn after turn, tell the person: the judge\'s own output is in .docket/judge.log.';
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since the last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
   out(JSON.stringify({ decision: 'block', reason }));
   return 0;
 }
@@ -2016,6 +2024,10 @@ function pack(argv) {
   }
   const names = argv._.slice(1);                                      // several names, one command (D30)
   for (const name of names) if (!/^[a-z][a-z0-9-]*$/.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
+  if (isDir(dir)) {                                                    // the plugin's packs are here: a name none has is a name to correct
+    const unknown = names.filter(name => !isFile(path.join(dir, name + '.md')));
+    if (unknown.length) die('pack: no pack named ' + unknown.join(', ') + '; the packs are ' + fs.readdirSync(dir).filter(f => /\.md$/.test(f)).map(f => f.replace(/\.md$/, '')).sort().join(', ') + ' (docket pack --list)', 2);
+  }
   out(names.map(name => readText(besideMe('packs', name + '.md', 'pack'))).join('\n')); return 0;
 }
 // A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry

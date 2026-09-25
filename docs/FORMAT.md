@@ -550,10 +550,12 @@ for this diff since the judge started is relayed as a block carrying the
 recorded reason and its route; a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
 error, or was stopped at the bound — is blocked once, with a reason that names
-the files, how the judge ended and where its output is. A stop it would judge
-with no `--judge` given is a usage error, exit 2. It writes one file,
-`.docket/judge.log` — the command, how the judge ended, and what it printed — for
-a person to read; nothing in the core reads it (D37).
+the files, how the judge ended and where its output is, and the block counts in
+the session's `blocks` as a recorded FAIL does, with nothing added to its
+`history` (D38). A stop it would judge with no `--judge` given is a usage error,
+exit 2. Beside that count it writes one file, `.docket/judge.log` — the command,
+how the judge ended, and what it printed — for a person to read; nothing in the
+core reads it (D37).
 
 With `DOCKET_TRAIL` set in the environment, every run of the core in a project
 that has a `.docket/` appends one line to `.docket/trail.log` — the time and the
