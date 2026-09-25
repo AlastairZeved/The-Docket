@@ -78,7 +78,8 @@ redirection — a host permits that shape and no other.
 A host may stop a judge after a fixed number of turns, and every command and
 every file read is one; a judge stopped before step 6 has judged nothing. So
 the commands print what a judgement needs: the diff `gate` prints shows each
-touched function whole, and `pack` and `governs` each take every name at once.
+touched function whole, and beneath it the rulings its regions cite, as
+`governs` prints them; and `pack` and `governs` each take every name at once.
 Read a file only for what they leave out (D30).
 
 1. **`docket gate --session <id> --diff`** — after one look at the host's re-entry flag:
@@ -100,9 +101,11 @@ Read a file only for what they leave out (D30).
    reading; record PASS or FAIL with `file:line`, the ruling id where one
    applies, and the feature id. Reason: reading the maker's account first is
    checking homework with the answer key.
-4. **`docket governs <id> <id> …`**, once, with every ruling cited in the touched
-   regions (the ids `near` would have printed for each hunk); for each it prints
-   the ruling's `Reason:` sentence beneath its heading, then its edges. Check the diff against each
+4. **The rulings cited in the touched regions** — the ids `near` would have
+   printed for each hunk — follow the diff `gate` printed, each as `docket
+   governs <id>` prints it; run `docket governs <id> <id> …`, once, only for any
+   they leave out (D33). For each, the ruling's `Reason:` sentence is beneath its
+   heading, then its edges. Check the diff against each
    ruling's clauses and against every in-edge's clause: a later ruling may have
    superseded the clause the diff breaks, or waived it for this case. For each
    ruling the diff contradicts, read its `Reason:` sentence and ask one more

@@ -1741,11 +1741,45 @@ function governedDiff(root) {
   return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, tracked: diffText ? trackedRels : [], untrackedText };
 }
 // The diff the judge reads: the hashed text with each touched function whole, so that a ruling's premise in the same
-// function is on the page and not a file read away; a host caps a judge's turns (D30). The hash never reads it.
+// function is on the page and not a file read away; a host caps a judge's turns (D30). Beneath it, each ruling cited
+// within the window of a hunk, as governs prints it — the rulings the judge's step 4 reads (D33). The hash never reads it.
 function wideDiff(root, d) {
-  if (!d.tracked.length) return d.text;
-  const w = sh('git', ['diff', 'HEAD', '--function-context', '--'].concat(d.tracked), root);
-  return w.status === 0 ? w.stdout + d.untrackedText : d.text;
+  const w = d.tracked.length ? sh('git', ['diff', 'HEAD', '--function-context', '--'].concat(d.tracked), root) : null;
+  const body = w && w.status === 0 ? w.stdout + d.untrackedText : d.text;
+  const rs = touchedRulings(root, d);
+  if (!rs.length) return body;
+  let ctx = null;
+  const blocks = rs.map(({ ledger, r }) => { ctx = ctx || loadContext(root); return governsBlock(root, ledger, r, codeCites(ctx, ledger).filter(c => c.id === r.id)); });
+  return body.replace(/\n*$/, '\n') + '\nThe rulings cited within ' + WINDOW + ' lines of each hunk, each as governs prints it (D33):\n\n' + blocks.join('\n\n');
+}
+// The rulings cited within WINDOW lines of each hunk of each touched file — read as near reads an edit (D7), a new file
+// whole — each once, in the order of the files and their lines. A deleted file has no lines to read.
+function touchedRulings(root, d) {
+  const found = [], ledgers = new Map(), tracked = new Set(d.tracked);
+  for (const rf of d.touched) {
+    const abs = path.join(root, rf), lp = findLedger(abs, root);
+    if (!lp || !isFile(abs) || !isTextFile(abs)) continue;
+    if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
+    const ledger = ledgers.get(lp), lines = splitLines(normEol(readText(abs))), N = lines.length, fenced = fencedLines(lines);
+    const ranges = [];
+    if (!tracked.has(rf)) ranges.push([1, N]);
+    else {
+      const h = sh('git', ['diff', 'HEAD', '-U0', '--', rf], root);
+      for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
+        const c = Number(m[1]), n = m[2] === undefined ? 1 : Number(m[2]);
+        ranges.push([Math.max(1, c - WINDOW), Math.min(N, c + Math.max(n, 1) - 1 + WINDOW)]);
+      }
+    }
+    for (const [a, b] of ranges) for (let ln = a; ln <= b; ln++) {
+      if (fenced[ln - 1]) continue;
+      for (const c of citesInLine(lines[ln - 1], ledger)) {
+        if (!c.exists || found.some(x => x.ledger === ledger && x.r.id === c.id)) continue;
+        const r = resolveRuling(ledger, c.id).r;
+        if (r) found.push({ ledger, r });
+      }
+    }
+  }
+  return found;
 }
 function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
 // The residue a surfaced session reports: its blocks and the failures per verdict since the last PASS, and the last

@@ -508,7 +508,9 @@ third block, with the residue printed beneath and the session marked surfaced;
 else `JUDGE <hash>
 <files…>`, and with `--diff` the diff beneath, each touched function whole
 (`git diff HEAD --function-context` over the same files, then the untracked
-ones as above), which the hash does not read (D30). `docket verdict` records
+ones as above), and beneath it each ruling cited within the window of a hunk
+(15) — a new file read whole — as `governs` prints it; the hash reads neither
+(D30, D33). `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
 session's history; a changed hash never resets anything. A FAIL or STALE for a

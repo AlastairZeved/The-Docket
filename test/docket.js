@@ -2399,6 +2399,12 @@ const SEC = String.fromCharCode(0xa7);
       const gw = docket(['gate', '--session', 'w', '--diff'], { cwd: w }), gp = docket(['gate', '--session', 'w'], { cwd: w });
       ok('gate --diff shows the touched function whole — its first line, far above the change, is printed — and the hash is the one gate prints without it (D30)', /^ function relate\(a, b\) \{$/m.test(gw.out) && /^\+  return line; \/\/ reviewed$/m.test(gw.out) && gw.out.split('\n')[0] === gp.out.trim(), gw.out.slice(0, 400));
       fs.rmSync(w, { recursive: true, force: true }); }
+    { const w = tempRepo(); const f = path.join(w, 'test', 'fixture', 'app.js');
+      fs.writeFileSync(f, read(f).replace('function relate(a, b) {\n', 'function relate(a, b) { // reviewed\n'));
+      const gw = docket(['gate', '--session', 'w', '--diff'], { cwd: w }), tail = gw.out.split('The rulings cited within 20 lines of each hunk, each as governs prints it (D33):\n')[1] || '';
+      const heads = tail.split('\n').filter(l => /^R\d+  /.test(l)).map(l => l.split('  ')[0]);
+      ok('gate --diff prints, beneath the diff, each ruling cited within twenty lines of a hunk as governs prints it, in the order of their lines, and none cited farther off (D33)', heads.join(',') === 'R5,R1,R3,R2' && /^R3  Fold similarity  · issue #4  \(test\/fixture\/DECISIONS\.md:\d+\)$/m.test(tail) && /^Reason: /m.test(tail), heads.join(',') + '\n' + gw.out.slice(-600));
+      fs.rmSync(w, { recursive: true, force: true }); }
     const gj = JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out);
     ok('gate --json carries the decision, the session, the hash and the files', gj.decision === 'JUDGE' && gj.session === 's1' && gj.hash === hash && gj.files.join() === 'test/fixture/app.js', JSON.stringify(gj));
     let v = docket(['verdict', 'FAIL', '--hash', hash, '--failures', '3', '--session', 's1', '--reason', held(3)], { cwd: d });
