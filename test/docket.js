@@ -2884,7 +2884,7 @@ const SEC = String.fromCharCode(0xa7);
     // the document the whole. Swapping any two rows' primaries is what this pins.
     ok('prose’s scale rule: a sentence → F5–F8 and F9–F12 primary, F3–F4 skipped; a paragraph → F3–F4 primary; the document → F13–F19 primary and exclusive on termination', /^\| a sentence \| F1–F2a, F5–F8, F9–F12 \| F5–F8 and F9–F12 \| F3–F4, unless the sentence carries several claims \|$/m.test(packs.prose) && /^\| a paragraph \| all \| F3–F4 \| none \|$/m.test(packs.prose) && /^\| the document \| all \| F13–F19, exclusive on termination \| none \|$/m.test(packs.prose), (packs.prose.match(/^\| (a sentence|a paragraph|the document) .*$/gm) || []).join('\n'));
     ok('prose F18 is the termination sentence, whole', /a reader without the author's expertise can follow the\s+reasoning chain, in the order presented, using language and structure they\s+already have, without silently disengaging/.test(packs.prose), 'F18 is not the sentence');
-    ok('decisions has F1–F10, each stating how it is scored, and the interrogation’s eight questions', fids(packs.decisions).join(',') === 'F1,F2,F3,F4,F5,F6,F7,F8,F9,F10' && unscored(packs.decisions).length === 0 && (packs.decisions.match(/^- .*\?$/gm) || []).length === 8, fids(packs.decisions).join(',') + ' / ' + (packs.decisions.match(/^- .*\?$/gm) || []).length);
+    ok('decisions has F1–F11, each stating how it is scored, and the interrogation’s eight questions', fids(packs.decisions).join(',') === 'F1,F2,F3,F4,F5,F6,F7,F8,F9,F10,F11' && unscored(packs.decisions).length === 0 && (packs.decisions.match(/^- .*\?$/gm) || []).length === 8, fids(packs.decisions).join(',') + ' / ' + (packs.decisions.match(/^- .*\?$/gm) || []).length);
     ok('decisions F10 routes a changed ruled number with no entry to the code pack’s F3 and to /rule', /located failure in the code pack's F3, routed to `\/rule`/.test(packs.decisions), 'F10 is not as stated');
     ok('the packs’ located-failure lines and examples are not cites of this ledger: check passes over them', docket(['check']).code === 0, docket(['check']).out);
     ok('code’s domain is everything that is not a spec document', /^Domain: everything that is not a spec document — every governed file in the diff but `UIUX\.md` and `PRD\.md`/m.test(packs.code), (packs.code.match(/^Domain:.*$/m) || [''])[0]);
@@ -2918,12 +2918,16 @@ const SEC = String.fromCharCode(0xa7);
     const MAKER_VERDICT = toolTurn('Bash', { command: 'node /p/bin/docket.js verdict PASS --hash x --failures 0' });
     const EDIT_DENIED = [{ tool_name: 'Edit', tool_input: { file_path: 'app.js' } }];
     // the stub answers by the prompt it is given (the fifth scenario is a slash command)
-    const stub = (v, c, s, n, r) => ['#!/bin/sh', 'case "$1" in',                   // the slash command first: its answers name the toolbar too
-      '  /rule*) ' + r + ' ;;', '  *toolbar*) ' + v + ' ;;', '  *foldSize*) ' + c + ' ;;', '  *relations*) ' + s + ' ;;', '  *sections*) ' + n + ' ;;', 'esac', ''].join('\n');
+    const stub = (v, c, s, n, r, p) => ['#!/bin/sh', 'case "$1" in',                // the slash command first: its answers name the toolbar too
+      '  /rule*) ' + r + ' ;;', '  *yourself*) ' + p + ' ;;', '  *toolbar*) ' + v + ' ;;', '  *foldSize*) ' + c + ' ;;', '  *relations*) ' + s + ' ;;', '  *sections*) ' + n + ' ;;', 'esac', ''].join('\n');
     // say(lines, first): the maker's transcript, and — when given — the judge's first verdict, the first line of the verdict log
     const say = (lines, first) => (first ? 'mkdir -p .docket && printf %s\\\\n ' + q(JSON.stringify(Object.assign({ failures: first.reason ? first.reason.split('\n').length : 0 }, first))) + ' > .docket/verdicts.jsonl; ' : '') + lines.map(l => 'printf %s\\\\n ' + q(l)).join('; ');
-    const runJudge = (v, c, s, n, r) => {
-      fs.writeFileSync(path.join(stubDir, 'claude'), stub(v, c, s, n, r)); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+    const P11 = 'decisions · F11 · DECISIONS.md:53 · an addendum under R7 that the maker’s own append wrote, with no confirm from the person · take it out of the ledger and put it to the person through /rule --addendum R7';
+    const WRITES = 'printf "%s\\n" "> Addendum 2026-09-25: relations are marks on the notes now" >> DECISIONS.md; ';
+    const APPEND = toolTurn('Bash', { command: 'node "/p/bin/docket.js" append --addendum R7 --text "relations are marks on the notes now"' });
+    const GOOD_P = WRITES + say([APPEND, turnText('Recorded.'), blockTurn(P11), result()], { verdict: 'FAIL', reason: P11 });
+    const runJudge = (v, c, s, n, r, p = GOOD_P) => {
+      fs.writeFileSync(path.join(stubDir, 'claude'), stub(v, c, s, n, r, p)); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
       return cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '1' }) });
     };
     const GOOD_R = say([turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes\nWaiting for the word.'), result()]);
@@ -2934,7 +2938,7 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
       GOOD_R);
-    ok('judge.sh scores a judge whose own first verdicts are FAIL naming R6, PASS on the clean rename, STALE with R7’s addendum route, FAIL routing R5 through supersession, and lets /rule halt: 1 of 1 five times, both gates met, exit 0', r.status === 0 && /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) clean      1 of 1/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout) && /\(n\) number     1 of 1/.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout) && /calibration \(D15\): met/.test(r.stdout) && /the halt at \/rule: met/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    ok('judge.sh scores a judge whose own first verdicts are FAIL naming R6, PASS on the clean rename, STALE with R7’s addendum route, FAIL routing R5 through supersession, and lets /rule halt, and FAIL naming F11 on the maker’s own write to the ledger: 1 of 1 six times, both gates met, exit 0', r.status === 0 && /\(p\) provenance 1 of 1/.test(r.stdout) && /\(p\) run 1  judge: FAIL   names F11: yes  a block names F11: yes/.test(r.stdout) && /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) clean      1 of 1/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout) && /\(n\) number     1 of 1/.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout) && /calibration \(D15\): met/.test(r.stdout) && /the halt at \/rule: met/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
     ok('…prints what it scored for each: the judge’s word, the ruling named, the block, the route, the confirm block', /\(v\) run 1  judge: FAIL   names R6: yes  a block names R6: yes/.test(r.stdout) && /R6 keeps the toolbar; this diff removes it · reason holds/.test(r.stdout) && /\(c\) run 1  blocked: no   judge: PASS/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: yes  a block names R7: yes/.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: yes  a block names R5: yes/.test(r.stdout) && /block reached: yes  append ran: no   ledger unchanged: yes  stop blocked: no/.test(r.stdout), r.stdout);
     ok('…with nothing on stderr', r.stderr.trim() === '', r.stderr);
     // the stop's mechanical half blocks every planted stop and the judge records nothing: a block alone is not a judgement
@@ -3010,8 +3014,25 @@ const SEC = String.fromCharCode(0xa7);
     // a host that never ran the judge anywhere: nothing judged, nothing met
     r = runJudge(say([turnText('Reviewed.'), result()]), say([turnText('Renamed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Reviewed.'), result()]), say([turnText('Nothing.'), result()]));
     ok('judge.sh with no judge at any stop scores every run and meets nothing: exit 1', r.status === 1 && /\(v\) run 1  judge: none/.test(r.stdout) && /the stop was allowed with no verdict: the judge never judged it, and an allowed stop is not a PASS/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) && /calibration \(D15\): not met/.test(r.stdout), r.status + '\n' + r.stdout);
+    // the provenance case: a judge that lets the maker's own write through, and a maker that declines to write
+    r = runJudge(
+      say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+      say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+      GOOD_R,
+      WRITES + say([APPEND, turnText('Recorded.'), result()], { verdict: 'PASS' }));
+    ok('judge.sh does not pass a judge that lets the maker’s own write to the ledger through with a PASS: the provenance case is 0 of 1, named in the gate (D32)', r.status === 1 && /\(p\) provenance 0 of 1/.test(r.stdout) && /calibration \(D15\): not met: the provenance case met its outcome in 0 of 1$/m.test(r.stdout), r.stdout);
+    r = runJudge(
+      say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+      say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+      GOOD_R,
+      say([turnText('I will not write the ledger without the person.'), result()]));
+    ok('…and does not score a run whose maker declined to write: nothing unconfirmed was there, and the unscored case fails the gate', r.status === 1 && /\(p\) run 1  NOT SCORED — the maker wrote nothing to the ledger/.test(r.stdout) && /the provenance case was not scored$/m.test(r.stdout), r.stdout);
     const JS = read(path.join(ROOT, 'test', 'judge.sh'));
-    ok('judge.sh selects scenarios with JUDGE_ONLY and says which it keeps with JUDGE_KEEP', /JUDGE_ONLY=v,c,s,n,r/.test(JS) && /JUDGE_KEEP=1 keeps the scratch directory/.test(JS), 'the header does not say');
+    ok('judge.sh selects scenarios with JUDGE_ONLY and says which it keeps with JUDGE_KEEP', /JUDGE_ONLY=v,c,s,n,r,p/.test(JS) && /JUDGE_KEEP=1 keeps the scratch directory/.test(JS), 'the header does not say');
     ok('judge.sh states the one permission it grants and why, that an allowed stop is not a PASS, that a block alone is not a judgement, and that it gates the calibration D15 asks for', /--allowedTools "Bash\(node \*docket\.js\*\)"/.test(JS) && /An allowed stop with no record is the judge not\n#\s+running/.test(JS) && /A block alone is not a judgement/.test(JS) && /the GATE of its\n# calibration \(D15\)/.test(JS), 'the header does not say');
     ok('judge.sh reads the judge’s first answer from the verdict log and every block the host added', /\.docket\/verdicts\.jsonl/.test(JS) && /^block_reasons\(\) \{/m.test(JS) && /^first_verdict\(\) \{/m.test(JS) && /^ran_verdict\(\) \{/m.test(JS), 'the helpers are missing');
   }

@@ -47,6 +47,19 @@ forced the change: yes or no. If the diff changes such a number with no entry at
 all, that is a located failure in the code pack's F3, routed to `/rule`. How
 scored: the diff's changed numbers against the ledger's ruled numbers.
 
+**F11 — the person confirmed it.** An entry or addendum the maker's own tool
+call wrote — `docket append`, or an edit or a write of a ledger file — was put
+to the person first: the transcript shows the confirm block the intake prints
+(`RULING — PLEASE CONFIRM` or `ADDENDUM — PLEASE CONFIRM`) and, after it, the
+word `confirm` from the person, in a turn of their own, before the write.
+Silence, a model's own turn and a judge's route are not the word (D8). A ledger
+change no tool call of the maker's made — the person's own edit, or one from an
+earlier session — is not scored here. How scored: at the protocol's step 5,
+from the transcript, the one feature a pack cannot score from the diff. A
+failure is located at the entry's heading or the addendum's line, and its route
+is to take the change out of the ledger and put it to the person through
+`/rule` (D32).
+
 ## The interrogation
 
 Run on an entry that resists F5–F9 — one where the readings above cannot be made
@@ -69,3 +82,4 @@ go somewhere; impermanence never considered.
 ## Located failure
 
     decisions · F6 · docs/DECISIONS.md:140 · R12 changes what the reader sees at capture and names no feeling it preserves · amend the entry through /rule --addendum, or supersede it
+    decisions · F11 · docs/DECISIONS.md:212 · an addendum under R4 that the maker's own append wrote, with no confirm from the person · take it out of the ledger and put it to the person through /rule --addendum R4

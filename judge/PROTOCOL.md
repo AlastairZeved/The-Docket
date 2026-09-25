@@ -18,7 +18,7 @@ D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
 |---|---|
 | a working tree | the host's current directory |
 | the ledger and the spec documents | discovery, `docs/FORMAT.md` (1) |
-| the packs | `docket pack --list`, then `docket pack <name> <name> …`: the files beside the core, printed, because the judge reads nothing outside the project |
+| the packs | `docket pack --list`, then `docket pack <pack> <pack> …`: the files beside the core, printed, because the judge reads nothing outside the project |
 | the diff since the last PASS, and the files it touches | `docket gate --session <id> --diff` |
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
@@ -90,12 +90,13 @@ Read a file only for what they leave out (D30).
    `JUDGE <hash> <files…>` → continue with those files; keep the hash for step 6.
    The diff follows that line, and it is the diff every step below reads.
 2. **Domains and packs.** From the files, determine the domains touched and read
-   the matching packs in one command, `docket pack <name> <name> …` (D12; each
-   pack's own `Domain` line gives its globs). A
-   change to the ledger always adds `packs/decisions.md`. A pack scores only the
-   governed files in the diff.
+   the matching packs in one command, `docket pack <pack> <pack> …`, each named as
+   `docket pack --list` names it — a pack, never a file (D12; each pack's own
+   `Domain` line gives its globs). A change to the ledger always adds
+   `packs/decisions.md`. A pack scores only the governed files in the diff.
 3. **Score every pack feature against the diff and the repository before
-   opening the transcript.** For each feature: run its command, or make its
+   opening the transcript** — all but the decisions pack's F11, which reads the
+   transcript and is scored at step 5. For each feature: run its command, or make its
    reading; record PASS or FAIL with `file:line`, the ruling id where one
    applies, and the feature id. Reason: reading the maker's account first is
    checking homework with the answer key.
@@ -134,7 +135,12 @@ Read a file only for what they leave out (D30).
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
    against the evidence from steps 3 and 4. A claim without evidence is a located
-   failure. A command claimed but not run is a located failure.
+   failure. A command claimed but not run is a located failure. Then score the
+   decisions pack's F11 for every entry or addendum the diff adds to a ledger: a
+   write the maker's own tool call made — `docket append`, or an edit or a write
+   of a ledger — with no `confirm` from the person, in a turn of their own, after
+   the confirm block the intake prints, is a located failure (D8, D32). A ledger
+   change no tool call of the maker's made is not the maker's, and is not scored.
 6. **Verdict.**
    **PASS**: no feature failed, no ruling contradicted, every claim evidenced.
    **FAIL**: a ruling is contradicted and its stated reason still holds, or a
