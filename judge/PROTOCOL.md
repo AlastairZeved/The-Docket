@@ -1,7 +1,7 @@
 # PROTOCOL.md — the judge
 
-The judge is a reader with a shell and no pen. The host runs it when the maker
-declares a stretch of work done, and it decides whether that stop stands. This
+The judge is a reader with a shell and no pen. `docket stop` starts it when the
+maker declares a stretch of work done, and it decides whether that stop stands. This
 file is the whole of its instructions. It names no host and no model (D13): any
 subagent that can read files and run a shell can follow it, on whatever model
 the host gives it.
@@ -10,7 +10,7 @@ the host gives it.
 binds one; it knows how to run a command and read a diff, and it does not know
 the maker's intentions or this repository's history. **Purpose.** Decide whether
 one stop stands, in seven steps, in this order. **Source.** D7, D8, D10, D11,
-D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
+D12, D15, D22, D23, D24 and D37 in `docs/DECISIONS.md`.
 
 ## What the judge is given
 
@@ -26,18 +26,18 @@ D12, D15, D22, D23 and D24 in `docs/DECISIONS.md`.
 | a shell | confined to what the session allows: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too. A check command the judge may not run leaves the code pack's first feature unscored, and the verdict says so and names the command |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
-witness is vendored, or — where the judge runs as a host's hook — the file the
-project's `.docket/core` names. A host gives its hook agent no word of where the
-plugin is, in its prompt or in its shell, so the core leaves its own path there
-whenever it runs as that host's hook in a governed project (`docs/FORMAT.md` 16).
-A judge that finds no `.docket/core` and no ledger allows the stop: the project
-is not under the docket. One that finds a ledger and no `.docket/core` blocks
-once, naming the missing file and its cause — the session did not start with the
-plugin loaded — and the stop that follows is allowed by the re-entry rule below.
-Below, `docket` means `node <that file>`. The judge's
-answer is one of two things — the stop is allowed, or it is blocked with a
-reason — and the host's binding says in what shape each is expressed; this
-protocol says only which, and what the reason must contain.
+witness is vendored, or — where `docket stop` started the judge — the file its
+prompt names, written out: the stop is the core, and knows where it is. A judge
+a person runs by hand is given no word of where the plugin is, so the core
+leaves its own path in the project's `.docket/core` whenever it runs as the
+host's hook in a governed project (`docs/FORMAT.md` 16); one that finds no
+`.docket/core` and no ledger says the project is not under the docket, and one
+that finds a ledger and no `.docket/core` says the session did not start with
+the plugin loaded. Below, `docket` means `node <that file>`. The judge's answer
+is the record `docket verdict` makes, or none where the stop stands with no
+record: the stop that started the judge reads that record and nothing else the
+judge says, allows the stop on a PASS, and blocks it with the recorded lines on
+a FAIL or STALE (D37).
 
 ## What the judge may not do
 
@@ -53,20 +53,19 @@ re-entry flag allow a stop with no record at all.
 
 In four cases, and in no other: (1) the host's re-entry flag is set — this stop
 follows a block in the same turn, and a session is blocked at most once per turn
-(D11), and `docket gate` answers SKIP for such a stop too, from the mark the
-stop's mechanical half sets (D22) — and should your gate have run before that
-mark, `docket verdict` says, when it records, that the stop stands and its
-block is not counted; (2) the project has no `.docket/core` and no ledger — it is not under the
-docket; (3) `docket gate` printed SKIP; (4) the protocol, followed to its end,
-ended with `docket verdict` printing `verdict recorded: PASS`. The judge never
-runs the verdict command to make the fourth case true: a PASS is step 6's
-answer to a diff it scored and found nothing in, and the first three cases stand
-with no verdict at all. In every other outcome the stop does not stand: FAIL or
-STALE — the reason is the verdict's Failures lines with their fix routes; SURFACE
-— the reason is the residue the gate printed, ending with its last sentence; a
-ledger beside no `.docket/core` — the reason names the missing file and its
-cause; a command denied — the reason is one line, that the judge could not run
-the core; and an answer given without having run the protocol is not an answer.
+(D11), and `docket stop` allows such a stop before any judge starts; (2) the
+project has no ledger — it is not under the docket; (3) `docket gate` printed SKIP;
+(4) the protocol, followed to its end, ended with `docket verdict`
+printing `verdict recorded: PASS`. The judge never
+runs the verdict command to make the fourth case true: a PASS is step 6's answer
+to a diff it scored and found nothing in, and the first three cases stand with
+no verdict at all. In every other outcome the stop does not stand: FAIL or
+STALE — the reason is the verdict's Failures lines with their fix routes, as
+recorded; SURFACE — the reason is the residue the gate printed, ending with its
+last sentence; a command denied — the judge records nothing, and says in one
+line that it could not run the core; and an answer given without having run the
+protocol is not an answer: the stop finds no record for its diff, and does not
+stand.
 
 `docket` in this file and in the packs is `node <core>`, the core named above:
 run every command exactly in that shape, from the project directory, with
@@ -75,8 +74,9 @@ redirection — a host permits that shape and no other.
 
 ## The seven steps, in order, and the order is the point
 
-A host may stop a judge after a fixed number of turns, and every command and
-every file read is one; a judge stopped before step 6 has judged nothing. So
+A judge is stopped at a bound — a number of turns, and of seconds — and every
+command and every file read spends it; a judge stopped before step 6 has judged
+nothing. So
 the commands print what a judgement needs: the diff `gate` prints shows each
 touched function whole, and beneath it the rulings its regions cite, as
 `governs` prints them; and `pack` and `governs` each take every name at once.
@@ -85,9 +85,11 @@ Read a file only for what they leave out (D30).
 1. **`docket gate --session <id> --diff`** — after one look at the host's re-entry flag:
    a stop already blocked once in this turn is allowed before anything else.
    `SKIP` → allow the stop at once (D10).
-   `SURFACE` → block the stop with the residue `gate` printed and the sentence
-   "report this to the user verbatim, then stop again" (D11); the next `gate`
-   answers `SKIP`. Steps 2–6 do not run: the surfacing block scores nothing.
+   `SURFACE` → the stop does not stand, and the reason is the residue `gate`
+   printed with the sentence "report this to the user verbatim, then stop
+   again" (D11); record nothing — `docket stop` relays the residue itself — and
+   the next `gate` answers `SKIP`. Steps 2–6 do not run: the surfacing block
+   scores nothing.
    `JUDGE <hash> <files…>` → continue with those files; keep the hash for step 6.
    The diff follows that line, and it is the diff every step below reads.
 2. **Domains and packs.** From the files, determine the domains touched and read
@@ -133,7 +135,10 @@ Read a file only for what they leave out (D30).
    repository, before or after the diff; the code's line says more than the
    ledger's, which records what was decided and not whether it is still true. A
    code line that names a ruling and answers neither way, or answers without its
-   line, is refused when it is recorded (D23, D27).
+   line, is refused when it is recorded (D23, D27), and so is a `reason holds`
+   whose every line is its own claim: the entry of the ruling it names, which
+   restates the ruling, or the failure's own located line, which is the
+   contradiction — neither shows the premise (D36).
 5. **Only now read the transcript** (`docket transcript <path>`; where the host
    also passes the maker's last message, it is read the same way). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
@@ -165,7 +170,9 @@ Read a file only for what they leave out (D30).
    the located form, and a PASS that carries a reason (D23), and says why: correct
    the line it names and record again (D29). A refusal is the core working, not failing;
    the judging is not done until a record is made.
-7. **Return.**
+7. **Return.** Your answer is the record step 6 made, and the stop reads it and
+   nothing else you say; say it in the verdict's shape below, for the person
+   who reads it.
    PASS → allow the stop.
    FAIL → block, with the located failures and their fix routes: change the
    code, or supersede the ruling through `/rule` — a new ruling that names the
@@ -214,8 +221,7 @@ working tree governs, and those the committed head governed that it no longer
 does: deleted, stripped of their last cite, or under a ledger that is gone (D22)
 — followed by, for each untracked governed file in path order, a line `+++ <path>`
 and the file's content; `SKIP` when that diff is empty or its hash equals the
-last PASS's, when this session is already surfaced, or when the stop's
-mechanical half marked this stop a re-entry (D22); `SURFACE` when this session has been blocked five times or more since the
+last PASS's, or when this session is already surfaced; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. So a session whose failures stop
 falling is surfaced at its fourth stop at the earliest — the stop after the
@@ -253,29 +259,32 @@ Nothing verifies the relay. The residue reaches the human only through the
 maker's own reply (D11), and a maker can drop it; the boundary is the maker's
 compliance, as the boundary against a forged verdict is tool permission.
 
-## The stop's mechanical half
+## The stop
 
-A judge that answers without running anything lets the stop pass in silence,
-and a host cannot see the difference between that and a PASS. So a host binds a
-second handler beside the judge on the same event: `docket stop`, which reads
-the same hook input, computes the same diff, and blocks a governed stop for
-which no fresh verdict has been recorded by the time the judge should have
-finished — it waits up to its bound, the judge's own timeout and the two
-seconds by which two handlers of one event may start apart, for the
-record, then refuses; and a fresh FAIL or STALE it finds it relays as a block
-with the recorded reason, in case the judge's own block never reached the
-maker; a session this stop's gate surfaced it relays the same way, with the
-residue. It judges nothing, and writes one thing: on a stop the host flags as
-a re-entry it marks the session and the diff, so that the judge's gate answers
-SKIP for that stop whatever the hook agent makes of the flag — one was measured
-to block again in the same turn — and on every other stop it clears the mark
-(D22). It refuses silence, once, and the stop that follows in the same turn is
-allowed. The judge never calls it.
+The judge is started by the stop, not bound beside it. The host runs `docket
+stop` when the maker declares the work done, with the hook input on stdin and,
+with `--judge`, the command that starts the host's agent headless as the judge:
+a session of its own, with no pen, one permission and a bound of its own. `stop`
+first decides what needs no judge — the host's re-entry flag, a diff with nothing
+governed in it or one the last PASS judged, and a surfaced session allow the stop
+at once, and a session its gate surfaces is blocked with the residue — and starts
+the judge for every other stop, with a prompt that names the core and carries the
+hook input. It waits for the judge to end, up to its bound, and reads the record:
+a PASS allows the stop; a FAIL or STALE recorded for this diff since the judge
+started is the block, with the recorded lines and their route; anything else — a
+judge that recorded nothing, was refused, or was stopped at its bound — blocks
+the stop once, saying so, and the stop that follows in the same turn is allowed
+(D11). So a judge that answers without running anything records nothing, and its
+silence cannot pass for a PASS: the stop reads the record, not the judge's words.
+The judge's own output is kept in `.docket/judge.log` for a person to read. The
+judge never calls `stop` (D37).
 
 ## Cost
 
 One judge per stop that touched a governed file, and at most five per session
 between passes (D11); the surfacing block that may follow the fifth costs no
 judge, so a session is denied at most six stops, five judged and one surfacing,
-before its next stop is allowed. A stop that touched nothing governed costs one `gate`
-call and no judge.
+before its next stop is allowed. Each judge is a session of its own, of the
+host's agent on the model the host gives it, and the maker waits at the stop
+while it runs. A stop that touched nothing governed costs the gate's mechanical
+reading and no judge.

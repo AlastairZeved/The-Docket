@@ -500,8 +500,7 @@ the working tree does not: a governed file deleted or stripped of its last cite,
 a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
 (D22) — followed by, for each untracked governed file in path order, a line
 `+++ <path>` and the file's content. `SKIP` when that text is empty, when its hash
-equals the last PASS's, when the session is surfaced, or when `docket stop`
-marked this stop a re-entry and the mark is younger than the judge's timeout;
+equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times since the last PASS or
 its located failures have not fallen across the last two verdicts after the
 third block, with the residue printed beneath and the session marked surfaced;
@@ -513,23 +512,20 @@ ones as above), and beneath it each ruling cited within the window of a hunk
 (D30, D33). `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
-session's history; a changed hash never resets anything. A FAIL or STALE for a
-diff whose re-entry mark is still young is recorded and not counted, with
-`counted: false`: the stop it judged follows a block in the same turn, and the
-judge reached it only because its gate ran before the mark was written. A FAIL
+session's history; a changed hash never resets anything. A FAIL
 or STALE carries `--reason`, one located failure per line in the protocol's form,
 as many lines as `--failures` says; a code-pack line that names a ruling answers,
 in a field of its own, `reason holds: <the premise> (<file:line>)`, `reason gone:
 <what changed> (<file:line>)` or `cite stale`, the line one of a file in the
-repository before or after the diff — a range or several will do (D27); STALE is
+repository before or after the diff — a range or several will do (D27), though a
+`reason holds` whose every location lies in the entry of a ruling the line names,
+or in the line's own location, is refused: a claim is not its own evidence (D36); STALE is
 refused unless every line is a stale one and FAIL when every line is; a PASS
 carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
-failures, time, session, the reason it was recorded with, and `counted: false`
-on a verdict not counted), `lastPassHash`,
-and `sessions`, one entry per identifier with `blocks`, `history`, `surfaced` and,
-while a re-entry is marked, `reentry` (the diff's hash and the time). Every
+failures, time, session, and the reason it was recorded with), `lastPassHash`,
+and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`. Every
 verdict is also appended, one JSON line each and in order, to
 `.docket/verdicts.jsonl`: the judge's record, for a person to read and for a
 measurement to score the judge's first answer by; nothing in the core reads it.
@@ -537,33 +533,39 @@ A file that is missing, half-written or hand-edited is read as what it holds and
 nothing more. `.docket/` is ignored by git, and a constituted project is told to
 ignore it too.
 
-`docket stop` is the stop's mechanical half, bound by a host beside the judge on
-the same event and fed the same hook input on stdin: it allows at once when the
-host's re-entry flag is set, when nothing governed changed or the last PASS
-judged this diff, or when the session is surfaced; otherwise it waits up to
-`--wait` seconds (300 by default, the judge's own timeout), and two seconds
-past them, the most two handlers of one event start apart, for a verdict
-recorded for this diff since it started — or up to two seconds before, the most
-two handlers of one event start apart — or for the surfacing mark: a PASS
-allows; a FAIL or STALE is relayed as a block carrying the recorded reason; a
-session surfaced during the wait is relayed as a block carrying the residue; a
-stop that reaches the bound unjudged is blocked with a reason that names the
-files, the bound and, when the binding passes one with `--permission`, the rule
-to grant. It writes one thing: on a stop whose input sets the re-entry flag it
-marks the session with this diff's hash, so the judge's `gate` answers SKIP for
-it, and on every other stop it clears that mark (D22).
+`docket stop` is the stop: a host runs it when the maker declares the work done,
+with its hook input on stdin — of which it reads `session_id`, `stop_hook_active`
+and `cwd`, and the judge `transcript_path` — and gives it, with `--judge`, the command that
+starts the host's agent as the judge — headless, a session of its own that reads
+its prompt on stdin — and, with `--permission`, the spelling of the one rule that
+command grants it. It allows at once when the host's re-entry flag is set, when
+nothing governed changed or the last PASS judged this diff, or when the session
+is surfaced; it blocks, with the residue and no judge, a stop at which the gate
+surfaces the session. For any other stop it starts the judge with a prompt that
+names the core by its path, the permission's spelling when given, and the hook
+input; waits for it to end, up to `--wait` seconds (600 by default), then stops
+it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
+for this diff since the judge started is relayed as a block carrying the
+recorded reason and its route; a session surfaced while the judge ran is relayed
+with the residue; anything else — a judge that recorded nothing, ended in an
+error, or was stopped at the bound — is blocked once, with a reason that names
+the files, how the judge ended and where its output is. A stop it would judge
+with no `--judge` given is a usage error, exit 2. It writes one file,
+`.docket/judge.log` — the command, how the judge ended, and what it printed — for
+a person to read; nothing in the core reads it (D37).
 
 With `DOCKET_TRAIL` set in the environment, every run of the core in a project
 that has a `.docket/` appends one line to `.docket/trail.log` — the time and the
-command as given — so a measurement can read what a judge ran when its host
-keeps no transcript of it (D25). It is off by default.
+command as given — so a measurement can read what a judge ran when its session
+keeps no transcript (D25). It is off by default.
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
 `status` only when the binding passes a plugin root (`DOCKET_PLUGIN_ROOT`) that
 contains the running file, and only where a ledger governs; rewritten only when
-it changes. The judge a host
-runs at a stop is given no word of where the plugin is, so it finds the core
-here, and everything else it reads it asks the core to print. A host's hook
-agent working in a project with a ledger and no breadcrumb blocks the stop once,
-naming the cause; one working in a project with neither allows it.
+it changes. The judge `docket stop`
+starts is given the core's path in its prompt; a judge a person runs by hand is
+given no word of where the plugin is, so it finds the core here, and everything
+else it reads it asks the core to print. One run by hand in a project with a
+ledger and no breadcrumb says the session did not start with the plugin loaded;
+one in a project with neither says the project is not under the docket.

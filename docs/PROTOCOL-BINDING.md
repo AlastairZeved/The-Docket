@@ -24,8 +24,8 @@ agent that is about to edit:
 and `content`. `near` prints the governed list (D2, D7) or nothing; it never
 denies (D1). Set `CLAUDE_PROJECT_DIR` to the project root if the host knows it;
 else the core uses the git root. The stop's commands — `gate`, `verdict` and
-`stop` — use the git root either way, so the judge and the stop's mechanical half
-read one state whichever of them the host tells the project directory (D28).
+`stop` — use the git root either way, so the judge and the stop read one state
+whichever of them the host tells the project directory (D28).
 
 **2. At session start** — show `docket status` to the agent:
 
@@ -34,44 +34,54 @@ read one state whichever of them the host tells the project directory (D28).
 It prints the docket: the last rulings, rulings cited nowhere, pending addenda,
 the last verdict and whether its session is surfaced, and the witness result.
 
-**3. At "done"** — run a read-only subagent on `judge/PROTOCOL.md`, passing it
-the transcript path, the session identifier and whether this stop was already
-blocked once in this turn; block completion while it returns FAIL or STALE,
-and pass its reason back to the agent that stopped. Deny the subagent every
-write tool. Where the host lets a subagent run on a model other than the
-maker's, bind it that way (D8): shared training is shared blind spots. Name no
-model in the binding; let the host choose.
+**3. At "done"** — run the core's `stop` with the hook's input on stdin — a
+JSON object with the session identifier (`session_id`), the maker's transcript
+(`transcript_path`), the project directory (`cwd`) and whether this stop was
+already blocked once in this turn (`stop_hook_active`) — and give it, with
+`--judge`, the command that starts your agent headless as the
+judge: a session of its own that reads its prompt on stdin, with every write
+tool denied, one permission — to run the core — and a turn limit of its own:
 
-Two things a host may not give that subagent, and what the core does about
-each. It may not tell the subagent where the plugin is: so the core, whenever
-it runs as the host's own hook in a governed project (calls 1 and 2), writes its
-absolute path to the project's `.docket/core`, and the subagent reads that
-(`docs/FORMAT.md` 16). It may not let the subagent read outside the project: so
-the core prints the protocol, the packs, the diff and the transcript itself
-(`protocol`, `pack`, `gate --diff`, `transcript`), and the one permission the
-judge needs is to run the core — in the host bound here, the rule
-`Bash(node *docket.js*)`, with no space before the closing parenthesis, so that a
-quoted path matches too; a project whose own checks are not the core (the code
-pack's first feature) grants the judge that command as well. A subagent that
-cannot run the core cannot judge, and must say so rather than allow the stop in
-silence — and because a subagent may say nothing at all, the host binds
-`docket stop` beside it on the same event: a command that blocks a governed
-stop no fresh verdict has judged, relays a fresh FAIL or STALE, and writes
-nothing (`judge/PROTOCOL.md`, the stop's mechanical half). The host's own
-names stay in the binding: its command hooks pass the plugin root to the core
-as `DOCKET_PLUGIN_ROOT`, and `stop` is given the permission's spelling with
-`--permission`, so the core names neither the host's variable nor its rule
-syntax (D13, D20).
+    node bin/docket.js stop --permission "<the rule>" --judge "<the command>"
 
-A host may also cap the subagent's turns. The host bound here stops an agent
-hook at its fiftieth turn, counting every message the agent writes — about two
-for each tool call — and a judge stopped there records nothing, so the stop
-falls to the mechanical half's bound. The protocol's commands print what a
-judgement needs in few calls (D30).
+`stop` decides what needs no judge, starts the judge for the rest with a prompt
+that names the core and carries the hook input, waits for it, and answers on
+stdout: nothing, to allow the stop, or a block with its reason as JSON. Where the
+host lets the judge run on a model other than the maker's, bind it that way
+(D8): shared training is shared blind spots. Name no model in the binding; let
+the host choose.
+
+Two things the judge needs that a host may not give it, and what the core does
+about each. Where the plugin is: `stop` is the core, so it writes its own path
+into the judge's prompt; for a judge a person runs by hand the core, whenever it
+runs as the host's own hook in a governed project (calls 1 and 2), writes its
+absolute path to the project's `.docket/core`, and that judge reads it
+(`docs/FORMAT.md` 16). Reading outside the project: the core prints the
+protocol, the packs, the diff and the transcript itself (`protocol`, `pack`,
+`gate --diff`, `transcript`), and the one permission the judge needs is to run
+the core — in the host bound here, the rule `Bash(node *docket.js*)`, with no
+space before the closing parenthesis, so that a quoted path matches too; a
+project whose own checks are not the core (the code pack's first feature) grants
+the judge that command as well. A judge that cannot run the core cannot judge,
+and records nothing; and a judge may say anything, so `stop` reads the record
+and not the judge's words, and a governed stop with no record for its diff does
+not stand, once (`judge/PROTOCOL.md`, the stop). The host's own names stay in the
+binding: its command hooks pass the plugin root to the core as
+`DOCKET_PLUGIN_ROOT`, and `stop` is given the command and the permission's
+spelling as text, so the core names neither the host's variable, nor its
+command, nor its rule syntax (D13, D20, D37).
+
+A host may also cap its agent's turns. The host bound here stops an agent hook
+at its fiftieth message, about two for each tool call, and a judge stopped there
+recorded nothing (D30); so the judge is not the host's hook agent but a session
+of its own, started by `stop`, with the turn limit the binding gives it and the
+bound `stop` keeps. The protocol's commands print what a judgement needs in few
+calls (D30).
 
 ## What a binding may contain
 
-A hook declaration per call, an agent declaration for the judge that points at
+A hook declaration per call — the third carrying the command that starts the
+judge — an agent declaration for a judge run by hand that points at
 `judge/PROTOCOL.md` and denies writing, and a skill or command per intake
 (`intake/RULE.md`, `intake/CONSTITUTE.md`) that says "follow this file, then run
 the subcommand". Each is a few lines. A binding that contains a rule, a

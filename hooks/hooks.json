@@ -28,14 +28,9 @@
       {
         "hooks": [
           {
-            "type": "agent",
-            "timeout": 300,
-            "prompt": "You are the docket's judge at this stop. Verify: the stop stands under the protocol the core prints, which says in which four cases a stop stands and what your reason is in every other. Read .docket/core in the project directory (the hook input's cwd) with your file tool: one line, the absolute path of the core. Run `node <that path> protocol` with the path written out \u2014 no $( ), no variable, no cd or other prefix: your one permission matches that shape alone. Follow the protocol to its end. If .docket/core is missing: with no DECISIONS.md anywhere under the project the stop stands; with one it does not, and your reason is that the session did not start with the plugin loaded. If a command of that shape is denied, the stop does not stand, and your reason is one line: the judge could not run the core. The host stops you at fifty messages, about two per tool call. Hook input: $ARGUMENTS"
-          },
-          {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" stop --permission \"Bash(node *docket.js*)\"",
-            "timeout": 330
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" stop --permission \"Bash(node *docket.js*)\" --judge \"claude -p --no-session-persistence --settings '{\\\"disableAllHooks\\\":true}' --allowedTools 'Bash(node *docket.js*)' --disallowedTools 'Write Edit NotebookEdit' --max-turns 60\"",
+            "timeout": 630
           }
         ]
       }

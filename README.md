@@ -352,7 +352,7 @@ node bin/docket.js check && node bin/docket.js status
 * [x] The witness: `docket check`, seven checks, CI red on a dangling cite
 * [x] The hook: what governs this region, printed before the edit
 * [x] `/rule`, `/constitute`, `/docket`, and the docket at session start
-* [x] The judge: a Stop hook of type `agent`, scoring before it reads the trace
+* [x] The judge: a headless session the Stop hook starts, scoring before it reads the trace
 * [x] The packs: code, design, prose, decisions
 * [ ] The substrate: the ~15% of a spatial tool that is reusable as a template
 * [ ] A second host binding: the same core, a second thin layer
@@ -441,7 +441,8 @@ broken.
 The core is host-agnostic: it speaks stdin JSON, stdout text, exit codes and
 markdown. `docs/PROTOCOL-BINDING.md` is one page on binding a second host: pipe
 the edit event into `docket near` before an edit, show `docket status` at
-session start, and run a read-only subagent on `judge/PROTOCOL.md` at "done".
+session start, and at "done" run `docket stop`, which starts a read-only judge
+on `judge/PROTOCOL.md` with the command your host gives it.
 
 </details>
 
