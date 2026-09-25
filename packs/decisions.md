@@ -44,8 +44,9 @@ absence is not a failure; an unrecorded absence is. How scored: a reading.
 **F10 — the number and its property.** If the entry changes a number an earlier
 ruling set, it names that ruling as superseded and gives the measurement that
 forced the change: yes or no. If the diff changes such a number with no entry at
-all, that is a located failure in the code pack's F3, routed to `/rule`. How
-scored: the diff's changed numbers against the ledger's ruled numbers.
+all, that is a located failure in the code pack's F3, routed to `/rule` as a
+ruling that supersedes the one that set the number (D14). How scored: the diff's
+changed numbers against the ledger's ruled numbers.
 
 **F11 — the person confirmed it.** An entry or addendum the maker's own tool
 call wrote — `docket append`, or an edit or a write of a ledger file — was put

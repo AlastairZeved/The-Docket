@@ -93,10 +93,23 @@ hook_fired() {
     node "$1/bin/docket.js" near 2>/dev/null | grep -q 'Governed here' && echo yes || echo no
 }
 
+copy_tree() {                     # $1 from, $2 to, then the top-level names left out: a copy of the tree as it stands
+  src=$1; dst=$2; shift 2         # an entry of its top level that vanishes while it is copied — a scratch directory another
+  mkdir -p "$dst" || return 1     # command made beside the tree and took away — was never the tree's, and is left out;
+  for e in "$src"/* "$src"/.[!.]* "$src"/..?*; do   # any other failure is a failure
+    b=${e##*/}
+    for x in "$@"; do [ "$b" = "$x" ] && continue 2; done
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" 2>/dev/null && continue
+    rm -rf "${dst:?}/$b"
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" || return 1
+  done
+}
+
 scratch() {                       # a fresh copy of the repo, fixture and plugin together
   d="$WORK/$1"
-  cp -a "$REPO" "$d" || return 1
-  rm -rf "$d/.claude" "$d/node_modules"
+  copy_tree "$REPO" "$d" .claude node_modules || return 1
   echo "$d"
 }
 

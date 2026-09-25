@@ -168,8 +168,9 @@ Read a file only for what they leave out (D30).
 7. **Return.**
    PASS → allow the stop.
    FAIL → block, with the located failures and their fix routes: change the
-   code, or amend the law through `/rule` (which ends at a confirm block only
-   the human can answer, D8).
+   code, or supersede the ruling through `/rule` — a new ruling that names the
+   clause it replaces, the route of an unlogged change to a ruled number too
+   (D14, D35) — which ends at a confirm block only the human can answer (D8).
    STALE → block, with the addendum route: `/rule --addendum <id> "<why the
    reason no longer holds>"`, not a new ruling (D7).
 

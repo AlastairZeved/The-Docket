@@ -308,7 +308,9 @@ function isBoundary(line) { return HEADING_RE.test(line) || SECTION_RE.test(line
 function parseLedger(text, ledgerPath) {
   const lines = splitLines(text);
   const rulings = [], sections = [];
-  const contractFrom = {}, baseline = {};
+  // Keyed by the ledger's own text, a prefix or a path: a map with no prototype, where `constructor` or `__proto__` is a
+  // key like any other and not a property every object already has (D1).
+  const contractFrom = Object.create(null), baseline = Object.create(null);
   let hasBaseline = false;
   let firstHeading = lines.length;
   for (let i = 0; i < lines.length; i++) {
@@ -316,8 +318,9 @@ function parseLedger(text, ledgerPath) {
   }
   const preambleLines = lines.slice(0, firstHeading);
   const directiveFaults = [];                                          // {k, line, message}: check reports them, parse reads the first directive
-  const contractFromLine = {};                                         // where each contract line sits, so check can name it
-  const firstAt = { bareCites: 0 };
+  const contractFromLine = Object.create(null);                        // where each contract line sits, so check can name it
+  const firstAt = Object.create(null);                                 // the line of each prefix's first contract line
+  let firstBareCites = 0;                                              // and of the first bare-cites comment: a prefix may be any letters
   for (let li = 0; li < preambleLines.length; li++) {
     const l = preambleLines[li];
     let m = /<!--\s*docket:\s*contract from ([A-Za-z]+)([1-9]\d{0,14})\s*-->/.exec(l);   // a ruling number (2): a zero names no entry, so it binds none
@@ -327,8 +330,8 @@ function parseLedger(text, ledgerPath) {
     }
     m = /<!--\s*docket:\s*bare-cites([^>]*)-->/.exec(l);
     if (m) {
-      if (hasBaseline) { directiveFaults.push({ k: 4, line: li + 1, message: 'a second bare-cites comment (line ' + firstAt.bareCites + ' is the baseline); the preamble carries one (FORMAT.md 9)' }); continue; }
-      hasBaseline = true; firstAt.bareCites = li + 1;
+      if (hasBaseline) { directiveFaults.push({ k: 4, line: li + 1, message: 'a second bare-cites comment (line ' + firstBareCites + ' is the baseline); the preamble carries one (FORMAT.md 9)' }); continue; }
+      hasBaseline = true; firstBareCites = li + 1;
       for (const kv of m[1].trim().split(/\s+/).filter(Boolean)) {
         const eq = kv.lastIndexOf('=');
         // One file, one allowance: a repeated key would let the later number raise a reviewed allowance
@@ -833,7 +836,7 @@ function runCheck(root, opts) {
       for (const c of citesIn(fileText(e), ledger)) if (!c.exists) fail(e.path, c.line, 1, 'cite ' + c.id + ' names no ruling in ' + rel(root, lp));
     }
     // 2. numbering contiguous per prefix, in order of appearance
-    const seenN = {};
+    const seenN = Object.create(null);                                 // keyed by prefix, which may be any letters
     for (const r of ledger.rulings) {
       const expect = (seenN[r.prefix] || 0) + 1;                       // FORMAT.md 12: each number is its position
       if (r.n !== expect) fail(lp, r.line, 2, 'numbering: ' + r.id + ' is entry ' + expect + ' of the ' + r.prefix + ' entries; expected ' + r.prefix + expect);
@@ -1178,6 +1181,13 @@ function buildEntry(argv, root, ledger) {
   if (splitLines(body).some(l => ADDENDUM_RE.test(l))) die('append: --body may not carry an addendum line; an addendum is written by append --addendum and dated by the tool (FORMAT.md 6)', 2);
   if (splitLines(body).some(isBoundary)) die('append: --body may not carry an entry or section heading line — a body opens no entry; the heading is the tool\'s to write (FORMAT.md 2, 7, 11)', 2);
   { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && /^Principle:\s/.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }
+  let prefix = flag(argv, '--prefix');
+  if (!prefix) prefix = ledger.rulings.length ? ledger.rulings[ledger.rulings.length - 1].prefix : null;
+  if (!prefix) die('append: --prefix is required for an empty ledger', 2);
+  if (!/^[A-Za-z]+$/.test(prefix)) die('append: --prefix must be letters', 2);
+  const n = ledger.rulings.filter(r => r.prefix === prefix).reduce((m, r) => Math.max(m, r.n), 0) + 1;
+  if (String(n).length > NUMERAL_MAX_DIGITS) die('append: the ' + prefix + ' entries end at ' + (n - 1) + ', the largest number the grammar allows (' + NUMERAL_MAX_DIGITS + ' digits); a further ruling needs a new prefix — pass --prefix (FORMAT.md 2, 12)', 2);
+  const selfId = prefix + n;                                           // the id this entry will receive
   const parsedEdges = [], edgeKeys = new Set();
   for (const e of edges) {
     if (/[\r\n\u2028\u2029]/.test(e)) die('append: --edge "' + e.replace(/[\r\n]+/g, ' ') + '" is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
@@ -1187,6 +1197,7 @@ function buildEntry(argv, root, ledger) {
     p.tos = p.tos.map(to => {                                           // the target is read whatever its case, as governs reads one
       const res = resolveRuling(ledger, to);
       if (res.ambiguous) die('append: --edge "' + e + '" names ' + to + '; ' + res.ambiguous.join(' and ') + ' differ only in case — name one exactly', 2);
+      if (!res.r && to.toLowerCase() === selfId.toLowerCase()) die('append: --edge "' + e + '" names ' + selfId + ', the id this entry will receive — an edge from ' + selfId + ' to itself; a ruling may not name itself (FORMAT.md 5)', 2);
       if (!res.r) die('append: --edge "' + e + '" names ' + to + ', which is not in ' + rel(root, ledger.path), 2);
       return res.r.id;
     });
@@ -1194,17 +1205,10 @@ function buildEntry(argv, root, ledger) {
     if (edgeKeys.has(k)) continue;                                      // the same edge given twice is one edge
     edgeKeys.add(k); parsedEdges.push(p);
   }
-  let prefix = flag(argv, '--prefix');
-  if (!prefix) prefix = ledger.rulings.length ? ledger.rulings[ledger.rulings.length - 1].prefix : null;
-  if (!prefix) die('append: --prefix is required for an empty ledger', 2);
-  if (!/^[A-Za-z]+$/.test(prefix)) die('append: --prefix must be letters', 2);
-  const n = ledger.rulings.filter(r => r.prefix === prefix).reduce((m, r) => Math.max(m, r.n), 0) + 1;
-  if (String(n).length > NUMERAL_MAX_DIGITS) die('append: the ' + prefix + ' entries end at ' + (n - 1) + ', the largest number the grammar allows (' + NUMERAL_MAX_DIGITS + ' digits); a further ruling needs a new prefix — pass --prefix (FORMAT.md 2, 12)', 2);
   // The ledger is append only: an entry whose text names a ruling that does not exist is refused before it is written,
   // not failed by check 1 after (FORMAT.md 8). The entry's own id may appear in its body.
   const probe = parseLedger(ledger.text + '\n### ' + prefix + n + '. x\n', ledger.path);
   for (const c of citesIn(title + '\n' + body, probe)) if (!c.exists) die('append: the entry names ' + c.id + ', which is not in ' + rel(root, ledger.path), 2);
-  const selfId = prefix + n;
   for (const li of splitLines(body)) for (const ed of edgesIn(li, selfId, 0, false)) {
     if (ed.to === selfId) die('append: --body says "' + ed.clause.trim() + '", which is an edge from ' + selfId + ' to itself; a ruling may not name itself (FORMAT.md 5), and once written the ledger could never stop failing check 5', 2);
     if (!probe.byId.has(ed.to)) die('append: --body says "' + ed.clause.trim() + '", naming ' + ed.to + ', which is not in ' + rel(root, ledger.path), 2);
@@ -1270,7 +1274,10 @@ function loadState(root) {
   try { st = JSON.parse(readText(statePath(root))); } catch (e) { st = null; }
   if (!st || typeof st !== 'object' || Array.isArray(st)) st = {};
   // Every field is filled here so that a file written by hand, or half-written, informs rather than throws (D1).
-  const sessions = st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions) ? st.sessions : {};
+  // A session id is the host's text, or a person's: a map with no prototype, where a session named __proto__ or
+  // constructor is stored and read like any other and not the prototype of the map (D11).
+  const sessions = Object.create(null);
+  if (st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions)) for (const k of Object.keys(st.sessions)) sessions[k] = st.sessions[k];
   const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
 }
@@ -1969,7 +1976,7 @@ function stop(argv) {
   }
   if (j) {                                                                                       // a fresh FAIL or STALE: relayed, in case the judge's own block never reached the maker
     const l = j.last, n = l.failures;
-    const reason = 'The docket\'s judge recorded ' + j.kind + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (j.kind === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or amend the law through /rule.') + tail;
+    const reason = 'The docket\'s judge recorded ' + j.kind + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (j.kind === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or supersede the ruling through /rule.') + tail;
     out(JSON.stringify({ decision: 'block', reason }));
     return 0;
   }
@@ -2157,7 +2164,7 @@ function main() {
   const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript, stop };
   if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
-  if (!table[sub]) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);
+  if (!Object.prototype.hasOwnProperty.call(table, sub)) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);   // `constructor` is no subcommand
   const allowed = OPTIONS[sub] || [];
   for (let i = 0; i < argv.raw.length; i++) {
     const a = argv.raw[i];

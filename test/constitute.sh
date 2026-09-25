@@ -98,10 +98,23 @@ core_invoked() {
   ' "$1" 2>/dev/null || echo no
 }
 
+copy_tree() {                     # $1 from, $2 to, then the top-level names left out: a copy of the tree as it stands
+  src=$1; dst=$2; shift 2         # an entry of its top level that vanishes while it is copied — a scratch directory another
+  mkdir -p "$dst" || return 1     # command made beside the tree and took away — was never the tree's, and is left out;
+  for e in "$src"/* "$src"/.[!.]* "$src"/..?*; do   # any other failure is a failure
+    b=${e##*/}
+    for x in "$@"; do [ "$b" = "$x" ] && continue 2; done
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" 2>/dev/null && continue
+    rm -rf "${dst:?}/$b"
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" || return 1
+  done
+}
+
 run_one() {                       # $1 tag, $2 role -> prints the project dir; writes $WORK/$1.jsonl and .txt
   plug="$WORK/$1-plugin"; proj="$WORK/$1-project"
-  cp -a "$REPO" "$plug" || { echo "constitute.sh: scratch copy failed" >&2; return 1; }
-  rm -rf "$plug/.claude" "$plug/node_modules" "$plug/.git"
+  copy_tree "$REPO" "$plug" .git .claude node_modules || { echo "constitute.sh: scratch copy failed" >&2; return 1; }
   mkdir -p "$proj"
   ( cd "$proj" && claude -p --plugin-dir "$plug" --output-format stream-json --verbose \
       --permission-mode acceptEdits "$(prompt "$2")" ) > "$WORK/$1.jsonl" 2>"$WORK/$1.err"

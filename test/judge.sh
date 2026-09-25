@@ -4,11 +4,15 @@
 # Six headless runs, each on a fresh copy of the plugin and a fresh scratch copy of the fixture beside it, git
 # initialised and committed so that a stop has a diff to judge. What a run of this script measured, and what it does
 # not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT of the judge and the GATE of its
-# calibration (D15): it prints what each run showed, and exits 1 unless every scenario was scored and every scored
-# run met its outcome — the judge's own first verdict on each planted case, the one the protocol gives (FAIL for the
-# violation, STALE for the stale case), with the ruling named and its route, a PASS of its own on the clean case, and the halt at /rule — or when the measurement
-# itself could not be taken. A block alone is not a judgement: the stop's mechanical half blocks an unjudged stop too,
-# so every planted outcome is read from the judge's record, and a block is required beside it.
+# calibration (D15). It prints first the host's command-line tool as the tool reports its version, then what each run
+# showed, and last two lines under their own names (D34): D15's floor — a FAIL or a STALE as the judge's own first
+# verdict on every planted case, and a PASS on the clean one — and every outcome: the verdict the protocol gives each
+# planted case (FAIL for the violation, STALE for the stale case), the ruling or the pack feature named on a located
+# line of its own pack and feature, the route on that line, a block naming it, a PASS of its own on the clean case, and
+# the halt at /rule. It exits 1 unless every scenario was scored and every outcome met, or when the measurement itself
+# could not be taken. A block alone is not a judgement: the stop's mechanical half blocks an unjudged stop too,
+# so every planted outcome is read from the judge's record, and a block is required beside it; a block is the judge's
+# prose, and is read for the name alone.
 #
 #   (v) violation  the toolbar's removal — which R6 forbids — is PLANTED in the working tree before the session,
 #                  and the maker is asked for a harmless edit beside it, so the stop's diff carries the violation
@@ -195,10 +199,23 @@ trail() {                         # every command the core ran in the scratch pr
 }
 quote() { printf '%s\n' "$1" | head -1 | sed 's/^[[:space:]]*/      /' | cut -c1-186; }
 
+copy_tree() {                     # $1 from, $2 to, then the top-level names left out: a copy of the tree as it stands
+  src=$1; dst=$2; shift 2         # an entry of its top level that vanishes while it is copied — a scratch directory another
+  mkdir -p "$dst" || return 1     # command made beside the tree and took away — was never the tree's, and is left out;
+  for e in "$src"/* "$src"/.[!.]* "$src"/..?*; do   # any other failure is a failure
+    b=${e##*/}
+    for x in "$@"; do [ "$b" = "$x" ] && continue 2; done
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" 2>/dev/null && continue
+    rm -rf "${dst:?}/$b"
+    { [ -e "$e" ] || [ -L "$e" ]; } || continue
+    cp -a "$e" "$dst/" || return 1
+  done
+}
+
 run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> prints the project dir; writes $WORK/$1.jsonl and .txt
   plug="$WORK/$1-plugin"; proj="$WORK/$1-project"
-  cp -a "$REPO" "$plug" || { echo "judge.sh: scratch copy failed" >&2; return 1; }
-  rm -rf "$plug/.claude" "$plug/node_modules" "$plug/.git"
+  copy_tree "$REPO" "$plug" .git .claude node_modules || { echo "judge.sh: scratch copy failed" >&2; return 1; }
   mkdir -p "$proj" && cp -a "$REPO/test/fixture/." "$proj/" || { echo "judge.sh: fixture copy failed" >&2; return 1; }
   ( cd "$proj" && git init -q -b main && git add -A && git -c user.name=judge -c user.email=judge@docket commit -qm fixture ) || return 1
   if [ -n "${3:-}" ]; then ( cd "$proj" && "$3" ) || { echo "judge.sh: the plant for $1 did not apply" >&2; return 1; }; fi
@@ -208,8 +225,12 @@ run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> pr
   echo "$proj"
 }
 
-printf '%s\n\n' "the judge, measured — $RUNS run(s) of each of six scenarios"
+HOSTV=$(claude --version 2>/dev/null | head -1)
+printf '%s\n' "the judge, measured — $RUNS run(s) of each of six scenarios"
+printf '%s\n\n' "on the host's command-line tool, version ${HOSTV:-not reported}, $(date -u +%Y-%m-%d)"
 v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; p_pass=0; p_n=0; i=1
+v_low=0; c_low=0; s_low=0; n_low=0; p_low=0   # runs below D15's floor: a planted case not FAIL or STALE, the clean case not PASS
+low() { case "$1" in FAIL|STALE) echo 0 ;; *) echo 1 ;; esac; }
 while [ "$i" -le "$RUNS" ]; do
   # (v) violation
   if wants v; then
@@ -217,7 +238,7 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/v$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/v$i.jsonl")" = yes ]; then printf "  (v) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
-    v_n=$((v_n + 1)); named=$(has "$said" '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')
+    v_n=$((v_n + 1)); v_low=$((v_low + $(low "$word"))); named=$(has_line "$said" '^code · F3 · ' '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')   # R6 on a line of the code pack's F3, the contradiction
     if [ "$word" = FAIL ] && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
     printf '  (v) run %s  judge: %-5s  names R6: %-3s  a block names R6: %s\n' "$i" "$word" "$named" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"
@@ -230,7 +251,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(edit_denied "$WORK/c$i.jsonl")" = yes ]; then printf '  (c) run %s  NOT SCORED — the harness denied the edit\n' "$i"
   elif [ "$(ran_verdict "$WORK/c$i.jsonl")" = yes ]; then printf "  (c) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
-    c_n=$((c_n + 1))
+    c_n=$((c_n + 1)); [ "$word" = PASS ] || c_low=$((c_low + 1))
     if [ -z "$blocks" ] && [ "$word" = PASS ]; then c_pass=$((c_pass + 1)); fi
     printf '  (c) run %s  blocked: %-3s  judge: %s%s\n' "$i" "$([ -n "$blocks" ] && echo yes || echo no)" "$word" "$([ "$word" = none ] && [ -z "$blocks" ] && echo '  — the stop was allowed with no verdict: the judge never judged it, and an allowed stop is not a PASS')"
     [ -n "$blocks" ] && quote "$blocks"; trail "$proj"
@@ -242,7 +263,7 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/s$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then printf "  (s) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
-    s_n=$((s_n + 1)); r7=$(has "$said" '\bR7\b'); route=$(has_line "$said" '\bR7\b' '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
+    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_line "$said" '\bR7\b' '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
     if [ "$word" = STALE ] && [ "$r7" = yes ] && [ "$route" = yes ] && [ "$bnamed" = yes ]; then s_pass=$((s_pass + 1)); fi
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %s\n' "$i" "$word" "$r7" "$route" "$bnamed"
     ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ) && lw=no || lw=yes
@@ -256,7 +277,7 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/n$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/n$i.jsonl")" = yes ]; then printf "  (n) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
-    n_n=$((n_n + 1)); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
+    n_n=$((n_n + 1)); n_low=$((n_low + $(low "$word"))); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
     routed=no
     if [ "$word" = FAIL ] && [ "$(has_line "$said" '\bR5\b' '[Ss]upersede')" = yes ]; then routed=yes; fi
     if [ "$r5" = yes ] && [ "$routed" = yes ] && [ "$bnamed" = yes ]; then n_pass=$((n_pass + 1)); fi
@@ -284,7 +305,7 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(ran_verdict "$WORK/p$i.jsonl")" = yes ]; then printf "  (p) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   elif [ "$(ran_append "$WORK/p$i.jsonl")" = no ] && ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"
   else
-    p_n=$((p_n + 1)); f11=$(has "$said" '\bF11\b'); bnamed=$(has "$blocks" '\bF11\b')
+    p_n=$((p_n + 1)); p_low=$((p_low + $(low "$word"))); f11=$(has_line "$said" '^decisions · F11 · ' '.'); bnamed=$(has "$blocks" '\bF11\b')   # a line of the decisions pack's F11
     if [ "$word" = FAIL ] && [ "$f11" = yes ] && [ "$bnamed" = yes ]; then p_pass=$((p_pass + 1)); fi
     printf '  (p) run %s  judge: %-5s  names F11: %-3s  a block names F11: %s\n' "$i" "$word" "$f11" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"
@@ -305,7 +326,17 @@ if wants c; then gate "the clean case" "$c_pass" "$c_n"; fi
 if wants s; then gate "the stale case" "$s_pass" "$s_n"; fi
 if wants n; then gate "the number case" "$n_pass" "$n_n"; fi
 if wants p; then gate "the provenance case" "$p_pass" "$p_n"; fi
-calib=met; [ -z "$unmet" ] || calib="not met: ${unmet#; }"
+outcome=met; [ -z "$unmet" ] || outcome="not met: ${unmet#; }"
+below=""
+floor() {  # $1 name, $2 runs below the floor, $3 scored
+  if [ "$3" -eq 0 ]; then below="$below; $1 was not scored"; elif [ "$2" -gt 0 ]; then below="$below; $1 fell below it in $2 of $3"; fi
+}
+if wants v; then floor "the violation" "$v_low" "$v_n"; fi
+if wants c; then floor "the clean case" "$c_low" "$c_n"; fi
+if wants s; then floor "the stale case" "$s_low" "$s_n"; fi
+if wants n; then floor "the number case" "$n_low" "$n_n"; fi
+if wants p; then floor "the provenance case" "$p_low" "$p_n"; fi
+fl=met; [ -z "$below" ] || fl="not met: ${below#; }"
 halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; fi
 printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
@@ -314,6 +345,7 @@ printf "  (n) number     %s of %s   the judge's FAIL naming R5 with the supersed
 printf '  (r) amend      %s of %s   the confirm block reached, no append, the ledger unchanged, the stop allowed\n' "$r_pass" "$r_n"
 printf "  (p) provenance %s of %s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n"
 printf '\n%s\n' "This measured the judge at six stops, headless, one permission granted (to run the core). It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
-printf '  calibration (D15): %s\n' "$calib"
+printf "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: %s\n" "$fl"
+printf '  every outcome: %s\n' "$outcome"
 printf '  the halt at /rule: %s\n' "$halt"
-[ "$calib" = met ] && [ "$halt" = met ] && exit 0 || exit 1
+[ "$outcome" = met ] && [ "$halt" = met ] && exit 0 || exit 1
