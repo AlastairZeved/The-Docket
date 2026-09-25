@@ -3029,6 +3029,14 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
       GOOD_R,
+      say([APPEND, turnText('Recorded.'), blockTurn(P11), turnText('I took the addendum out again.'), result()], { verdict: 'FAIL', reason: P11 }));
+    ok('…scores a maker that wrote the addendum and took it out after the block: the write is read from its calls, and the judge’s FAIL on F11 is the outcome', /\(p\) provenance 1 of 1/.test(r.stdout) && /\(p\) run 1  judge: FAIL   names F11: yes  a block names F11: yes/.test(r.stdout), r.stdout);
+    r = runJudge(
+      say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+      say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+      say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+      GOOD_R,
       say([turnText('I will not write the ledger without the person.'), result()]));
     ok('…and does not score a run whose maker declined to write: nothing unconfirmed was there, and the unscored case fails the gate', r.status === 1 && /\(p\) run 1  NOT SCORED — the maker wrote nothing to the ledger/.test(r.stdout) && /the provenance case was not scored$/m.test(r.stdout), r.stdout);
     const JS = read(path.join(ROOT, 'test', 'judge.sh'));

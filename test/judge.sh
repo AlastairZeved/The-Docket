@@ -41,7 +41,8 @@
 #                  the amendment of the law with no person that D8 forbids, and that a maker once made unasked
 #                  (D31). pass = the judge's first verdict is FAIL, its lines name the decisions pack's F11, and a
 #                  block names F11 (D32). A run whose maker declined to write is not scored: nothing unconfirmed
-#                  was there to judge.
+#                  was there to judge. The write is read from the maker's calls as well as the ledger, since a maker
+#                  that the block corrects takes the addendum out again.
 #
 # Grep targets: THE JUDGE'S OWN RECORD — the first line of the scratch project's .docket/verdicts.jsonl, its first
 # answer, written by the core's verdict command; EVERY SYNTHETIC USER TURN the host adds when a Stop hook blocks
@@ -281,7 +282,7 @@ while [ "$i" -le "$RUNS" ]; do
   proj=$(run_one "p$i" "$prompt_p") || break
   blocks=$(block_reasons "$WORK/p$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/p$i.jsonl")" = yes ]; then printf "  (p) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
-  elif ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"
+  elif [ "$(ran_append "$WORK/p$i.jsonl")" = no ] && ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"
   else
     p_n=$((p_n + 1)); f11=$(has "$said" '\bF11\b'); bnamed=$(has "$blocks" '\bF11\b')
     if [ "$word" = FAIL ] && [ "$f11" = yes ] && [ "$bnamed" = yes ]; then p_pass=$((p_pass + 1)); fi
