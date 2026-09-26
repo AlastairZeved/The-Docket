@@ -378,7 +378,11 @@ and `append` exits 2 without it.
 
 Each failure prints one line, `<file>:<line>  check <k>: <message>`; the exit
 code is 1 if any check fails, else 0. A failure names the line of the offending
-cite, heading or edge, never only the file.
+cite, heading or edge, never only the file. Every line the core prints, here and
+in every subcommand, replaces a control character, or a character that reorders
+what a terminal shows, with U+FFFD: check 2 fails an entry that carries one, and
+text no check reads for one — a ledger's preamble, a section heading — still
+prints straight.
 
 | k | Check | Fails when |
 |---|---|---|
@@ -415,8 +419,10 @@ from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a
 declaration of another value beside it is a theme's and is reported, not failed;
 a value inside a CSS comment is not a declaration, and a comment never closed
 runs to the end of the file, as CSS reads it; and a
-**contrast row**, a table row holding token names and an `N:1` value, which
-names exactly two tokens or fails, and whose ratio is recomputed from the two
+**contrast row**, a table row holding token names and an `N:1` value — the `1`
+ends it, so `4.5:10` is not one, and a row that names two tokens with a ratio in
+another shape (`4.5:10`, `4.5 : 1`, `4.5 to 1`) fails, named, and is not read as
+prose — which names exactly two tokens or fails, and whose ratio is recomputed from the two
 hexes to two decimals (b): the stated ratio is rounded half-up on its written
 digits, the recomputed one on its value, and the two are compared in hundredths. `governs <id>` names the ledger it searched and
 exits 2 when `<id>` is not one of its entries; `query <term>` prints that nothing

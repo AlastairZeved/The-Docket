@@ -1497,8 +1497,16 @@ const SEC = String.fromCharCode(0xa7);
   const esc = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '# Empty\n'));
   r = docket(['spec-check'], { cwd: path.join(esc, 'test', 'fixture') });
   ok('spec-check honours the same exemption check does: no entries, no row read, and it says so', r.code === 0 && /no entries; its subtree is ungoverned and spec-check reads no row beside it/.test(r.out), r.out);
+  // every line the core prints reads straight (FORMAT.md 13): a reordering character in a principle or a section heading, which no
+  // check reads, prints as U+FFFD
+  {
+    const bd = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'DECISIONS.md'), pr = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace('## A. Resolved conflict', '## A. Resolved \u202Econflict')); fs.writeFileSync(pr, read(pr).replace('**Positions are permanent.**', '**Positions are \u202Epermanent.**')); });
+    const fx = path.join(bd, 'test', 'fixture');
+    const bc = docket(['check'], { cwd: fx }), bp = docket(['principles'], { cwd: fx }), bi = docket(['index', '--json'], { cwd: fx });
+    ok('a reordering character in a principle or a section heading prints as U+FFFD, in principles and in the index, and check, which reads entries for one, passes', bc.code === 0 && /Positions are \uFFFDpermanent/.test(bp.out) && /Resolved \uFFFDconflict/.test(bi.out) && !/\u202E/.test(bp.out + bi.out), bc.out + bp.out + bi.out.slice(0, 400));
+  }
   // a row that means to assert a ratio and writes it in a shape the grammar does not read
-  for (const shape of ['15.04 :1', '15.04: 1', '15.04 to 1']) {
+  for (const shape of ['15.04 :1', '15.04: 1', '15.04 to 1', '15.04:10', '15.04:1.5']) {   // the 1 ends an N:1 value: 15.04:10 is not 15.04:1
     const badR = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', shape)); });
     r = docket(['spec-check'], { cwd: path.join(badR, 'test', 'fixture') });
     ok('spec-check (b): a row naming two tokens whose ratio reads "' + shape + '" is named, not passed over as prose', r.code === 1 && /the ratio is not written as <n>:1/.test(r.out), r.out);
@@ -2653,6 +2661,8 @@ const SEC = String.fromCharCode(0xa7);
     fs.appendFileSync(path.join(nl, 'a.js'), 'y();\n');
     g = docket(['gate', '--session', 'n'], { cwd: nl, env: { CLAUDE_PROJECT_DIR: '' } });
     ok('gate in a project with no ledger → SKIP, and no .docket/ is created', g.out === 'SKIP\n' && !fs.existsSync(path.join(nl, '.docket')), g.out);
+    const sn = docket(['stop', '--judge', 'touch started'], { cwd: nl, input: JSON.stringify({ session_id: 'n' }), env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('stop in a project with no ledger is allowed silently, exit 0: no judge starts and nothing is written — the protocol’s second case', sn.code === 0 && sn.out === '' && !fs.existsSync(path.join(nl, 'started')) && !fs.existsSync(path.join(nl, '.docket')), sn.code + ' ' + sn.out + sn.err);
     for (const x of [d, d2, d3, nl]) fs.rmSync(x, { recursive: true, force: true });
   }
 

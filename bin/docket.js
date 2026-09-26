@@ -1028,8 +1028,9 @@ function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toS
 // fixed the text still reads straight.
 const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 function plain(t) { return String(t).replace(UNSAFE_OUT_RE_G, '\ufffd'); }
-const CONTRAST_RE = /(\d+(?:\.\d+)?):1/;
-const CONTRAST_RE_ALL = /(\d+(?:\.\d+)?):1/g;
+// An N:1 value (FORMAT.md 13): the 1 ends it — no digit, and no decimal point with a digit, after it — so 4.5:10 is not one
+const CONTRAST_RE = /(\d+(?:\.\d+)?):1(?!\d|\.\d)/;
+const CONTRAST_RE_ALL = /(\d+(?:\.\d+)?):1(?!\d|\.\d)/g;
 function hexToRgb(hex) {
   let h = hex.replace('#', '');
   if (h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join('');
@@ -1092,7 +1093,7 @@ function runSpecCheck(root, ctx, onlyLedger) {
       const cm = CONTRAST_RE.exec(l);
       if (!cm) {
         // two tokens and no ratio the grammar reads: the row means to assert one and does not.
-        if (toksAll.length === 2 && /\d\s*(?::\s*1\b|to\s+1\b)/.test(l)) { rows++; failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: toksAll.join(' on ') + ': the ratio is not written as <n>:1, so no ratio is read from this row' }); }
+        if (toksAll.length === 2 && /\d\s*(?::\s*\d|to\s+1\b)/.test(l)) { rows++; failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: toksAll.join(' on ') + ': the ratio is not written as <n>:1, so no ratio is read from this row' }); }
         return;
       }
       const toks = toksAll;
