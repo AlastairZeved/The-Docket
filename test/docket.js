@@ -2134,6 +2134,12 @@ const SEC = String.fromCharCode(0xa7);
     // a harness denial: the run is NOT SCORED and the count excludes it
     r = runScript('cites.sh', [turn('Governed by R6; editing.', 'Edit'), result([{ tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js' } }])]);
     ok('cites.sh does not score a run the harness interfered with, and says so', /NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(b\) obeying  0 of 0/.test(r.stdout), r.stdout);
+    // the evidence each script quotes is cut at one hundred and eighty-six characters, not bytes (D14's addendum): a line whose
+    // 180th character is a middle dot, after the six-space indent, ends on that dot, whole
+    const long = 'R6 ' + 'y'.repeat(176) + '·' + ' and the words the cut drops';
+    r = runScript('cites.sh', [turn(long), result()]);
+    ok('cites.sh cuts the sentence it quotes at 186 characters, not bytes: a middle dot at the cut is printed whole, and nothing undecodable (D14)', r.stdout.split('\n').includes('      ' + long.slice(0, 180)) && !r.stdout.includes('\uFFFD'), r.stdout);
+    ok('…and no script the tests hold cuts with `cut -c`', ['judge.sh', 'cites.sh', 'constitute.sh'].every(f => !/\bcut -c/.test(read(path.join(ROOT, 'test', f))) && /^cut186\(\) \{ node -e /m.test(read(path.join(ROOT, 'test', f)))), 'a script still cuts by bytes');
     // constitute.sh: (c) a host that prints the block's exact heading and touches nothing; the skill's text is in the transcript
     // The stream transcript never carries the expanded skill text, so "skill loaded" is read from the host's init
     // event (the skill registered from the plugin directory), an unrefused splice, and a turn having run; and
@@ -2143,6 +2149,11 @@ const SEC = String.fromCharCode(0xa7);
     const intakeEcho = 'As the intake says: run `docket constitute --answers <that file>` on the word, and not before.\n';
     r = runScript('constitute.sh', [skillLine, turn(intakeEcho + 'CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
     ok('constitute.sh scores a host that reaches the block, quotes the intake’s command in prose and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+    { // the refusal it quotes, cut at 186 characters: a dash at the cut is printed whole (D14's addendum)
+      const refusal = '"general audience" is refused ' + 'z'.repeat(149) + '—' + ' and the words the cut drops';
+      const rr = runScript('constitute.sh', [skillLine, turn(refusal), result()]);
+      ok('constitute.sh cuts the refusal it quotes at 186 characters, not bytes: a dash at the cut is printed whole (D14)', rr.stdout.split('\n').includes('      ' + refusal.slice(0, 180)) && !rr.stdout.includes('\uFFFD'), rr.stdout);
+    }
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
     ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
     ok('…and stderr is clean for both scripts', r.stderr.trim() === '', r.stderr);
@@ -3187,6 +3198,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('…prints what it scored for each: the judge’s word, the ruling named, the block, the route, the confirm block', /\(v\) run 1  judge: FAIL   names R6: yes  a block names R6: yes/.test(r.stdout) && /R6 keeps the toolbar; this diff removes it · reason holds/.test(r.stdout) && /\(c\) run 1  blocked: no   judge: PASS/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: yes  a block names R7: yes/.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: yes  a block names R5: yes/.test(r.stdout) && /block reached: yes  append ran: no   ledger unchanged: yes  stop blocked: no/.test(r.stdout), r.stdout);
     ok('…with nothing on stderr', r.stderr.trim() === '', r.stderr);
     ok('…and prints, first, the host tool as it reports its version and the date, and last, D15’s floor and every outcome as two lines, both met (D34)', /^on the host's command-line tool, version 9\.9\.9 \(stand-in\), \d{4}-\d{2}-\d{2}$/m.test(r.stdout) && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: met$/m.test(r.stdout) && /^  every outcome: met$/m.test(r.stdout), r.stdout.split('\n').slice(0, 3).concat(r.stdout.split('\n').slice(-5)).join(' | '));
+    { // the judge's line it quotes, cut at 186 characters, not bytes (D14's addendum): a middle dot at the cut, whole
+      const head = 'code · F3 · app.js:41 · R6 keeps the toolbar; this diff removes it · reason holds: ';
+      const R6L = head + 'w'.repeat(179 - Array.from(head).length) + '·' + ' the toolbar still shows the note it acts on (app.js:44) · change the code';
+      const rq = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6L), result()], { verdict: 'FAIL', reason: R6L }),
+        say([turnText('Renamed foldSize to foldExtent.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        GOOD_R);
+      ok('judge.sh cuts the line it quotes at 186 characters, not bytes: a middle dot at the cut is printed whole, and nothing undecodable (D14)', rq.stdout.split('\n').includes('      ' + Array.from(R6L).slice(0, 180).join('')) && !rq.stdout.includes('\uFFFD'), rq.stdout);
+    }
     // the stale case read as a FAIL: D15's floor holds (FAIL or STALE) while the outcome (STALE) does not, and the two say so
     r = runJudge(
       say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),

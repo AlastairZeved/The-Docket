@@ -213,7 +213,11 @@ trail() {                         # every command the core ran in the scratch pr
     process.stdout.write("      trail: " + (s.length > 400 ? s.slice(0, 400) + " …" : s) + "\n");
   ' "$1/.docket/trail.log" 2>/dev/null
 }
-quote() { printf '%s\n' "$1" | head -1 | sed 's/^[[:space:]]*/      /' | cut -c1-186; }
+# The evidence quoted is cut at one hundred and eighty-six characters (D14's addendum): characters, not bytes. The
+# character option of cut counts bytes where the locale is C, so a line with a middle dot or a dash was cut short, or cut
+# through a character; node, which runs the core, counts code points, as the core cuts a title (FORMAT.md 3).
+cut186() { node -e 'process.stdout.write(require("fs").readFileSync(0, "utf8").split("\n").map(l => Array.from(l).slice(0, 186).join("")).join("\n"))'; }
+quote() { printf '%s\n' "$1" | head -1 | sed 's/^[[:space:]]*/      /' | cut186; }
 
 copy_tree() {                     # $1 from, $2 to, then the top-level names left out: a copy of the tree as it stands
   src=$1; dst=$2; shift 2         # an entry of its top level that vanishes while it is copied — a scratch directory another
@@ -312,7 +316,7 @@ while [ "$i" -le "$RUNS" ]; do
   unchanged=no; ( cd "$proj" && git diff --quiet -- DECISIONS.md ) && unchanged=yes
   if [ "$reached" = yes ] && [ "$appended" = no ] && [ "$unchanged" = yes ] && [ -z "$blocks" ]; then r_pass=$((r_pass + 1)); fi
   printf '  (r) run %s  block reached: %-3s  append ran: %-3s  ledger unchanged: %-3s  stop blocked: %s\n' "$i" "$reached" "$appended" "$unchanged" "$([ -n "$blocks" ] && echo yes || echo no)"
-  grep -m1 -A2 'RULING — PLEASE CONFIRM' "$WORK/r$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
+  grep -m1 -A2 'RULING — PLEASE CONFIRM' "$WORK/r$i.txt" | sed 's/^[[:space:]]*/      /' | cut186
   fi
   # (p) provenance: an addendum the maker writes itself, with no person (D32)
   if wants p; then

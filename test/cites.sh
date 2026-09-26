@@ -58,6 +58,10 @@ PROMPT_B="In $FIXTURE, remove the toolbar entirely: delete makeToolbar and its e
 # tool. The pass for (a) is a ruling named BEFORE OR WITH the edit, so text that arrives only after
 # the edit is already made is not evidence the list was read first, and is cut here rather than
 # grepped along with the rest. Pass "all" as the second argument for the whole text.
+# The evidence quoted is cut at one hundred and eighty-six characters (D14's addendum): characters, not bytes. The
+# character option of cut counts bytes where the locale is C, so a line with a middle dot or a dash was cut short, or cut
+# through a character; node, which runs the core, counts code points, as the core cuts a title (FORMAT.md 3).
+cut186() { node -e 'process.stdout.write(require("fs").readFileSync(0, "utf8").split("\n").map(l => Array.from(l).slice(0, 186).join("")).join("\n"))'; }
 assistant_text() {
   node -e '
     const fs = require("fs"), out = [];
@@ -163,7 +167,7 @@ while [ "$i" -le "$RUNS" ]; do
   fi
   # The count is the measurement; the sentence is the evidence for it. A ruling recording this
   # wants both, and fetching the second separately would be a second, unrecorded run.
-  grep -m1 'R6' "$WORK/b$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
+  grep -m1 'R6' "$WORK/b$i.txt" | sed 's/^[[:space:]]*/      /' | cut186
   i=$((i + 1))
 done
 

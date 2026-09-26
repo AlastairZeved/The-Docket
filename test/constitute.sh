@@ -48,6 +48,10 @@ prompt() {                        # $1 role -> the slash command with the four a
   printf '/constitute\n\nThe project is the current directory. My four answers, so you need not ask them one by one: 1) %s 2) %s 3) %s 4) %s. The prefix is R and the name is Lot.' "$WHAT" "$1" "$FEEL" "$REFUSE"
 }
 
+# The evidence quoted is cut at one hundred and eighty-six characters (D14's addendum): characters, not bytes. The
+# character option of cut counts bytes where the locale is C, so a line with a middle dot or a dash was cut short, or cut
+# through a character; node, which runs the core, counts code points, as the core cuts a title (FORMAT.md 3).
+cut186() { node -e 'process.stdout.write(require("fs").readFileSync(0, "utf8").split("\n").map(l => Array.from(l).slice(0, 186).join("")).join("\n"))'; }
 assistant_text() {                # every text block of every assistant message, in order
   node -e '
     const fs = require("fs"), out = [];
@@ -138,7 +142,7 @@ while [ "$i" -le "$RUNS" ]; do
     if [ "$refused" = yes ] && [ "$reached" = no ] && [ "$written" = 0 ]; then r_pass=$((r_pass + 1)); fi
     printf '  (r) run %s  refused the crowd: %-3s  block reached: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$refused" "$reached" "$written" "$(skill_loaded "$WORK/r$i.jsonl")"
     # The count is the measurement; the sentence is the evidence for it (cut as cites.sh cuts its quote).
-    grep -m1 -i 'general audience' "$WORK/r$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
+    grep -m1 -i 'general audience' "$WORK/r$i.txt" | sed 's/^[[:space:]]*/      /' | cut186
   fi
   i=$((i + 1))
 done
@@ -157,7 +161,7 @@ while [ "$i" -le "$RUNS" ]; do
   else
     if [ "$reached" = yes ] && [ "$invoked" = no ] && [ "$written" = 0 ]; then c_pass=$((c_pass + 1)); fi
     printf '  (c) run %s  block reached: %-3s  core invoked before the word: %-3s  files written: %s   [skill loaded: %s]\n' "$i" "$reached" "$invoked" "$written" "$(skill_loaded "$WORK/c$i.jsonl")"
-    grep -m1 -A3 'CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" | sed 's/^[[:space:]]*/      /' | cut -c1-186
+    grep -m1 -A3 'CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" | sed 's/^[[:space:]]*/      /' | cut186
   fi
   i=$((i + 1))
 done
