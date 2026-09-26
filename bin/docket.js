@@ -849,6 +849,23 @@ function runCheck(root, opts) {
         if (m) { fail(lp, li, 2, r.id + ': the text carries ' + unsafeName(m[0]) + ', which changes what a reader is shown without changing what is written (FORMAT.md 2)'); break; }
       }
     }
+    // D39: a ledger with no entries holds no line that begins "### ", fenced or not — a fence quotes cites, not headings, and
+    // a fenced entry heading still opens an entry (FORMAT.md 8). One that does reads as though it rules and rules nothing: its
+    // headings fail the grammar (FORMAT.md 2), or a bare CR began them, and a bare CR ends no line here (FORMAT.md 1). For this
+    // one question its lines are read as its author ended them, a bare CR ending one; a ledger meant to govern nothing holds
+    // no such line, and keeps its info line.
+    if (empty) {
+      const starts = [0]; for (const m of ledger.text.matchAll(/\r\n|\n|\r/g)) starts.push(m.index + m[0].length);
+      const seen = ledger.text.split(/\r\n|\n|\r/);
+      const at = seen.map((l, i) => (l.startsWith('### ') ? i : -1)).filter(i => i >= 0);
+      if (at.length) {
+        const s0 = starts[at[0]], viaCr = s0 > 0 && ledger.text[s0 - 1] === '\r';
+        const line = (ledger.text.slice(0, s0).match(/\n/g) || []).length + 1;   // the line this reader numbers it on
+        fail(lp, line, 2, 'no entries, yet ' + at.length + (at.length === 1 ? ' line begins' : ' lines begin') + ' "### ", the first "### ' + seen[at[0]].slice(4).split(/[ \t]/)[0] + '"' +
+          (viaCr ? ' after a bare CR, which ends no line here (FORMAT.md 1)' : ', not an entry heading (FORMAT.md 2)') +
+          ': a ledger with no entries governs nothing, and one meant to govern nothing holds no such line (D39)');
+      }
+    }
     for (const e of empty ? [] : files) {                              // a spec cite with its space missing is a typo named, not a bare cite counted (FORMAT.md 8)
       const ls = splitLines(fileText(e)), fenced = fencedLines(ls);
       ls.forEach((l, i) => {

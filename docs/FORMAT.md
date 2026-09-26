@@ -24,7 +24,12 @@ directory the file does not lie under, the file's git root is the bound, and the
 filesystem root when there is none. A ledger file with no entries governs nothing, and still ends
 the walk: nothing above it is consulted, so an empty ledger placed in a subtree
 declares that subtree ungoverned — none of the seven checks runs on its files —
-and `check` says so with an info line. A file
+and `check` says so with an info line. Such a ledger holds no line that begins
+`### `, fenced or not (a fence quotes cites, not headings, 8): one that does
+reads as though it rules and would rule
+nothing — its headings fail the grammar (2), or a bare CR began them — and check 2
+fails at the first such line, its lines read for this one question as its author
+ended them, a bare CR ending one (13, D39). A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
 The stop's commands take one root whatever the variable says: `gate`, `verdict`
@@ -68,7 +73,8 @@ CRLF and LF both end a line, a bare CR does not, and a CRLF ledger parses, cites
 and compares line for line exactly as an LF one, whatever a checkout's
 line-ending settings made of either side. A ledger saved with bare CR endings
 alone is one line: one that opens with anything but an entry heading has no
-entries, and the info line above names it; one that opens with an entry heading
+entries — the info line above names it, and check 2 fails at its first line that
+begins `### ` once a bare CR ends a line, as above; one that opens with an entry heading
 is one entry whose heading runs to the end of the file, and check 2 fails on the
 carriage returns it carries (13).
 
@@ -99,7 +105,7 @@ the **id** (`D7`, `R12`, `A1`). A heading whose prefix uses any other letter is
 not an entry. A line that begins `### ` and is not an entry heading — a leading
 zero, a digit in the prefix, no `. ` after the id — ends nothing: it is body text
 of the entry above it, or preamble when no entry precedes it, and every check
-reads it there. Text before the first entry heading or `## ` line is the
+reads it there; in a ledger with no entry at all it fails check 2 (1). Text before the first entry heading or `## ` line is the
 **preamble**.
 
 An entry parses to
@@ -377,7 +383,7 @@ cite, heading or edge, never only the file.
 | k | Check | Fails when |
 |---|---|---|
 | 1 | Cites resolve | a cite in a git-tracked text file names a number that does not exist in that file's ledger |
-| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows |
+| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows; or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39) |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
