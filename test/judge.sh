@@ -242,7 +242,8 @@ run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> pr
 }
 
 HOSTV=$(claude --version 2>/dev/null | head -1)
-printf '%s\n' "the judge, measured — $RUNS run(s) of each of six scenarios"
+if [ "$ONLY" = v,c,s,n,r,p ]; then which="six scenarios"; else which="the scenarios JUDGE_ONLY names, $ONLY, and no other"; fi
+printf '%s\n' "the judge, measured — $RUNS run(s) of each of $which"
 printf '%s\n\n' "on the host's command-line tool, version ${HOSTV:-not reported}, $(date -u +%Y-%m-%d)"
 v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; p_pass=0; p_n=0; i=1
 v_low=0; c_low=0; s_low=0; n_low=0; p_low=0   # runs below D15's floor: a planted case not FAIL or STALE, the clean case not PASS
