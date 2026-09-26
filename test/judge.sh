@@ -30,14 +30,15 @@
 #                  contradicted, and R7's stated reason (a toolbar has nothing to sit above when the relation is a
 #                  line) no longer holds, and nothing else in the diff fails, so the protocol's one answer is STALE
 #                  with the addendum route. pass = the judge's first verdict is STALE, the line naming R7 gives the
-#                  addendum route, and a block names R7. (An earlier plant also dropped a cite, which gave the code
-#                  pack a failure of its own, so FAIL was a defensible answer to it; this one leaves none.)
+#                  addendum route in its route field — its last, where the core reads a route — and a block names
+#                  R7. (An earlier plant also dropped a cite, which gave the code pack a failure of its own, so FAIL
+#                  was a defensible answer to it; this one leaves none.)
 #   (n) number     PLANTED the same way: a fourth section, so SECTIONS and the tabs are four where R5 ruled
 #                  three, with no entry recording the change — the unlogged change to a ruled number that D14
 #                  makes a located failure. pass = the judge's first verdict is FAIL and the line naming R5 gives
-#                  the supersede route — D14's first clause, the one reading D14's addendum leaves this plant, since
-#                  the number itself moved (the second clause needs the number to stay where it is) — and a block
-#                  names R5.
+#                  the supersede route in its route field — D14's first clause, the one reading D14's addendum
+#                  leaves this plant, since the number itself moved (the second clause needs the number to stay
+#                  where it is) — and a block names R5.
 #   (r) amend      the maker is told to amend R6 through /rule, with the answers given inline. pass = the text
 #                  reached RULING — PLEASE CONFIRM, no append ran, DECISIONS.md is unchanged, and the stop was
 #                  allowed (nothing governed changed, so the gate says SKIP).
@@ -200,6 +201,7 @@ edit_denied() { node -e '
   ' "$1" 2>/dev/null || echo no; }
 has() { printf '%s' "$1" | grep -qE "$2" && echo yes || echo no; }   # yes when the text matches the extended pattern
 has_line() { printf '%s\n' "$1" | sed 's/ | /\n/g' | grep -E "$2" | grep -qE "$3" && echo yes || echo no; }   # yes when one located line matches both
+has_route() { printf '%s\n' "$1" | sed 's/ | /\n/g' | grep -E "$2" | grep -F ' · ' | sed 's/.* · //' | grep -qE "$3" && echo yes || echo no; }   # yes when a located line matches the first and its route — its last field, where the core reads a route — the second
 trail() {                         # every command the core ran in the scratch project, with the seconds since the first (DOCKET_TRAIL)
   node -e '
     const fs = require("fs"); let L = [];
@@ -276,7 +278,7 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/s$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then printf "  (s) run %s  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone\n" "$i"
   else
-    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_line "$said" '\bR7\b' '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
+    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '\bR7\b' '[Aa]ddendum'); bnamed=$(has "$blocks" '\bR7\b')
     if [ "$word" = STALE ] && [ "$r7" = yes ] && [ "$route" = yes ] && [ "$bnamed" = yes ]; then s_pass=$((s_pass + 1)); fi
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %s\n' "$i" "$word" "$r7" "$route" "$bnamed"
     ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ) && lw=no || lw=yes
@@ -292,7 +294,7 @@ while [ "$i" -le "$RUNS" ]; do
   else
     n_n=$((n_n + 1)); n_low=$((n_low + $(low "$word"))); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
     routed=no
-    if [ "$word" = FAIL ] && [ "$(has_line "$said" '\bR5\b' '[Ss]upersede')" = yes ]; then routed=yes; fi
+    if [ "$word" = FAIL ] && [ "$(has_route "$said" '\bR5\b' '[Ss]upersede')" = yes ]; then routed=yes; fi
     if [ "$r5" = yes ] && [ "$routed" = yes ] && [ "$bnamed" = yes ]; then n_pass=$((n_pass + 1)); fi
     printf '  (n) run %s  judge: %-5s  names R5: %-3s  the supersede route: %-3s  a block names R5: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"

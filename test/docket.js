@@ -3151,6 +3151,19 @@ const SEC = String.fromCharCode(0xa7);
       ok('judge.sh reads the stale case’s route on R7’s own line: an addendum route on another ruling’s line is not a pass', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
       ok('…and the number case’s route on R5’s own line: a supersede route on another ruling’s line is not a pass', /\(n\) number     0 of 1/.test(r.stdout) && /the supersede route: no /.test(r.stdout), r.stdout);
     }
+    // the route is read in the line's route field, its last, where the core reads a route: the word elsewhere on the line is not the route
+    {
+      const WORD7 = 'code · F3 · app.js:80 · R7 keeps the relational plane’s menu, and the addendum under it; this diff removes it · reason gone: relations are marks on the notes (app.js:191) · move the menu back';
+      const WORD5 = 'code · F3 · app.js:12 · R5 ruled three sections, and nothing superseded it; this diff makes four · reason holds: three tabs still read three sections (app.js:14) · change the code';
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(WORD7), result()], { verdict: 'STALE', reason: WORD7 }),
+        say([turnText('Reviewed.'), blockTurn(WORD5), result()], { verdict: 'FAIL', reason: WORD5 }),
+        GOOD_R);
+      ok('judge.sh reads the stale case’s route in the line’s route field, its last, where the core reads a route: “addendum” in what the line found is not the addendum route', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
+      ok('…and the number case’s the same way: “superseded” in what the line found is not the supersede route', /\(n\) number     0 of 1/.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: no /.test(r.stdout), r.stdout);
+    }
     // the stale case's maker that writes the addendum itself, the core's path quoted: printed, not scored (D8, D31)
     {
       const WROTE = 'printf "%s\\n" "> Addendum 2026-09-24: relations are marks now" >> DECISIONS.md; ' + say([turnText('Reviewed.'), blockTurn(STALE7), toolTurn('Bash', { command: 'node "/p/bin/docket.js" append --addendum R7 --text "relations are marks now"' }), result()], { verdict: 'STALE', reason: STALE7 });
