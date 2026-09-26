@@ -23,7 +23,7 @@ D12, D15, D22, D23, D24 and D37 in `docs/DECISIONS.md`.
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
 | whether this stop was already blocked once in this turn | the host passes it in; if so, allow the stop at once |
-| a shell | confined to what the session allows: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too. A check command the judge may not run leaves the code pack's first feature unscored, and the verdict says so and names the command |
+| a shell | confined to what the session allows, of which the protocol uses two things: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too; what else a host lets through unasked, such as a command that only reads, the protocol does not use. A check command the judge may not run leaves the code pack's first feature unscored, and the verdict says so and names the command |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
 witness is vendored, or — where `docket stop` started the judge — the file its
@@ -70,7 +70,10 @@ stand.
 `docket` in this file and in the packs is `node <core>`, the core named above:
 run every command exactly in that shape, from the project directory, with
 nothing before it and nothing after it — no `cd`, no `;`, `&&` or `|`, no
-redirection — a host permits that shape and no other.
+redirection — because that is the shape the one permission names: a command
+in any other shape is one it does not cover, and a host may refuse it. A host
+may let other commands through unasked — one that only reads, inside the
+project — while a write stays refused; the protocol uses none of them.
 
 ## The seven steps, in order, and the order is the point
 

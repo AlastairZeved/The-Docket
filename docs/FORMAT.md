@@ -391,6 +391,11 @@ ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
 load — a host runs a splice under the skill's own allow-list, which names the
 core and nothing else — and the vendored copy, with no `intake/` beside it,
 says so rather than printing nothing.
+`--json` is on every subcommand. A subcommand that prints a file — `intake`,
+`protocol`, `pack <name>…` — prints, with it, the file's name and its whole text
+(a pack's with its domain); `transcript` prints the turns it keeps, each its role
+and its lines, and a line that is not JSON as `raw`; `stop` prints its answer as
+it always does, and `{}` for a stop it allows, where it otherwise prints nothing.
 `docket check` covers every ledger in the tree; `docket spec-check` covers the
 ledger nearest the working directory (a fixture ledger under `test/` is reached
 from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a

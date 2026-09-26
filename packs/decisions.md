@@ -82,5 +82,5 @@ go somewhere; impermanence never considered.
 
 ## Located failure
 
-    decisions · F6 · docs/DECISIONS.md:140 · R12 changes what the reader sees at capture and names no feeling it preserves · amend the entry through /rule --addendum, or supersede it
+    decisions · F6 · docs/DECISIONS.md:140 · R12 changes what the reader sees at capture and names no feeling it preserves · supersede R12 through /rule with an entry that names the feeling it preserves
     decisions · F11 · docs/DECISIONS.md:212 · an addendum under R4 that the maker's own append wrote, with no confirm from the person · take it out of the ledger and put it to the person through /rule --addendum R4

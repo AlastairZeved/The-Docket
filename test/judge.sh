@@ -64,8 +64,9 @@
 #
 # What this does NOT establish: that a human's confirm releases the write in (r) (no human is here); the judge's
 # scoring of the packs beyond the one ruling each run is about; a second run's agreement with the first (JUDGE_RUNS
-# repeats each scenario). JUDGE_ONLY=v,c,s,n,r,p selects scenarios; JUDGE_KEEP=1 keeps the scratch directory and names
-# it, so a run can be read afterwards.
+# repeats each scenario). JUDGE_ONLY=v,c,s,n,r,p selects scenarios, and one it leaves out is not run and says so: what
+# it would have measured is printed as not measured, and the exit is 1 (D34). JUDGE_KEEP=1 keeps the scratch directory
+# and names it, so a run can be read afterwards.
 
 set -u
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -341,7 +342,12 @@ if wants c; then gate "the clean case" "$c_pass" "$c_n"; fi
 if wants s; then gate "the stale case" "$s_pass" "$s_n"; fi
 if wants n; then gate "the number case" "$n_pass" "$n_n"; fi
 if wants p; then gate "the provenance case" "$p_pass" "$p_n"; fi
-outcome=met; [ -z "$unmet" ] || outcome="not met: ${unmet#; }"
+notrun=""; flnot=""                 # a case JUDGE_ONLY left out is not measured, and the measurement is all six (D34)
+for x in "v:the violation" "c:the clean case" "s:the stale case" "n:the number case" "r:the amend case" "p:the provenance case"; do
+  wants "${x%%:*}" && continue; notrun="$notrun, ${x#*:}"; [ "${x%%:*}" = r ] || flnot="$flnot, ${x#*:}"
+done
+outcome=met
+if [ -n "$unmet" ]; then outcome="not met: ${unmet#; }${notrun:+; not run: ${notrun#, }}"; elif [ -n "$notrun" ]; then outcome="not measured: ${notrun#, } not run"; fi
 below=""
 floor() {  # $1 name, $2 runs below the floor, $3 scored
   if [ "$3" -eq 0 ]; then below="$below; $1 was not scored"; elif [ "$2" -gt 0 ]; then below="$below; $1 fell below it in $2 of $3"; fi
@@ -351,15 +357,16 @@ if wants c; then floor "the clean case" "$c_low" "$c_n"; fi
 if wants s; then floor "the stale case" "$s_low" "$s_n"; fi
 if wants n; then floor "the number case" "$n_low" "$n_n"; fi
 if wants p; then floor "the provenance case" "$p_low" "$p_n"; fi
-fl=met; [ -z "$below" ] || fl="not met: ${below#; }"
-halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; fi
+fl=met
+if [ -n "$below" ]; then fl="not met: ${below#; }${flnot:+; not run: ${flnot#, }}"; elif [ -n "$flnot" ]; then fl="not measured: ${flnot#, } not run"; fi
+halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; else halt="not measured: the amend case not run"; fi
 printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
 printf "  (s) stale      %s of %s   the judge's STALE, R7 and the addendum route named, and a block naming R7\n" "$s_pass" "$s_n"
 printf "  (n) number     %s of %s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block naming R5\n" "$n_pass" "$n_n"
 printf '  (r) amend      %s of %s   the confirm block reached, no append, the ledger unchanged, the stop allowed\n' "$r_pass" "$r_n"
 printf "  (p) provenance %s of %s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n"
-printf '\n%s\n' "This measured the judge at six stops, headless, each judge a session its stop started with one permission (to run the core), the maker with none. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
+printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with one permission (to run the core), the maker with none. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
 printf "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: %s\n" "$fl"
 printf '  every outcome: %s\n' "$outcome"
 printf '  the halt at /rule: %s\n' "$halt"

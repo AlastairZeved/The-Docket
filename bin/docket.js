@@ -1659,7 +1659,9 @@ function intake(argv) {
   if (!which || !/^(rule|constitute)$/.test(which)) die('intake: which one — docket intake rule | docket intake constitute', 2);
   const p = path.join(__dirname, '..', 'intake', which.toUpperCase() + '.md');
   if (!isFile(p)) die('intake: intake/' + which.toUpperCase() + '.md is not beside this file\'s bin/ — the intakes live in the plugin; the vendored witness at test/docket.js carries none', 2);
-  out(readText(p));
+  const text = readText(p);
+  if (argv.json) { out(JSON.stringify({ intake: which, file: 'intake/' + which.toUpperCase() + '.md', text }, null, 2)); return 0; }
+  out(text);
   return 0;
 }
 
@@ -1974,11 +1976,12 @@ function stop(argv) {
   const waitRaw = flag(argv, '--wait');
   const waitS = waitRaw === null ? STOP_WAIT : Number(waitRaw);
   if (!(Number.isInteger(waitS) && waitS >= 1)) die('stop: --wait takes a whole number of seconds, one or more: the bound on the judge it starts', 2);
-  if (input.stop_hook_active === true) return 0;                                                 // D11: blocked at most once per turn
+  const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
+  if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
   const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
   const id = flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default';
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
-  if (g.decision === 'SKIP') return 0;                                                           // D10, D11: nothing to judge, or surfaced before this stop
+  if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.join(', ');
   const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
   if (g.decision === 'SURFACE') { out(JSON.stringify({ decision: 'block', reason: surfacedReason(g.st, g.sess, tail) })); return 0; }   // D11: no judge; the residue goes to the maker
@@ -1995,7 +1998,7 @@ function stop(argv) {
   try { fs.mkdirSync(path.join(root, '.docket'), { recursive: true }); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
   const st = loadState(root), l = st.last;
   if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail) })); return 0; }   // surfaced while the judge ran (D11)
-  if (st.lastPassHash === d.hash) return 0;                                                      // the judge's PASS
+  if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS
   if (l && l.hash === d.hash && Date.parse(l.at) >= start && (l.verdict === 'FAIL' || l.verdict === 'STALE')) {
     const n = l.failures;
     const reason = 'The docket\'s judge recorded ' + l.verdict + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (l.verdict === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or supersede the ruling through /rule.') + tail;
@@ -2024,7 +2027,11 @@ function besideMe(dir, file, what) {
   if (!isFile(p)) die(what + ': ' + dir + '/' + file + ' is not beside this file\'s bin/ — it lives in the plugin; the vendored witness at test/docket.js carries none', 2);
   return p;
 }
-function protocol(argv) { out(readText(besideMe('judge', 'PROTOCOL.md', 'protocol'))); return 0; }
+function protocol(argv) {
+  const text = readText(besideMe('judge', 'PROTOCOL.md', 'protocol'));
+  if (argv.json) { out(JSON.stringify({ file: 'judge/PROTOCOL.md', text }, null, 2)); return 0; }
+  out(text); return 0;
+}
 function pack(argv) {
   const dir = path.join(__dirname, '..', 'packs');
   if (has(argv, '--list') || !argv._[1]) {
@@ -2041,7 +2048,9 @@ function pack(argv) {
     const unknown = names.filter(name => !isFile(path.join(dir, name + '.md')));
     if (unknown.length) die('pack: no pack named ' + unknown.join(', ') + '; the packs are ' + fs.readdirSync(dir).filter(f => /\.md$/.test(f)).map(f => f.replace(/\.md$/, '')).sort().join(', ') + ' (docket pack --list)', 2);
   }
-  out(names.map(name => readText(besideMe('packs', name + '.md', 'pack'))).join('\n')); return 0;
+  const texts = names.map(name => readText(besideMe('packs', name + '.md', 'pack')));
+  if (argv.json) { out(JSON.stringify(names.map((name, i) => { const m = /^Domain:\s*(.+)$/m.exec(texts[i]); return { name, domain: m ? m[1].trim() : '', text: texts[i] }; }), null, 2)); return 0; }
+  out(texts.join('\n')); return 0;
 }
 // A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry
 // `message.content`, a list of blocks — `text`, and `tool_use` with a `name` and an `input`. Printed in order: the
@@ -2072,19 +2081,20 @@ function transcript(argv) {
     }
     if (L.length) turns.push({ role, lines: L });
   }
-  if (plain_ && turns.every(t => t.raw !== undefined)) { out(lines.join('\n')); return 0; }
+  if (plain_ && turns.every(t => t.raw !== undefined)) { out(argv.json ? JSON.stringify(lines.map(raw => ({ raw })), null, 2) : lines.join('\n')); return 0; }
   const aTurns = turns.filter(t => t.role === 'assistant');
   const start = keep === Infinity ? 0 : Math.max(0, aTurns.length - keep);
   const firstKept = aTurns[start];
-  const outL = [];
+  const outL = [], kept = [];
   let seen = 0;
   for (const tn of turns) {
-    if (tn.raw !== undefined) { if (keep === Infinity) outL.push(tn.raw); continue; }
+    if (tn.raw !== undefined) { if (keep === Infinity) { outL.push(tn.raw); kept.push({ raw: tn.raw }); } continue; }
     if (tn.role === 'assistant') { if (tn === firstKept) seen = 1; if (!seen && keep !== Infinity) continue; }
     else if (!seen && keep !== Infinity) continue;
     outL.push((tn.role === 'assistant' ? '── assistant' : '── user') + '\n' + tn.lines.join('\n'));
+    kept.push({ role: tn.role, lines: tn.lines });
   }
-  out(outL.join('\n'));
+  out(argv.json ? JSON.stringify(kept, null, 2) : outL.join('\n'));
   return 0;
 }
 
@@ -2128,9 +2138,9 @@ const OPTIONS = {
   near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
-  diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: [],
-  gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: [], pack: ['--json', '--list'], transcript: ['--last'],
-  stop: ['--session', '--wait', '--permission', '--judge'],
+  diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: ['--json'],
+  gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: ['--json'], pack: ['--json', '--list'], transcript: ['--json', '--last'],
+  stop: ['--json', '--session', '--wait', '--permission', '--judge'],
 };
 function parseArgv(args) {
   const raw = args.slice();
