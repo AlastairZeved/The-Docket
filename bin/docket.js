@@ -1370,11 +1370,14 @@ function status(argv) {
   const pend = pendingAddenda(ledger);
   const st = loadState(stopRoot(cwd));                                 // the verdict the stop's commands keep (D28)
   const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show; a verdict naming a session the file never recorded is not surfaced
+  // `last` names one session; every surfaced session waits for the human, and the protocol's release says status names it (D11)
+  const surfacedAll = Object.keys(st.sessions).filter(k => st.sessions[k] && st.sessions[k].surfaced).sort();
+  const surfacedOthers = surfacedAll.filter(k => !(st.last && k === st.last.session));
   const check_ = runCheck(root, { ctx });
   const spec_ = runSpecCheck(root, ctx, lp);
   const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, ledgers: check_.ctx.ledgers.size, failures: check_.failures.concat(spec_.failures) };
   if (argv.json) {
-    out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, witness }, null, 2));
+    out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, surfacedSessions: surfacedAll, witness }, null, 2));
     return 0;
   }
   const L = [];
@@ -1388,6 +1391,7 @@ function status(argv) {
     L.push('  ' + a.id + ' (' + a.date + '): ' + (t.length > GLANCE ? t.slice(0, GLANCE - 1).join('').trimEnd() + '\u2026' : a.text));
   }
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
+  if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since the last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
   out(L.join('\n'));
@@ -1828,11 +1832,13 @@ function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
 // The residue a surfaced session reports: its blocks since the last PASS, how many of them had no verdict recorded (D38),
 // the failures per verdict, and the last verdict with the lines it was recorded with (D11). The gate prints it at SURFACE,
 // and `stop` relays it (D22).
-function residueLines(st, sess) {
+function residueLines(st, sess, id) {
   const h = sess.history, L = [], none = sess.blocks - h.length;
   L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS' + (none > 0 ? ', ' + none + ' of them with no verdict recorded' : '') + '; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
   if (st.last) {
-    L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')');
+    const other = st.last.session !== id;                              // `last` is one for the repository: a verdict another session recorded is named as its (FORMAT.md 16)
+    L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' +
+      (other ? ', recorded by another session' + (st.last.session ? ', ' + st.last.session : '') + ', not this one' : ''));
     if (st.last.reason) for (const line of String(st.last.reason).split('\n')) if (line.trim()) L.push('  ' + line.trim());
   }
   return L;
@@ -1855,7 +1861,7 @@ function gate(argv) {
   const say = (decision, extra) => { if (argv.json) out(JSON.stringify(Object.assign({ decision, session: id, hash: d.hash, files: d.touched }, extra || {}), null, 2)); };
   if (g.decision === 'SKIP') { say('SKIP', { reason: g.reason }); if (!argv.json) out('SKIP'); return 0; }
   if (g.decision === 'SURFACE') {
-    const L = ['SURFACE'].concat(residueLines(g.st, g.sess));
+    const L = ['SURFACE'].concat(residueLines(g.st, g.sess, id));
     L.push('report this to the user verbatim, then stop again');
     say('SURFACE', { residue: L.slice(1, -1) }); if (!argv.json) out(L.join('\n'));
     return 0;
@@ -1982,8 +1988,8 @@ function verdict(argv) {
 // at its own limit, or at the bound — does not let the stop stand, once, and the block says so and counts as one of the
 // session's five (D38). The judge's own output is kept in .docket/judge.log for a person to read; the stop judges nothing,
 // and writes nothing else but that count.
-function surfacedReason(st, sess, tail) {
-  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since the last PASS.\n' + residueLines(st, sess).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
+function surfacedReason(st, sess, tail, id) {
+  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since the last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
 }
 function judgePrompt(core, perm, input) {
   core = /^[\w\/.@:+-]+$/.test(core) ? core : JSON.stringify(core);   // a path the shell would split is written quoted, as the rule allows
@@ -2010,7 +2016,7 @@ function stop(argv) {
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.join(', ');
   const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
-  if (g.decision === 'SURFACE') { out(JSON.stringify({ decision: 'block', reason: surfacedReason(g.st, g.sess, tail) })); return 0; }   // D11: no judge; the residue goes to the maker
+  if (g.decision === 'SURFACE') { out(JSON.stringify({ decision: 'block', reason: surfacedReason(g.st, g.sess, tail, id) })); return 0; }   // D11: no judge; the residue goes to the maker
   const judge = flag(argv, '--judge');
   if (!judge) die('stop: this stop is judged, and --judge names no command to start the judge: the host\'s binding gives one, which reads its prompt on stdin (docs/FORMAT.md 16)', 2);
   const perm = flag(argv, '--permission');
@@ -2023,7 +2029,7 @@ function stop(argv) {
     : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status);
   try { fs.mkdirSync(path.join(root, '.docket'), { recursive: true }); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
   const st = loadState(root), l = st.last;
-  if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail) })); return 0; }   // surfaced while the judge ran (D11)
+  if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail, id) })); return 0; }   // surfaced while the judge ran (D11)
   if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS
   if (l && l.hash === d.hash && Date.parse(l.at) >= start && (l.verdict === 'FAIL' || l.verdict === 'STALE')) {
     const n = l.failures;

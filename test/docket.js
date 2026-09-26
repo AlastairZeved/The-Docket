@@ -13,9 +13,13 @@ function ok(name, cond, detail) {
   failed++;
   console.error(`FAIL  ${name}${detail === undefined ? '' : '\n      ' + String(detail).split('\n').join('\n      ')}`);
 }
+// The environment a check the witness starts inherits: the caller's, less DOCKET_BASE. A base names a commit of the repository a
+// CI step checks, and the witness's checks run in scratch repositories that hold none of its commits; a test that wants a base
+// passes one.
+function outerEnv() { const e = Object.assign({}, process.env); delete e.DOCKET_BASE; return e; }
 function docket(args, opts) {
   opts = opts || {};
-  const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, process.env, opts.env || {}) });
+  const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}) });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
@@ -401,7 +405,7 @@ const SEC = String.fromCharCode(0xa7);
   const sj = docket(['status', '--json'], { cwd: path.join(sRepo, 'test', 'fixture') });
   const sjo = sj.code === 0 ? JSON.parse(sj.out) : {};
   ok('status --json carries each pending addendum whole', (sjo.pendingAddenda || []).some(a => a.id === 'R2' && /reading still writes nothing, and the rule stands as written\.$/.test(a.text)), sj.out);
-  ok('status --json carries the whole docket: ledger, rulings, prefixes, last, uncited, pendingAddenda, lastVerdict, surfaced, witness', Object.keys(sjo).join(',') === 'ledger,rulings,prefixes,last,uncited,pendingAddenda,lastVerdict,surfaced,witness' && sjo.rulings === 9 && sjo.uncited.length === 0 && sjo.pendingAddenda.length === 1 && sjo.pendingAddenda[0].id === 'R2' && sjo.lastVerdict === null && sjo.witness.ok === false && sjo.witness.failures.length === 1, sj.out);
+  ok('status --json carries the whole docket: ledger, rulings, prefixes, last, uncited, pendingAddenda, lastVerdict, surfaced, surfacedSessions, witness', Object.keys(sjo).join(',') === 'ledger,rulings,prefixes,last,uncited,pendingAddenda,lastVerdict,surfaced,surfacedSessions,witness' && sjo.rulings === 9 && sjo.uncited.length === 0 && sjo.pendingAddenda.length === 1 && sjo.pendingAddenda[0].id === 'R2' && sjo.lastVerdict === null && sjo.witness.ok === false && sjo.witness.failures.length === 1, sj.out);
   const pfull = docket(['principles'], { cwd: FIX });
   ok('principles prints each bullet whole, and the count is the list', pfull.out.split('\n').filter(Boolean).length === 3 && pfull.out.split('\n')[0] === '- **Capture precedes structure.** A thought is framed the instant it is typed; where it goes and what it is next to are asserted afterwards.', pfull.out);
   const cj = docket(['check', '--json'], { cwd: FIX });
@@ -1972,7 +1976,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…byte-identical to the core', fs.existsSync(dest) && read(dest) === read(CORE), 'differs');
     ok('…and prints the CI step, running the copy bare with a full clone for check 7', /run: node test\/docket\.js/.test(r.out) && /fetch-depth: 0/.test(r.out), r.out);
     ok('…whose witness step names DOCKET_BASE as this repository\u2019s CI does, so the copy compares a pushed range, not only the tip\u2019s parent (FORMAT.md 13)', /run: node test\/docket\.js\n        env:\n          DOCKET_BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(r.out), r.out);
-    const w = cp.spawnSync('node', [dest], { cwd: dir, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const w = cp.spawnSync('node', [dest], { cwd: dir, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('the copy, run bare where the law lives, is the witness: its own check passes, spec rows included', w.status === 0 && /^witness: ok \(1 ledger, [1-9]\d* spec rows\)$/m.test(w.stdout), w.status + ' ' + w.stdout + w.stderr);
     ok('…and says it did not read itself as a governed file (D9)', /^info  test\/docket\.js: the vendored witness, a copy of this program — not read as a governed file \(D9\)$/m.test(w.stdout), w.stdout);
     r = docket(['vendor', '.'], { cwd: dir });
@@ -1982,7 +1986,7 @@ const SEC = String.fromCharCode(0xa7);
     r = docket(['vendor', 'nosuchdir'], { cwd: dir });
     ok('vendor into a non-directory exits 2 and names it', r.code === 2 && /^vendor: nosuchdir is not a directory$/m.test(r.err), r.err);
     // A copy that is the running program judges its own source only when it is the core in bin/ (D6).
-    const n = cp.spawnSync('node', [dest, 'near'], { cwd: dir, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'test/docket.js', old_string: 'const WINDOW = 20' } }), env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const n = cp.spawnSync('node', [dest, 'near'], { cwd: dir, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'test/docket.js', old_string: 'const WINDOW = 20' } }), env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('near on the vendored copy itself prints nothing: its cites are another ledger’s', n.status === 0 && n.stdout === '', JSON.stringify(n.stdout));
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -2020,13 +2024,13 @@ const SEC = String.fromCharCode(0xa7);
     const ui = read(path.join(d, 'docs', 'UIUX.md'));
     ok('UIUX.md carries the two token tables, empty, and the minimum, so spec-check has rows to find once values are stated', new RegExp('^## ' + SEC + '2 Design tokens$', 'm').test(ui) && /^\| Token \| Value \| Use \|$/m.test(ui) && /^\| Pair \| Ratio \|$/m.test(ui) && new RegExp('^## ' + SEC + '4\.5 The minimum$', 'm').test(ui), ui);
     // Existence is not the claim. The vendored witness is RUN over the triad, and passes.
-    const w = cp.spawnSync('node', [path.join(d, 'test', 'docket.js')], { cwd: d, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const w = cp.spawnSync('node', [path.join(d, 'test', 'docket.js')], { cwd: d, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('the vendored witness, run bare over the constituted triad, exits 0 — not "the files exist": the check passes', w.status === 0 && /^witness: ok \(1 ledger, 0 spec rows\)$/m.test(w.stdout), w.status + ' ' + w.stdout + w.stderr);
     ok('…and the copy did not read itself: the info line says so', /the vendored witness, a copy of this program/.test(w.stdout), w.stdout);
-    const near = cp.spawnSync('node', [path.join(d, 'test', 'docket.js'), 'near'], { cwd: d, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'docs/PRD.md', old_string: '## ' + SEC + '2 The reader' } }), env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const near = cp.spawnSync('node', [path.join(d, 'test', 'docket.js'), 'near'], { cwd: d, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'docs/PRD.md', old_string: '## ' + SEC + '2 The reader' } }), env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('near in the constituted project is silent on a spec document, as the grammar says', near.status === 0 && near.stdout === '', near.stdout);
     fs.writeFileSync(path.join(d, 'app.js'), 'const x = 1; // R1: the constitution\nconst y = 2;\n');
-    const near2 = cp.spawnSync('node', [path.join(d, 'test', 'docket.js'), 'near'], { cwd: d, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'app.js', old_string: 'const y' } }), env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const near2 = cp.spawnSync('node', [path.join(d, 'test', 'docket.js'), 'near'], { cwd: d, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'app.js', old_string: 'const y' } }), env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('…and lists R1 for an edit beside a cite of it: the constituted ledger governs', /^Governed here \(.*docs\/DECISIONS\.md, ±20 lines of app\.js:2\):\n  R1  The constitution$/m.test(near2.stdout), near2.stdout);
     const again = constitute(ANSWERS, { dir: d });
     ok('a second constitution in the same directory is refused: written once, appended after (D4)', again.code === 2 && /^constitute: docs\/DECISIONS\.md already exists — a constitution is written once/m.test(again.err), again.code + ' ' + again.err);
@@ -2095,9 +2099,9 @@ const SEC = String.fromCharCode(0xa7);
     // The vendored copy cannot constitute: it carries no templates, and says so rather than failing on a path.
     const dir = tempRepo(); docket(['vendor', '.'], { cwd: dir });
     fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify(ANSWERS));
-    const c = cp.spawnSync('node', [path.join(dir, 'test', 'docket.js'), 'constitute', '--answers', 'a.json', '--target', 'other'], { cwd: dir, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const c = cp.spawnSync('node', [path.join(dir, 'test', 'docket.js'), 'constitute', '--answers', 'a.json', '--target', 'other'], { cwd: dir, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     fs.mkdirSync(path.join(dir, 'other'));
-    const c2 = cp.spawnSync('node', [path.join(dir, 'test', 'docket.js'), 'constitute', '--answers', 'a.json', '--target', 'other'], { cwd: dir, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
+    const c2 = cp.spawnSync('node', [path.join(dir, 'test', 'docket.js'), 'constitute', '--answers', 'a.json', '--target', 'other'], { cwd: dir, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('the vendored copy refuses to constitute, naming the templates it does not carry', c.status === 2 && c2.status === 2 && /templates\/PRD\.md is not beside this file’s bin\/ — constitute runs from the plugin/.test(c2.stderr.replace(/'/g, '’')), c.status + ' ' + c2.stderr);
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -2113,7 +2117,7 @@ const SEC = String.fromCharCode(0xa7);
     const result = (denials) => JSON.stringify({ type: 'result', result: 'done', num_turns: 1, permission_denials: denials || [] });
     const runScript = (script, hostLines, env) => {
       fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\n' + hostLines.map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
-      return cp.spawnSync('sh', [path.join(ROOT, 'test', script)], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1', CONSTITUTE_RUNS: '1' }, env || {}) });
+      return cp.spawnSync('sh', [path.join(ROOT, 'test', script)], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1', CONSTITUTE_RUNS: '1' }, env || {}) });
     };
     void stub;
     // cites.sh: a host that names R6 and edits → (a) cited, (b) surfaced by naming; the script completes, exit 0, stderr clean
@@ -2211,7 +2215,11 @@ const SEC = String.fromCharCode(0xa7);
       ok('…and a base the repository does not hold (the commit before a force-push) falls back too, and says so: an info line names the ledger, the revision and what it was compared with — the stronger comparison was asked for and not made', gone.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 compared with HEAD’s parent: DOCKET_BASE names feedfacefeedfacefeedfacefeedfacefeedface, which this repository does not hold$/m.test(gone.out.replace(/'/g, '’')) && /^check: ok/m.test(gone.out) && !/does not hold/.test(zero.out + tip.out + based.out), gone.out);
       ok('…in --json as well', goneJ.code === 0 && JSON.parse(goneJ.out).info.some(i => /test\/fixture\/DECISIONS\.md: check 7 compared with HEAD's parent: DOCKET_BASE names feedface/.test(i)), goneJ.out);
       const wf = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
-      ok('ci.yml names DOCKET_BASE from the push’s before or the pull request’s base', /DOCKET_BASE:\s*\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(wf), wf);
+      ok('ci.yml names DOCKET_BASE from the push’s before or the pull request’s base, on the step that runs the docket over the repository and not the job — the witness step’s scratch checks never see it', /- name: The docket \(D6\)\n\s+run: node bin\/docket\.js\n\s+env:\n(?:\s+#[^\n]*\n)*\s+DOCKET_BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(wf) && !/^    env:/m.test(wf), wf);
+      { const had = process.env.DOCKET_BASE; process.env.DOCKET_BASE = 'feedfacefeedfacefeedfacefeedfacefeedface';
+        const inherited = docket(['check'], { cwd: dir });
+        if (had === undefined) delete process.env.DOCKET_BASE; else process.env.DOCKET_BASE = had;
+        ok('…and the witness’s own checks do not inherit a DOCKET_BASE from the environment it runs in: CI names one for the repository it checks, which a scratch repository does not hold', inherited.code === 0 && /^check: ok/m.test(inherited.out) && !/does not hold/.test(inherited.out), inherited.out); }
       fs.rmSync(dir, { recursive: true, force: true });
     }
     // DOCKET_BASE naming a commit the repository holds from before the ledger was added: check 7 is skipped and says so;
@@ -2366,7 +2374,7 @@ const SEC = String.fromCharCode(0xa7);
       copyTree(ROOT, plug, ['.git', 'node_modules'], src => !/[\\/]\.git(?:[\\/]|$)/.test(src) && !/[\\/]node_modules(?:[\\/]|$)/.test(src));
       fs.appendFileSync(path.join(plug, 'templates', 'PRD.md'), '\n{{bogus}}\n');
       const d = tmpDir('const-'); fs.writeFileSync(path.join(d, 'a.json'), JSON.stringify(ANSWERS));
-      const pr = cp.spawnSync('node', [path.join(plug, 'bin', 'docket.js'), 'constitute', '--answers', 'a.json'], { cwd: d, encoding: 'utf8', env: Object.assign({}, process.env, { DOCKET_TODAY: '2026-09-22', CLAUDE_PROJECT_DIR: '' }) });
+      const pr = cp.spawnSync('node', [path.join(plug, 'bin', 'docket.js'), 'constitute', '--answers', 'a.json'], { cwd: d, encoding: 'utf8', env: Object.assign({}, outerEnv(), { DOCKET_TODAY: '2026-09-22', CLAUDE_PROJECT_DIR: '' }) });
       ok('a placeholder constitute does not fill is refused by name, exit 2, and nothing is written — run, not read', pr.status === 2 && /^constitute: templates\/PRD\.md names \{\{bogus\}\}, which constitute does not fill$/m.test(pr.stderr) && !fs.existsSync(path.join(d, 'docs')), pr.status + ' ' + pr.stderr + ' ' + fs.readdirSync(d).join(','));
     }
     const c = docket(['check', '--json']);
@@ -2447,6 +2455,24 @@ const SEC = String.fromCharCode(0xa7);
   // one located failure per line, in the protocol's form; a code line that names a ruling answers the reason question (D23)
   const held = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (262 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (test/fixture/app.js:40) · change the code').join('\n');
   const gone = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (262 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only · reason gone: nothing reads a position now (test/fixture/app.js:40) · /rule --addendum ' + (id || 'R2')).join('\n');
+  // ── the residue's last verdict is `last`, one for the repository: one another session recorded says so (FORMAT.md 16) ──
+  {
+    const d = tempRepo();
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const later = 1; // R2\n');
+    const h = docket(['gate', '--session', 'a'], { cwd: d }).out.split(' ')[1];
+    for (let i = 0; i < 3; i++) docket(['verdict', 'FAIL', '--hash', h, '--failures', '3', '--session', 'a', '--reason', held(3)], { cwd: d });
+    docket(['verdict', 'FAIL', '--hash', h, '--failures', '1', '--session', 'b', '--reason', held(1)], { cwd: d });
+    const g = docket(['gate', '--session', 'a'], { cwd: d });
+    ok('gate: a session surfaced after another session recorded the last verdict names that session on the residue\u2019s last-verdict line, not this one (FORMAT.md 16)', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: FAIL at \S+ \(1 located failure\), recorded by another session, b, not this one\n  code · F3 · /.test(g.out), g.out);
+    const sa = docket(['status'], { cwd: path.join(d, 'test', 'fixture') }), sj = docket(['status', '--json'], { cwd: path.join(d, 'test', 'fixture') });
+    ok('…and status names that surfaced session, which the last verdict does not: its line gives its blocks and its failures per verdict, and --json lists it (FORMAT.md 16; the protocol\u2019s release: status names it)', /^Last verdict: FAIL at \S+ \(1 located failure\)\nSurfaced: a \(3 blocks since the last PASS; located failures per verdict: 3 → 3 → 3\) — each waits for the human, who releases it with a PASS naming it$/m.test(sa.out) && JSON.stringify(JSON.parse(sj.out).surfacedSessions) === '["a"]', sa.out + sj.out);
+    const n0 = tempRepo(); fs.mkdirSync(path.join(n0, '.docket'), { recursive: true });
+    fs.writeFileSync(path.join(n0, '.docket', 'verdict.json'), JSON.stringify({ last: null, sessions: { s1: { blocks: 5, history: [], surfaced: true } } }));
+    const s0 = docket(['status'], { cwd: path.join(n0, 'test', 'fixture') }), s0j = docket(['status', '--json'], { cwd: path.join(n0, 'test', 'fixture') });
+    ok('…and a session surfaced by blocks with no verdict recorded, the last verdict none, is named too (D38)', /^Last verdict: none\nSurfaced: s1 \(5 blocks since the last PASS; located failures per verdict: none recorded\) — each waits for the human, who releases it with a PASS naming it$/m.test(s0.out) && JSON.stringify(JSON.parse(s0j.out).surfacedSessions) === '["s1"]', s0.out + s0j.out);
+    fs.rmSync(n0, { recursive: true, force: true });
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   // ── gate and verdict (D10, D11): SKIP / JUDGE / SURFACE with a scripted .docket/ state ──
   {
     const d = tempRepo();
@@ -2991,7 +3017,7 @@ const SEC = String.fromCharCode(0xa7);
       const bin = tmpDir('host-bin-'), seen = tmpDir('seen-');
       fs.writeFileSync(path.join(bin, 'claude'), ['#!/bin/sh', 'for a in "$@"; do printf "%s\\n" "$a"; done > ' + JSON.stringify(path.join(seen, 'argv')), 'cat > ' + JSON.stringify(path.join(seen, 'prompt')), 'h=$(node ' + JSON.stringify(CORE) + ' gate --session b | cut -d" " -f2)', 'node ' + JSON.stringify(CORE) + ' verdict PASS --hash "$h" --failures 0 --session b >/dev/null', ''].join('\n'));
       fs.chmodSync(path.join(bin, 'claude'), 0o755);
-      const rh = cp.spawnSync('/bin/sh', ['-c', stop.command], { cwd: d, input: JSON.stringify({ session_id: 'b', cwd: d, transcript_path: '/t/x.jsonl', stop_hook_active: false }), encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PLUGIN_ROOT: ROOT, PATH: bin + ':' + process.env.PATH }) });
+      const rh = cp.spawnSync('/bin/sh', ['-c', stop.command], { cwd: d, input: JSON.stringify({ session_id: 'b', cwd: d, transcript_path: '/t/x.jsonl', stop_hook_active: false }), encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PLUGIN_ROOT: ROOT, PATH: bin + ':' + process.env.PATH }) });
       const argv = fs.existsSync(path.join(seen, 'argv')) ? read(path.join(seen, 'argv')).split('\n').slice(0, -1) : [];
       ok('the hook’s command, run through a shell as the host runs it, starts the judge with each word intact: headless, keeping no session, running no hooks of its own, granted one permission, denied every write tool, limited in turns, and on no model the binding names', argv.join(' | ') === ['-p', '--no-session-persistence', '--settings', '{"disableAllHooks":true}', '--allowedTools', 'Bash(node *docket.js*)', '--disallowedTools', 'Write Edit NotebookEdit', '--max-turns', '60'].join(' | '), argv.join(' | ') + ' ' + rh.stderr);
       ok('…the permission it grants the judge is the one `--permission` spells for the prompt', argv[argv.indexOf('--allowedTools') + 1] === (stop.command.match(/--permission "([^"]*)"/) || [])[1], stop.command);
@@ -3126,7 +3152,7 @@ const SEC = String.fromCharCode(0xa7);
     const GOOD_P = WRITES + say([EDITS, turnText('Recorded.'), blockTurn(P11), result()], { verdict: 'FAIL', reason: P11 });
     const runJudge = (v, c, s, n, r, p = GOOD_P) => {
       fs.writeFileSync(path.join(stubDir, 'claude'), stub(v, c, s, n, r, p)); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
-      return cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '1' }) });
+      return cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '1' }) });
     };
     const GOOD_R = say([turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes\nWaiting for the word.'), result()]);
     // a host whose judge does its job at all four stops
@@ -3300,7 +3326,7 @@ const SEC = String.fromCharCode(0xa7);
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
         GOOD_R, GOOD_P));
       fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
-      const r2 = cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env, { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '2' }) });
+      const r2 = cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '2' }) });
       ok('judge.sh with JUDGE_RUNS=2 scores every run of every scenario and gates on them all: two of two where both runs met, one of two on the stale case whose second judge read it as a FAIL, and exit 1 naming it', r2.status === 1 && /— 2 run\(s\) of each of six scenarios/.test(r2.stdout) && /\(s\) run 1  judge: STALE/.test(r2.stdout) && /\(s\) run 2  judge: FAIL/.test(r2.stdout) && /\(v\) violation  2 of 2/.test(r2.stdout) && /\(c\) clean      2 of 2/.test(r2.stdout) && /\(p\) provenance 2 of 2/.test(r2.stdout) && /\(s\) stale      1 of 2/.test(r2.stdout) && /^  every outcome: not met: the stale case met its outcome in 1 of 2$/m.test(r2.stdout) && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: met$/m.test(r2.stdout), r2.status + ' ' + r2.stdout.split('\n').slice(-6).join(' | '));
     }
     // a copy of a live tree: an entry that vanishes while it is copied is left out, and any other failure fails the run
@@ -3315,7 +3341,7 @@ const SEC = String.fromCharCode(0xa7);
       fs.writeFileSync(path.join(cpDir, 'cp'), '#!/bin/sh\nfor a in "$@"; do case "$a" in */.vanish-probe) rm -rf "$a"; echo "cp: cannot stat \'$a\': No such file or directory" >&2; exit 1 ;; */bin) [ -n "${CP_FAIL_BIN:-}" ] && { echo "cp: cannot open \'$a\': Permission denied" >&2; exit 1; } ;; esac; done\nexec /bin/cp "$@"\n');
       fs.chmodSync(path.join(cpDir, 'cp'), 0o755);
       fs.writeFileSync(path.join(stubDir, 'claude'), stub('', say([turnText('Renamed.'), result()], { verdict: 'PASS' }), '', '', '', '')); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
-      const runIn = extra => cp.spawnSync('sh', [path.join(rp, 'test', 'judge.sh')], { cwd: rp, encoding: 'utf8', env: Object.assign({}, process.env, extra, { PATH: cpDir + ':' + stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '1', JUDGE_ONLY: 'c' }) });
+      const runIn = extra => cp.spawnSync('sh', [path.join(rp, 'test', 'judge.sh')], { cwd: rp, encoding: 'utf8', env: Object.assign({}, outerEnv(), extra, { PATH: cpDir + ':' + stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '1', JUDGE_ONLY: 'c' }) });
       let rv = runIn({});
       ok('judge.sh copies the plugin though an entry beside it vanishes during the copy: the run is scored, and the vanished entry is left out', /\(c\) run 1  blocked: no   judge: PASS/.test(rv.stdout) && !/scratch copy failed/.test(rv.stderr) && !fs.existsSync(path.join(rp, '.vanish-probe')), rv.status + ' ' + rv.stdout.slice(-300) + rv.stderr);
       ok('…and a run of one scenario says what it did not measure: its first line names the scenario it runs, the cases left out are not run, the floor, every outcome and the halt not measured, and exit 1 — the measurement is all six (D34)', rv.status === 1 && /^  every outcome: not measured: the violation, the stale case, the number case, the amend case, the provenance case not run$/m.test(rv.stdout) && /^  the halt at \/rule: not measured: the amend case not run$/m.test(rv.stdout) && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: not measured: the violation, the stale case, the number case, the provenance case not run$/m.test(rv.stdout) && /This measured the judge at the stops above, headless/.test(rv.stdout) && /^the judge, measured — 1 run\(s\) of each of the scenarios JUDGE_ONLY names, c, and no other$/m.test(rv.stdout), rv.status + ' ' + rv.stdout.slice(-600));

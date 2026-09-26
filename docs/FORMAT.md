@@ -520,7 +520,9 @@ a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
 equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times since the last PASS or
 its located failures have not fallen across the last two verdicts after the
-third block, with the residue printed beneath and the session marked surfaced;
+third block, with the residue printed beneath and the session marked surfaced —
+the residue's last verdict is `last`, one for the repository (below), and one
+another session recorded is named on its line as that session's, not this one's;
 else `JUDGE <hash>
 <files…>`, and with `--diff` the diff beneath, each touched function whole
 (`git diff HEAD --function-context` over the same files, then the untracked
@@ -543,7 +545,11 @@ carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
 failures, time, session, and the reason it was recorded with), `lastPassHash`,
-and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`. Every
+and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`;
+`docket status` names the last verdict's session when it is surfaced, and every other
+session the file marks surfaced on a line of its own with its blocks and its failures
+per verdict, since `last` names one session and each surfaced session waits for the
+human (`status --json` lists them all, as `surfacedSessions`). Every
 verdict is also appended, one JSON line each and in order, to
 `.docket/verdicts.jsonl`: the judge's record, for a person to read and for a
 measurement to score the judge's first answer by; nothing in the core reads it.
