@@ -67,7 +67,10 @@ normalised on reading, the working tree's file and the committed version alike:
 CRLF and LF both end a line, a bare CR does not, and a CRLF ledger parses, cites
 and compares line for line exactly as an LF one, whatever a checkout's
 line-ending settings made of either side. A ledger saved with bare CR endings
-alone is one line, so it has no entries, and the info line above names it.
+alone is one line: one that opens with anything but an entry heading has no
+entries, and the info line above names it; one that opens with an entry heading
+is one entry whose heading runs to the end of the file, and check 2 fails on the
+carriage returns it carries (13).
 
 The **enumeration root** — the tree `check`, `spec-check`, `status`, `governs`
 and the witness read — is the working directory's project root by the same
@@ -210,7 +213,9 @@ An **addendum** is a line under an entry of the form
 It records that something about the entry has changed without amending the
 entry: most often that the entry's stated reason no longer holds. An addendum
 is **pending** until a ruling written after it has an edge into the entry (any
-verb); the docket (`docket status`) lists pending addenda. `docket append --addendum <id>
+verb); the docket (`docket status`) lists pending addenda, each on one line with
+its text cut at one hundred characters (D14) — `governs <id>` prints the whole,
+and `status --json` carries it. `docket append --addendum <id>
 --text <text>` writes one with today's date as the last line of the entry;
 `append` refuses a `--body` that carries an addendum line, so an addendum is
 dated by the tool and never by hand.
@@ -377,7 +382,7 @@ cite, heading or edge, never only the file.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is the one at the revision `DOCKET_BASE` names when the environment names one (CI names the commit before the push, so an amendment inside a range of commits is compared, not only the tip's parent), else `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), all read from the repository root whatever directory the host names and with the normalisation of 1; a ledger the compared revision has and the working tree lacks fails as removed; skipped when no such version exists — a ledger not yet committed, or one the revision compared with has no file of: a first commit, or the commit that added it — and an info line names the ledger whose check 7 was skipped, so a skip is never mistaken for a pass; a `DOCKET_BASE` that names `HEAD` itself would compare a clean commit with itself and is read as unset, and one the repository does not hold — a force-push leaves the commit before it behind — is read as unset too, with an info line naming the ledger, the revision and what the ledger was compared with instead |
+| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is the one at the revision `DOCKET_BASE` names when the environment names one (CI names the commit before the push — this repository's does, and so does the CI step `vendor` and `constitute` print — so an amendment inside a range of commits is compared, not only the tip's parent), else `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), all read from the repository root whatever directory the host names and with the normalisation of 1; a ledger the compared revision has and the working tree lacks fails as removed; skipped when no such version exists — a ledger not yet committed, or one the revision compared with has no file of: a first commit, the commit that added it, or a `DOCKET_BASE` whose tree has none, which the tip's rule never stands in for — and an info line names the ledger whose check 7 was skipped, and the base when the base had none, so a skip is never mistaken for a pass; a `DOCKET_BASE` that names `HEAD` itself would compare a clean commit with itself and is read as unset, and one the repository does not hold — a force-push leaves the commit before it behind — is read as unset too, with an info line naming the ledger, the revision and what the ledger was compared with instead |
 
 Check 7's reference point — the first parent when the ledger is unchanged since
 `HEAD` — is a rule of this repository's ledger, stated with its reason in the preamble of
@@ -402,7 +407,8 @@ from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a
 **token row**, whose first two cells are a `--token` and a hex colour of 3, 4,
 6 or 8 digits, matched by one CSS declaration of that token (a) — a second
 declaration of another value beside it is a theme's and is reported, not failed;
-a value inside a CSS comment is not a declaration; and a
+a value inside a CSS comment is not a declaration, and a comment never closed
+runs to the end of the file, as CSS reads it; and a
 **contrast row**, a table row holding token names and an `N:1` value, which
 names exactly two tokens or fails, and whose ratio is recomputed from the two
 hexes to two decimals (b): the stated ratio is rounded half-up on its written

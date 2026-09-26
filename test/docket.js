@@ -272,7 +272,11 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 7: a committed ledger emptied in the working tree is nine removals, beside the info line', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: A1 was removed \(append only\)$/m.test(r.out) && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R8 was removed \(append only\)$/m.test(r.out) && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out), r.out);
   const cr = tempRepo(d => { const p = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(p, read(p).replace(/\n/g, '\r')); });
   r = docket(['check'], { cwd: cr });
-  ok('check: a ledger with bare CR endings is one line with no entries, and the info line names it (FORMAT.md 1)', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out), r.out + r.err);
+  ok('check: a ledger with bare CR endings that opens with its preamble is one line with no entries, and the info line names it (FORMAT.md 1)', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out), r.out + r.err);
+  const crOpen = tempRepo(d => { const p = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(p, read(p).replace(/^[\s\S]*?(?=^### )/m, '').replace(/\n/g, '\r')); });
+  r = docket(['check'], { cwd: crOpen });
+  ok('…and one that opens with its first entry heading is one entry whose heading runs to the end of the file: check 2 fails on its carriage returns, and it is not read as the empty ledger (FORMAT.md 1)', r.code === 1 && /^test\/fixture\/DECISIONS\.md:1  check 2: A1: the text carries U\+000D/m.test(r.out) && !/no entries/.test(r.out), r.out + r.err);
+  fs.rmSync(crOpen, { recursive: true, force: true });
   const emptyNear = docket(['near'], { cwd: emptyL, input: nearInput(path.join(emptyL, 'test', 'fixture', 'app.js'), 'makeToolbar(') });
   ok('near: under an empty ledger every file is ungoverned → silent', emptyNear.code === 0 && emptyNear.out === '' && emptyNear.err === '');
   const json = docket(['check', '--json'], { cwd: c1 });
@@ -379,9 +383,11 @@ const SEC = String.fromCharCode(0xa7);
   ok('principles falls back to the ledger preamble when no PRD.md sits beside it', pr.code === 0 && pr.out.split('\n').filter(Boolean).length === 5 && /One home per value/.test(pr.out), pr.out);
   const sRepo = tempRepo();                                            // hermetic: the checkout's own state directory is not read
   const s = docket(['status'], { cwd: path.join(sRepo, 'test', 'fixture') });
+  ok('status: each pending addendum on one line, its text cut at one hundred characters with …, as governs cuts a cited line (D14) — the fixture’s R2 addendum is longer', /^  R2 \(2026-09-11\): .{1,99}\u2026$/m.test(s.out) && !/and the rule stands as written/.test(s.out), s.out);
   ok('status: the docket names the ledger, the last three rulings, uncited rulings, pending addenda, the last verdict and the witness', /^Docket — test\/fixture\/DECISIONS\.md \(9 rulings; prefixes A, R\)\nLast rulings:\n  R8  /.test(s.out) && /Cited nowhere: none/.test(s.out) && /Addenda pending: \n  R2 \(2026-09-11\)/.test(s.out) && /Last verdict: none/.test(s.out) && /Witness: FAIL \(1\)/.test(s.out), s.out);
   const sj = docket(['status', '--json'], { cwd: path.join(sRepo, 'test', 'fixture') });
   const sjo = sj.code === 0 ? JSON.parse(sj.out) : {};
+  ok('status --json carries each pending addendum whole', (sjo.pendingAddenda || []).some(a => a.id === 'R2' && /reading still writes nothing, and the rule stands as written\.$/.test(a.text)), sj.out);
   ok('status --json carries the whole docket: ledger, rulings, prefixes, last, uncited, pendingAddenda, lastVerdict, surfaced, witness', Object.keys(sjo).join(',') === 'ledger,rulings,prefixes,last,uncited,pendingAddenda,lastVerdict,surfaced,witness' && sjo.rulings === 9 && sjo.uncited.length === 0 && sjo.pendingAddenda.length === 1 && sjo.pendingAddenda[0].id === 'R2' && sjo.lastVerdict === null && sjo.witness.ok === false && sjo.witness.failures.length === 1, sj.out);
   const pfull = docket(['principles'], { cwd: FIX });
   ok('principles prints each bullet whole, and the count is the list', pfull.out.split('\n').filter(Boolean).length === 3 && pfull.out.split('\n')[0] === '- **Capture precedes structure.** A thought is framed the instant it is typed; where it goes and what it is next to are asserted afterwards.', pfull.out);
@@ -1952,6 +1958,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('vendor writes <dir>/test/docket.js and says so', r.code === 0 && /^wrote test\/docket\.js — the witness/m.test(r.out) && fs.existsSync(dest), r.out);
     ok('…byte-identical to the core', fs.existsSync(dest) && read(dest) === read(CORE), 'differs');
     ok('…and prints the CI step, running the copy bare with a full clone for check 7', /run: node test\/docket\.js/.test(r.out) && /fetch-depth: 0/.test(r.out), r.out);
+    ok('…whose witness step names DOCKET_BASE as this repository\u2019s CI does, so the copy compares a pushed range, not only the tip\u2019s parent (FORMAT.md 13)', /run: node test\/docket\.js\n        env:\n          DOCKET_BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(r.out), r.out);
     const w = cp.spawnSync('node', [dest], { cwd: dir, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: '' }) });
     ok('the copy, run bare where the law lives, is the witness: its own check passes, spec rows included', w.status === 0 && /^witness: ok \(1 ledger, [1-9]\d* spec rows\)$/m.test(w.stdout), w.status + ' ' + w.stdout + w.stderr);
     ok('…and says it did not read itself as a governed file (D9)', /^info  test\/docket\.js: the vendored witness, a copy of this program — not read as a governed file \(D9\)$/m.test(w.stdout), w.stdout);
@@ -2194,6 +2201,24 @@ const SEC = String.fromCharCode(0xa7);
       ok('ci.yml names DOCKET_BASE from the push’s before or the pull request’s base', /DOCKET_BASE:\s*\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(wf), wf);
       fs.rmSync(dir, { recursive: true, force: true });
     }
+    // DOCKET_BASE naming a commit the repository holds from before the ledger was added: check 7 is skipped and says so;
+    // the tip's parent, inside the push, never stands in — it would pass an amendment in the middle and fail one at the tip
+    {
+      const hold = tmpDir('docket-');
+      const dir = tempRepo(d => fs.renameSync(path.join(d, LED), path.join(hold, 'DECISIONS.md')));
+      const before = sh('git', ['rev-parse', 'HEAD'], dir).stdout.trim();
+      fs.renameSync(path.join(hold, 'DECISIONS.md'), path.join(dir, LED)); git(dir, ['add', '-A']); git(dir, ['commit', '-qm', 'the ledger']);
+      edit(dir, LED, '### R3. Fold similarity (issue #4)', '### R3. Fold similarity, rewritten (issue #4)'); git(dir, ['commit', '-qam', 'amend']);
+      const atTip = docket(['check'], { cwd: dir, env: { DOCKET_BASE: before } });
+      const a = docket(['append', '--title', 'Appended after the amendment', '--issue', '9', '--principle', 'Capture precedes structure', '--body', 'Reason: r.', '--ledger', LED], { cwd: dir, env: { DOCKET_TODAY: '2026-09-23' } }); git(dir, ['commit', '-qam', 'append']);
+      const inside = docket(['check'], { cwd: dir, env: { DOCKET_BASE: before } }), insideJ = docket(['check', '--json'], { cwd: dir, env: { DOCKET_BASE: before } });
+      const skipLine = new RegExp('^info  test/fixture/DECISIONS\\.md: check 7 skipped — DOCKET_BASE names ' + before + ', which has no such file', 'm');
+      ok('check 7: a DOCKET_BASE from before the ledger was added skips the check and says so, naming the base — an amendment in the middle of the push is not passed in silence', a.code === 0 && inside.code === 0 && skipLine.test(inside.out) && (inside.out.match(/check 7 skipped/g) || []).length === 1 && !/check 7 compared with/.test(inside.out), a.out + a.err + inside.out);
+      ok('…and the same at a tip that amends: the tip\u2019s parent, inside the push, never stands in for the base', atTip.code === 0 && skipLine.test(atTip.out) && !/check 7: R3/.test(atTip.out), atTip.out);
+      ok('…in --json as well', insideJ.code === 0 && JSON.parse(insideJ.out).info.some(i => /^test\/fixture\/DECISIONS\.md: check 7 skipped — DOCKET_BASE names [0-9a-f]{40}, which has no such file/.test(i)), insideJ.out);
+      fs.rmSync(hold, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
     // a committed ledger deleted from the tree: check 7 fails, status says so
     {
       const dir = tempRepo(); fs.unlinkSync(path.join(dir, LED));
@@ -2242,6 +2267,10 @@ const SEC = String.fromCharCode(0xa7);
       ok('…a value inside a CSS comment is not a declaration', !/--ink/.test(r.out.replace(/info[^\n]*/g, '')), r.out);
       ok('…and the fixture’s planted mismatch still fails, since no declaration of --line matches', r.code === 1 && /--line is #7a8fa6 in the spec but #7a8fa7 at test\/fixture\/styles\.css:5/.test(r.out), r.out);
       fs.rmSync(dir, { recursive: true, force: true });
+      const open = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'styles.css'), '\n/* never closed: --line: #7a8fa6\n'));
+      const ro = docket(['spec-check'], { cwd: path.join(open, 'test', 'fixture') });
+      ok('…and a comment never closed runs to the end of the file, as CSS reads it: the value inside it does not answer the planted mismatch (FORMAT.md 13)', ro.code === 1 && /--line is #7a8fa6 in the spec but #7a8fa7 at test\/fixture\/styles\.css:5/.test(ro.out) && !/--line is #7a8fa6 in the spec and one declaration matches/.test(ro.out), ro.out);
+      fs.rmSync(open, { recursive: true, force: true });
     }
     // options: one a subcommand does not read is a usage error, exit 2, naming the ones it does
     {

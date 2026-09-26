@@ -43,6 +43,7 @@ const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
 const STOP_WAIT = 600;    // D14, logged in D19 and D37: the seconds `stop` gives the judge it starts before it stops it — more than twice the longest judge measured at a stop
 const SNIFF_BYTES = 8000;   // git's own binary sniff: a file with a NUL in its first 8000 bytes is not text
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
+const GLANCE = 100;       // D14: one glance — governs cuts a cited line here, and status each pending addendum; the ledger holds the rest
 
 const VERBS = ['supersedes', 'overrides', 'retires', 'reverses', 'waives', 'extends',
   'keeps', 're-tunes', 'refines', 'replaces', 'corrects', 'revises'];
@@ -798,7 +799,7 @@ function governsBlock(root, ledger, r, cites) {
   lines.push('Addenda:');
   if (!r.addenda.length) lines.push('  none'); for (const a of r.addenda) lines.push('  ' + a.date + ': ' + a.text);
   lines.push('Code cites:');
-  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + c.text.trim().slice(0, 100));
+  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + c.text.trim().slice(0, GLANCE));
   return lines.join('\n');
 }
 function principles(argv) {
@@ -912,8 +913,9 @@ function runCheck(root, opts) {
     // cites included, and check 1, 3 and 4 would read none of it. The fault is the fence, and it is named.
     const fenceAt = ledger.lines.map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
     if (fenceAt.length % 2 === 1) fail(lp, fenceAt[fenceAt.length - 1], 2, 'a fence opened here is never closed; every line after it is read as code, cites included (FORMAT.md 8)');
-    const committed = committedText(root, lp, ledger.text, m => info.push(rel(root, lp) + ': check 7 ' + m));
-    if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (the ledger is not yet committed, or the revision compared with has no such file: a first commit, or the commit that added it)');   // FORMAT.md 13: the skip is said, not silent
+    let skipSaid = false;                                              // a skip committedText names itself is not said twice
+    const committed = committedText(root, lp, ledger.text, (m, skip) => { skipSaid = skipSaid || !!skip; info.push(rel(root, lp) + ': check 7 ' + m); });
+    if (committed === null && !skipSaid) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (the ledger is not yet committed, or the revision compared with has no such file: a first commit, or the commit that added it)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
       const old = parseLedger(committed, lp);
       for (const o of old.rulings) {
@@ -954,7 +956,8 @@ function normEol(s) { return s.replace(/\r\n/g, '\n'); }
 // with: an amendment in the middle of a pushed range is then seen, where a tip-only comparison would miss it. Unset
 // or unreadable, the rule is HEAD's, or HEAD's parent's when the tree already equals HEAD; a revision the repository does
 // not hold — a force-push leaves the commit before it behind — is said in an info line, since the comparison it asked for
-// was not made.
+// was not made. A revision it holds whose tree has no file of the ledger skips the check, and says so: nothing from
+// before the push is there to compare, and the tip's parent, inside the push, is not the comparison asked for.
 function baseRevision() {
   const b = process.env.DOCKET_BASE;
   return b && /^[A-Za-z0-9_./~^-]{1,64}$/.test(b) && !/^0+$/.test(b) ? b : null;
@@ -971,6 +974,7 @@ function committedText(root, filePath, workingText, note) {
   if (base && !namesHead(base, groot)) {                               // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule below applies
     const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout;
     if (sh('git', ['rev-parse', '--verify', '--quiet', base + '^{commit}'], groot).status !== 0) lost = base;
+    else { if (note) note('skipped — DOCKET_BASE names ' + base + ', which has no such file, so no version from before the push is there to compare', true); return null; }   // FORMAT.md 13
   }
   const said = what => { if (lost && note) note('compared with ' + what + ': DOCKET_BASE names ' + lost + ', which this repository does not hold'); };
   const head = sh('git', ['show', 'HEAD:' + p], groot);
@@ -1044,7 +1048,7 @@ function runSpecCheck(root, ctx, onlyLedger) {
     const specLines = splitLines(readText(docs.uiux));
     const cssFiles = ctx.files.filter(e => e.ledger === lp && /\.css$/i.test(e.path));
     const decls = new Map(); // token -> [{value, file, line}]
-    for (const e of cssFiles) splitLines(fileText(e).replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))).forEach((l, i) => {   // a comment is not a declaration; blanked, so line numbers hold
+    for (const e of cssFiles) splitLines(fileText(e).replace(/\/\*[\s\S]*?(?:\*\/|$)/g, m => m.replace(/[^\n]/g, ' '))).forEach((l, i) => {   // a comment is not a declaration, and one never closed runs to the end of the file, as CSS reads it; blanked, so line numbers hold
       const re = new RegExp('(--[A-Za-z0-9_-]+)\\s*:\\s*(' + HEX + ')', 'g'); let m;
       while ((m = re.exec(l)) !== null) { if (!decls.has(m[1])) decls.set(m[1], []); decls.get(m[1]).push({ value: m[2].toLowerCase(), file: e.path, line: i + 1 }); }
     });
@@ -1362,7 +1366,10 @@ function status(argv) {
   for (const r of ledger.rulings.slice(-3).reverse()) L.push('  ' + r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : ''));
   L.push('Cited nowhere: ' + (uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
   L.push('Addenda pending: ' + (pend.length ? '' : 'none'));
-  for (const a of pend) L.push('  ' + a.id + ' (' + a.date + '): ' + a.text);
+  for (const a of pend) {                                              // D14: one line each, cut at a glance; governs <id> prints the whole, and --json carries it
+    const t = Array.from(a.text);
+    L.push('  ' + a.id + ' (' + a.date + '): ' + (t.length > GLANCE ? t.slice(0, GLANCE - 1).join('').trimEnd() + '\u2026' : a.text));
+  }
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
@@ -1460,6 +1467,8 @@ const CI_STEP = [
   '          node-version: 20',
   '      - name: The witness',
   '        run: node test/docket.js',
+  '        env:',
+  '          DOCKET_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}   # the commit before the push, or a pull request\'s base: the seventh check compares a pushed range with it',
 ].join('\n');
 function vendorInto(dir) {
   const dest = path.join(dir, 'test', 'docket.js');
