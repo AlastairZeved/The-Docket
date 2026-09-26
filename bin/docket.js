@@ -1896,19 +1896,22 @@ function evidenceOf(root, fields, at) {
   const premise = a && g ? a.replace(g[0], ' ').replace(/^reason (?:holds|gone)\b[\s:—–-]*/i, '').trim() : '';
   const locs = g ? [...g[1].trim().matchAll(LOC_RE)] : [], ev = [];
   if (!a || !g || !/[\p{L}\p{N}]/u.test(premise) || !locs.length) die(at + ' answers the reason question without its evidence' + (a ? ' (read: "' + a + '")' : '') + ': the answer is a field of its own, `reason holds: <the premise, as the code the diff leaves shows it> (<file:line>)` or `reason gone: <what the diff changed> (<file:line>)`; a range `<file:first-last>`, or several locations with commas, will do (protocol step 4, D27)', 2);
-  for (const L of locs) {
-    const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
-    if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
-    const real = realOr(abs);
-    if (!isWithin(real, realOr(root))) die(at + ' points its evidence outside the repository: ' + where + ' is a link to a file outside it (FORMAT.md 1)', 2);
-    let now = null, then = null;
-    if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
-    const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
-    const count = Math.max(lineCount(now), lineCount(then));
-    if (!(first >= 1 && last >= first && last <= count)) die(at + ' points its evidence at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
-    ev.push({ abs: real, first, last });
-  }
+  for (const L of locs) ev.push(heldLine(root, L, at + ' points its evidence'));
   return ev;
+}
+// A location held as evidence (D27): a line of a file in the repository, before or after the diff, the file its path
+// resolves to (FORMAT.md 1). `lead` says what points there, so a refusal names it.
+function heldLine(root, L, lead) {
+  const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
+  if (!isWithin(abs, root)) die(lead + ' outside the repository: ' + where, 2);
+  const real = realOr(abs);
+  if (!isWithin(real, realOr(root))) die(lead + ' outside the repository: ' + where + ' is a link to a file outside it (FORMAT.md 1)', 2);
+  let now = null, then = null;
+  if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
+  const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
+  const count = Math.max(lineCount(now), lineCount(then));
+  if (!(first >= 1 && last >= first && last <= count)) die(lead + ' at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
+  return { abs: real, first, last };
 }
 // An answer's evidence is never its own claim (D36): a "reason holds" whose every location lies in the entry of a ruling
 // the line names — the ruling restated — or in the failure's own located lines — the contradiction itself — shows no
@@ -1936,12 +1939,20 @@ function holdToLines(root, v, failures, lines) {
   lines.forEach((l, i) => {
     const f = l.split(LOCATED_SEP).map(x => x.trim()), at = 'verdict: line ' + (i + 1);
     if (f.length < 5 || !/^[a-z][a-z0-9-]*$/.test(f[0]) || !/^F\d+[a-z]?$/.test(f[1]) || !f[2] || !f[f.length - 1]) die(at + ' is not a located failure: <pack> · F<n> · <file:line> · <what> · <fix route>, its fields joined by " · " (the protocol\'s form)', 2);
-    const said = f.slice(3, -1).join(LOCATED_SEP);
+    // The answer is a field of its own (protocol step 4), read there and nowhere else: prose that says the words is not an
+    // answer, and an answer on any line, of any pack, is held to its line (D27)
+    const mid = f.slice(3, -1), said = mid.filter(x => /^(?:reason (?:holds|gone)|cite stale)\b/i.test(x)).join(LOCATED_SEP);
     const gone = /\b(?:reason gone|cite stale)\b/i.test(said), holds = /\breason holds\b/i.test(said);
     if (gone && holds) die(at + ' says both that the reason holds and that it is gone', 2);
     const names = f[0] === 'code' && (f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []).some(t => rulingIds().has(t));
+    if (names && !gone && !holds && /\b(?:reason (?:holds|gone)|cite stale)\b/i.test(mid.join(LOCATED_SEP))) evidenceOf(root, mid, at);   // an answer said inside another field is told where it goes
     if (names && !gone && !holds) die(at + ' names a ruling and says nothing of its reason: after what the diff breaks, write "reason holds: <the premise> (<file:line>)", or "reason gone: <what changed> (<file:line>)" (or "cite stale"), then the route (protocol step 4)', 2);
-    if (names && (holds || /\breason gone\b/i.test(said))) { const ev = evidenceOf(root, f.slice(3, -1), at); if (holds) ownClaim(root, f, ev, at); }
+    if (holds || /\breason gone\b/i.test(said)) { const ev = evidenceOf(root, mid, at); if (holds) ownClaim(root, f, ev, at); }
+    else if (gone) {                                                   // `cite stale`: the failure's own location is its evidence (D27)
+      const own = [...String(f[2]).matchAll(LOC_RE)];
+      if (!own.length) die(at + ' says cite stale, whose evidence is its own location, and ' + f[2] + ' names no line of a file (D27)', 2);
+      for (const L of own) heldLine(root, L, at + ' says cite stale, whose evidence is its own location, and points');
+    }
     if (gone) stale += 1;
   });
   if (v === 'STALE' && stale < lines.length) die('verdict: STALE is the verdict only when every failure is a stale one (protocol step 6); ' + (lines.length - stale) + ' of these ' + lines.length + (lines.length - stale === 1 ? ' is' : ' are') + ' not: record FAIL, with the stale ones and their addendum route among its lines', 2);

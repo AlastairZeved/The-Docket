@@ -539,9 +539,13 @@ in a field of its own, `reason holds: <the premise> (<file:line>)`, `reason gone
 repository before or after the diff, a link read as 1 reads one, so that a link
 out of the tree is outside it — a range or several will do (D27), though a
 `reason holds` whose every location lies in the entry of a ruling the line names,
-or in the line's own location, is refused: a claim is not its own evidence (D36); STALE is
-refused unless every line is a stale one and FAIL when every line is; a PASS
-carries no reason (D23).
+or in the line's own location, is refused: a claim is not its own evidence (D36). The
+answer is read in the field that begins with it and nowhere else — prose that says the
+words is not an answer — and an answer on any line, of any pack, naming a ruling or not,
+is held to its line the same way; a `cite stale` line's evidence is its own location,
+held to the same rule (D27). A line is a stale one when its answer is `reason gone` or
+`cite stale`: STALE is refused unless every line is a stale one and FAIL when every
+line is; a PASS carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
 failures, time, session, and the reason it was recorded with), `lastPassHash`,

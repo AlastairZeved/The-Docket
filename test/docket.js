@@ -2741,6 +2741,27 @@ const SEC = String.fromCharCode(0xa7);
     ok('.docket/verdicts.jsonl is ignored by git, as the rest of .docket/ is', sh('git', ['check-ignore', '.docket/verdicts.jsonl'], ROOT).status === 0, 'not ignored');
     fs.rmSync(d, { recursive: true, force: true });
   }
+  // the answer is read in its own field, and every answer is held to its line, whatever its pack (D27, FORMAT.md 16)
+  {
+    const ad = tempRepo();
+    fs.appendFileSync(path.join(ad, 'test', 'fixture', 'app.js'), 'const an = 1; // R2\n');
+    const ah = docket(['gate', '--session', 'an'], { cwd: ad }).out.split(' ')[1];
+    const av = (word, reason) => docket(['verdict', word, '--hash', ah, '--failures', '1', '--session', 'an', '--reason', reason], { cwd: ad });
+    let r = av('STALE', 'design · F5 · test/fixture/styles.css:3 · a card pattern · reason gone: the old layout is gone (no/such/path.css:9999) · supersede via /rule');
+    ok('verdict holds an answer on a line of another pack to its line: a STALE whose evidence is in no file is refused (D27)', r.code === 2 && /line 1 points its evidence at no\/such\/path\.css:9999, which is not a line of a file in this repository/.test(r.err), r.code + ' ' + r.err);
+    r = av('FAIL', 'code · F3 · test/fixture/app.js:40 · the lot writes a position · reason holds: positions stay read-only (../../etc/hosts:1) · change the code');
+    ok('…and on a code line that names no ruling: an answer outside the repository is refused', r.code === 2 && /line 1 points its evidence outside the repository: \.\.\/\.\.\/etc\/hosts:1/.test(r.err), r.code + ' ' + r.err);
+    r = av('STALE', 'code · F5 · made/up/path.js:999999 · R2 is cited on code that no longer implements it · cite stale · /rule --addendum R2');
+    ok('…and a “cite stale” line, whose evidence is its own location: a location in no file is refused', r.code === 2 && /line 1 says cite stale, whose evidence is its own location, and points at made\/up\/path\.js:999999, which is not a line of a file in this repository/.test(r.err), r.code + ' ' + r.err);
+    r = av('STALE', 'code · F5 · test/fixture/app.js · R2 is cited on code that no longer implements it · cite stale · /rule --addendum R2');
+    ok('…and one whose location names no line', r.code === 2 && /line 1 says cite stale, whose evidence is its own location, and test\/fixture\/app\.js names no line of a file/.test(r.err), r.code + ' ' + r.err);
+    ok('nothing refused is recorded', !fs.existsSync(path.join(ad, '.docket', 'verdict.json')), 'a refused verdict wrote the state');
+    r = av('FAIL', 'design · F5 · test/fixture/styles.css:3 · a card pattern where the reason gone from the old layout no longer explains it · change the CSS');
+    ok('…and reads the answer in its own field alone: a line whose prose says “reason gone” is not a stale one, so its FAIL records', r.code === 0 && /verdict recorded: FAIL \(1 located failure\)/.test(r.out), r.code + ' ' + r.err);
+    r = av('STALE', 'code · F5 · test/fixture/app.js:40 · R2 is cited on code that no longer implements it · cite stale · /rule --addendum R2');
+    ok('…and a “cite stale” line whose own location is a line of the file records', r.code === 0 && /verdict recorded: STALE \(1 located failure\)/.test(r.out), r.code + ' ' + r.err);
+    fs.rmSync(ad, { recursive: true, force: true });
+  }
   // an answer's evidence is never its own claim (D36): the ruling's own entry, or the failure's own line, shows no premise
   {
     const d = tempRepo();
