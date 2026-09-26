@@ -912,7 +912,7 @@ function runCheck(root, opts) {
     // cites included, and check 1, 3 and 4 would read none of it. The fault is the fence, and it is named.
     const fenceAt = ledger.lines.map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
     if (fenceAt.length % 2 === 1) fail(lp, fenceAt[fenceAt.length - 1], 2, 'a fence opened here is never closed; every line after it is read as code, cites included (FORMAT.md 8)');
-    const committed = committedText(root, lp, ledger.text);
+    const committed = committedText(root, lp, ledger.text, m => info.push(rel(root, lp) + ': check 7 ' + m));
     if (committed === null) info.push(rel(root, lp) + ': check 7 skipped — no earlier version to compare (the ledger is not yet committed, or the revision compared with has no such file: a first commit, or the commit that added it)');   // FORMAT.md 13: the skip is said, not silent
     if (committed !== null) {
       const old = parseLedger(committed, lp);
@@ -952,7 +952,9 @@ function bodyOnlyAppended(oldLines, newLines) {
 function normEol(s) { return s.replace(/\r\n/g, '\n'); }
 // DOCKET_BASE, when the environment names a revision (CI names the commit before the push), is the version compared
 // with: an amendment in the middle of a pushed range is then seen, where a tip-only comparison would miss it. Unset
-// or unreadable, the rule is HEAD's, or HEAD's parent's when the tree already equals HEAD.
+// or unreadable, the rule is HEAD's, or HEAD's parent's when the tree already equals HEAD; a revision the repository does
+// not hold — a force-push leaves the commit before it behind — is said in an info line, since the comparison it asked for
+// was not made.
 function baseRevision() {
   const b = process.env.DOCKET_BASE;
   return b && /^[A-Za-z0-9_./~^-]{1,64}$/.test(b) && !/^0+$/.test(b) ? b : null;
@@ -961,18 +963,24 @@ function namesHead(rev, groot) {
   const a = sh('git', ['rev-parse', '--verify', '--quiet', rev + '^{commit}'], groot), h = sh('git', ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], groot);
   return a.status === 0 && h.status === 0 && a.stdout.trim() === h.stdout.trim();
 }
-function committedText(root, filePath, workingText) {
+function committedText(root, filePath, workingText, note) {
   const groot = gitRoot(path.dirname(filePath)) || root;               // git resolves <rev>:<path> from the repository root, whatever the enumeration root is
   const p = rel(groot, filePath);
   const base = baseRevision();
-  if (base && !namesHead(base, groot)) { const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout; }   // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule below applies
+  let lost = null;
+  if (base && !namesHead(base, groot)) {                               // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule below applies
+    const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout;
+    if (sh('git', ['rev-parse', '--verify', '--quiet', base + '^{commit}'], groot).status !== 0) lost = base;
+  }
+  const said = what => { if (lost && note) note('compared with ' + what + ': DOCKET_BASE names ' + lost + ', which this repository does not hold'); };
   const head = sh('git', ['show', 'HEAD:' + p], groot);
   if (head.status !== 0) return null;
   let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
-  if (working === undefined) { try { working = readText(filePath); } catch (e) { return head.stdout; } }
-  if (normEol(working) !== normEol(head.stdout)) return head.stdout;  // FORMAT.md 1: both sides normalised
+  if (working === undefined) { try { working = readText(filePath); } catch (e) { said('HEAD'); return head.stdout; } }
+  if (normEol(working) !== normEol(head.stdout)) { said('HEAD'); return head.stdout; }   // FORMAT.md 1: both sides normalised
   const parent = sh('git', ['show', 'HEAD~1:' + p], groot);
-  return parent.status === 0 ? parent.stdout : null;
+  if (parent.status !== 0) return null;
+  said('HEAD\'s parent'); return parent.stdout;
 }
 function check(argv) {
   if (has(argv, '--ledger')) die('check: no --ledger option — check covers every ledger under the root (index, query, governs, principles, status, spec-check and append take --ledger)', 2);
@@ -1844,6 +1852,9 @@ const LOCATED_SEP = ' · ';
 // some, each a line of the file as the diff leaves it or as it stood at HEAD.
 const LOC_RE = /([^\s(),;]+?):(\d+)(?:\s*[-–]\s*(\d+))?/g;
 function lineCount(text) { return text === null ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0); }
+// A location is the file it resolves to, as FORMAT.md 1 reads a link for the walk: a link out of the tree is not the tree's
+// file, and a link to a ledger is that ledger. A path that resolves to nothing is kept as written (read at HEAD, or refused).
+function realOr(p) { try { return fs.realpathSync(p); } catch (e) { return p; } }
 function evidenceOf(root, fields, at) {
   const a = fields.map(x => x.trim()).find(x => /^reason (?:holds|gone)\b/i.test(x));
   const groups = a ? [...a.matchAll(/\(([^()]*)\)/g)].filter(g => /:\d/.test(g[1])) : [];
@@ -1854,12 +1865,14 @@ function evidenceOf(root, fields, at) {
   for (const L of locs) {
     const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
     if (!isWithin(abs, root)) die(at + ' points its evidence outside the repository: ' + where, 2);
+    const real = realOr(abs);
+    if (!isWithin(real, realOr(root))) die(at + ' points its evidence outside the repository: ' + where + ' is a link to a file outside it (FORMAT.md 1)', 2);
     let now = null, then = null;
     if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
     const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
     const count = Math.max(lineCount(now), lineCount(then));
     if (!(first >= 1 && last >= first && last <= count)) die(at + ' points its evidence at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
-    ev.push({ abs, first, last });
+    ev.push({ abs: real, first, last });
   }
   return ev;
 }
@@ -1870,8 +1883,8 @@ function evidenceOf(root, fields, at) {
 function ownClaim(root, f, ev, at) {
   const named = new Set(f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []);
   const entries = [];
-  for (const [lp, L] of loadContext(root).ledgers) for (const r of L.rulings) if (named.has(r.id)) entries.push({ abs: path.resolve(lp), first: r.line, last: r.endLine, id: r.id, lp });
-  const own = [...String(f[2]).matchAll(LOC_RE)].map(L => ({ abs: path.resolve(root, L[1].trim()), first: Number(L[2]), last: L[3] === undefined ? Number(L[2]) : Number(L[3]) }));
+  for (const [lp, L] of loadContext(root).ledgers) for (const r of L.rulings) if (named.has(r.id)) entries.push({ abs: realOr(path.resolve(lp)), first: r.line, last: r.endLine, id: r.id, lp });
+  const own = [...String(f[2]).matchAll(LOC_RE)].map(L => ({ abs: realOr(path.resolve(root, L[1].trim())), first: Number(L[2]), last: L[3] === undefined ? Number(L[2]) : Number(L[3]) }));   // compared as the files they resolve to, the evidence's included
   const inside = (e, s) => e.abs === s.abs && e.first >= s.first && e.last <= s.last;
   const why = ev.map(e => {
     const en = entries.find(s => inside(e, s));

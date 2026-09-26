@@ -2187,6 +2187,9 @@ const SEC = String.fromCharCode(0xa7);
       ok('a two-commit push that amends and then appends passes at the tip alone', a.code === 0 && tip.code === 0 && /^check: ok/m.test(tip.out), a.out + a.err + tip.out);
       ok('…and is caught when DOCKET_BASE names the commit before the push', based.code === 1 && /check 7: R3: heading changed/.test(based.out), based.out);
       ok('…while an unreadable base (a branch’s first push) falls back to the tip rule', zero.code === 0 && /^check: ok/m.test(zero.out), zero.out);
+      const gone = docket(['check'], { cwd: dir, env: { DOCKET_BASE: 'feedfacefeedfacefeedfacefeedfacefeedface' } }), goneJ = docket(['check', '--json'], { cwd: dir, env: { DOCKET_BASE: 'feedfacefeedfacefeedfacefeedfacefeedface' } });
+      ok('…and a base the repository does not hold (the commit before a force-push) falls back too, and says so: an info line names the ledger, the revision and what it was compared with — the stronger comparison was asked for and not made', gone.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 compared with HEAD’s parent: DOCKET_BASE names feedfacefeedfacefeedfacefeedfacefeedface, which this repository does not hold$/m.test(gone.out.replace(/'/g, '’')) && /^check: ok/m.test(gone.out) && !/does not hold/.test(zero.out + tip.out + based.out), gone.out);
+      ok('…in --json as well', goneJ.code === 0 && JSON.parse(goneJ.out).info.some(i => /test\/fixture\/DECISIONS\.md: check 7 compared with HEAD's parent: DOCKET_BASE names feedface/.test(i)), goneJ.out);
       const wf = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
       ok('ci.yml names DOCKET_BASE from the push’s before or the pull request’s base', /DOCKET_BASE:\s*\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.before \}\}/.test(wf), wf);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -2448,6 +2451,11 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate', '--session', 's1'], { cwd: d });
     ok('gate: a surfaced session answers SKIP from then on', g.out === 'SKIP\n', g.out);
     ok('…and gate --json says why', JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out).reason === 'this session is surfaced until a PASS or a new session', 'no reason');
+    { const f = path.join(d, 'test', 'fixture', 'app.js'), was = read(f);
+      fs.appendFileSync(f, 'const further = 1; // R2\n');
+      g = docket(['gate', '--session', 's1'], { cwd: d });
+      ok('…and a further edit, a hash no PASS has judged, still SKIP: the surfaced mark holds the session, not the hash, until a PASS or a new session (D11)', g.out === 'SKIP\n', g.out);
+      fs.writeFileSync(f, was); }
     g = docket(['gate', '--session', 's2'], { cwd: d });
     ok('gate: a new session is not surfaced → JUDGE', /^JUDGE /.test(g.out), g.out);
     g = docket(['gate'], { cwd: d, env: { DOCKET_SESSION: 's2' } });
@@ -2607,6 +2615,25 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and a line past the end of a ledger', v.code === 2 && /which is not a line of a file/.test(v.err), v.err);
     v = vd('FAIL', 1, ans('reason holds: the lot still reads positions (../../etc/hosts:1)'));
     ok('…and a line outside the repository', v.code === 2 && /points its evidence outside the repository/.test(v.err), v.err);
+    { // a location is the file it resolves to (FORMAT.md 1): a link out of the tree is outside it, a link within reads its file,
+      // and a link to a ruling's entry is that entry to the own-claim rule (D36)
+      const ld = tempRepo(), outside = tmpDir('outside-');
+      fs.writeFileSync(path.join(outside, 'o.txt'), 'the premise, somewhere else\n');
+      fs.symlinkSync(path.join(outside, 'o.txt'), path.join(ld, 'linked.txt'));
+      fs.symlinkSync(path.join(ld, 'test', 'fixture', 'app.js'), path.join(ld, 'inlink.js'));
+      fs.symlinkSync(path.join(ld, 'test', 'fixture', 'DECISIONS.md'), path.join(ld, 'led.md'));
+      fs.appendFileSync(path.join(ld, 'test', 'fixture', 'app.js'), 'const lk = 1; // R2\n');
+      const lh = docket(['gate', '--session', 'l'], { cwd: ld }).out.split(' ')[1];
+      const lv = where => docket(['verdict', 'FAIL', '--hash', lh, '--failures', '1', '--session', 'l', '--reason', ans('reason holds: the lot still reads positions (' + where + ')')], { cwd: ld });
+      const r2 = read(path.join(ld, 'test', 'fixture', 'DECISIONS.md')).split('\n').findIndex(l => l.startsWith('### R2.')) + 1;
+      let lr = lv('linked.txt:1');
+      ok('…and a line of a link in the tree to a file outside it: the link is not the tree’s file, as FORMAT.md 1 reads one', lr.code === 2 && /points its evidence outside the repository: linked\.txt:1 is a link to a file outside it \(FORMAT\.md 1\)/.test(lr.err), lr.code + ' ' + lr.err);
+      lr = lv('led.md:' + r2);
+      ok('…and a link to the ledger is the ledger: a reason that holds on the named ruling’s entry through a link is still its own claim (D36)', lr.code === 2 && /with its own claim as the evidence — the entry of R2 itself/.test(lr.err), lr.code + ' ' + lr.err);
+      lr = lv('inlink.js:40');
+      ok('…while a link within the tree reads the file it resolves to, and the answer is recorded', lr.code === 0, lr.code + ' ' + lr.err);
+      fs.rmSync(ld, { recursive: true, force: true });
+    }
     v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only; reason holds: said inside what the diff breaks (test/fixture/app.js:40) · change the code');
     ok('…and an answer that is not a field of its own', v.code === 2 && /without its evidence/.test(v.err), v.err);
     ok('…and a refusal quotes the field it could not read', /without its evidence \(read: "reason holds: the lot still reads positions"\)/.test(vd('FAIL', 1, ans('reason holds: the lot still reads positions')).err), 'no quote');
@@ -2944,6 +2971,8 @@ const SEC = String.fromCharCode(0xa7);
     const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
     ok('agents/docket-judge.md names itself, denies every writing tool, caps its turns at forty, and names no model', /^name:\s*docket-judge$/m.test(A) && /^disallowedTools:\s*Write, Edit, NotebookEdit$/m.test(A) && /^maxTurns:\s*40$/m.test(A) && !/^model:/m.test(A), A.split('\n').slice(0, 7).join('\n'));
     ok('…and its body reads .docket/core, runs the core’s protocol, follows it, and writes nothing', /\.docket\/core/.test(A) && /node <core> protocol/.test(A) && /You write no file and edit nothing/.test(A), A);
+    { const PB = read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'));
+      ok('the binding page names its three calls, in order: near before an edit, status at session start, stop at done (D13)', /^\*\*1\. Before an edit\*\* — pipe the edit into `near`/m.test(PB) && /^\*\*2\. At session start\*\* — show `docket status`/m.test(PB) && /^\*\*3\. At "done"\*\* — run the core's `stop`/m.test(PB) && PB.indexOf('**1. Before an edit**') < PB.indexOf('**2. At session start**') && PB.indexOf('**2. At session start**') < PB.indexOf('**3. At "done"**'), PB.slice(0, 400)); }
     ok('the binding page says what this host cannot give the judge and what the core does about each: the breadcrumb, the printing, the one permission', /\.docket\/core/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /Bash\(node \*docket\.js\*\)/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /cannot run the core cannot judge/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))), 'the binding page is silent');
     ok('FORMAT.md 16 describes the gate, the state file and the breadcrumb', /^## 16\. The gate, the verdict file and the core.s breadcrumb/m.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))) && /\.docket\/core/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'no section 16');
     ok('the section map names 16 gate/verdict and 17 protocol/pack/transcript', /^\/\/ 16  gate\/verdict/m.test(read(CORE)) && /^\/\/ 17  protocol\/pack\/transcript/m.test(read(CORE)), 'the map is behind');
