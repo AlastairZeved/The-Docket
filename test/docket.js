@@ -3206,6 +3206,15 @@ const SEC = String.fromCharCode(0xa7);
     ok('no tracked file names how the build was made — the three published passages of the ledger excepted, which D4 keeps as written', found.length === 0, found.join(', '));
   }
 
+  // ── D15 made mechanical: the protocol and the packs are the bytes the calibration of record measured (D25's addendum of
+  // 2026-09-30). A change to any of them fails here until a new run is recorded and these pins move with it.
+  {
+    const crypto = require('crypto');
+    const PINNED = {"judge/PROTOCOL.md": "f7a19e5a51a09a87321387bdf0c108543cc9f7eed65d3cca6d72c053441ad6c0", "packs/code.md": "5424a5ec2879fcd64acebfe7c10f945e4b62e71b1352162e75280bb5382e359c", "packs/decisions.md": "4b21c3be41444d008216bfab649b06e3e010f90957893d089183befc0a916e3f", "packs/design.md": "c981016f4f20bc23c69207f2045671fb46c56a6c1a238c7d6fa9fb4e3621f53e", "packs/prose.md": "00017a2e88746791030d9c7ba912808b47fb934fbbf333b168fd5f07a0d3ee20"};
+    const drift = Object.keys(PINNED).filter(f => crypto.createHash('sha256').update(read(path.join(ROOT, f)).replace(/\r\n/g, '\n')).digest('hex') !== PINNED[f]);
+    ok('the protocol and the four packs are the bytes the calibration of record measured: a change fails here until a run is recorded beside new pins (D15, D25)', drift.length === 0, 'changed since the calibration of record: ' + drift.join(', '));
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {
