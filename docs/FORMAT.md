@@ -76,7 +76,9 @@ alone is one line: one that opens with anything but an entry heading has no
 entries — the info line above names it, and check 2 fails at its first line that
 begins `### ` once a bare CR ends a line, as above; one that opens with an entry heading
 is one entry whose heading runs to the end of the file, and check 2 fails on the
-carriage returns it carries (13).
+carriage returns it carries (13). A leading U+FEFF, the byte order mark an editor
+may write, is an encoding mark and not text: a heading on the first line of a
+ledger or a spec document is read past it, and a write keeps it.
 
 The **enumeration root** — the tree `check`, `spec-check`, `status`, `governs`
 and the witness read — is the working directory's project root by the same
@@ -195,7 +197,9 @@ boundaries (`.`, `;`, or a line break).
 An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 `R7 partially reverses R6 (relational plane only)` is one edge from R7 to R6.
 The same edge stated twice — in the meta, the title or the body — is one edge,
-and its clause is the first statement in that order: meta, then title, then body. One verb may name several
+and its clause is the first statement in that order: meta, then title, then body. The same edge is
+the same rendering, qualifier included: `extends R1` and `extends R1 (desktop)` are two edges, the second
+binding less than the first, and each is kept. One verb may name several
 targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with
 the same clause.
 
@@ -249,7 +253,8 @@ a heading in `UIUX.md` or `PRD.md` of the form
 
     #… §<x>[.<y>[.<z>]] <title>
 
-and is cited as `UIUX §<x>.<y>` or `PRD §<x>`. Both are indexed by
+and is cited as `UIUX §<x>.<y>` or `PRD §<x>`; a heading numbered four levels
+deep, `§4.5.1.1`, is no spec heading. Both are indexed by
 `docket index` under `sections[]` and `specs[]`; `near` prints a spec cite with
 its title (`UIUX §<x>.<y> <title>`).
 
@@ -261,7 +266,9 @@ letter, digit or underscore — in any script, not only ASCII — meets a charac
 that is none of these: `styléR9` is one word and not a cite, `→R7` is a cite.
 Edges (5) and spec cites (below) share the rule. A cite to a number that
 does not exist in that ledger is a failure (check 1); `<n>` has the grammar of 2
-(`D05` is not a cite). An id whose prefix is not
+(`D05` is not a cite, nor is a numeral of sixteen digits). The number of the
+contract line (11) is the directive's own and not a cite: it names the first entry
+the contract binds, which may be one not yet written. An id whose prefix is not
 one of the ledger's prefixes is not a cite and is ignored. An id inside a code
 span (backticks) is quoted, not cited, in every text file, as an edge inside one
 is quoted and not asserted (5): the `D7` in section 2 is an example, not a
@@ -271,7 +278,9 @@ them to resolve like any other, and `governs` and `status` count code cites in
 every governed file except the ledger. A fenced code block — a line that
 begins with three backticks opens it, the next such line closes it — is quoted
 like a code span: no id, spec cite or bare cite inside it is counted, so a
-document may quote a ledger's output or another project's rulings.
+document may quote a ledger's output or another project's rulings. A fence
+never closed quotes every line after it: in the ledger that is check 2's failure
+(below); in any other file `check` names the line that opened it in an info line.
 
 A ledger's **governed tree** is every git-tracked text file that resolves to it (1),
 cited or not; `check`'s summary counts those, which is why the number is larger
@@ -286,7 +295,8 @@ and `near` is silent for an edit inside one: the ledger is amended through
 `append` (11), and a direct edit is check 7's business.
 
 A **spec cite** is `UIUX §<x>[.<y>[.<z>]]` or `PRD §<x>[.<y>[.<z>]]`, the same
-depth the heading grammar allows (7); it must resolve to a spec heading
+depth the heading grammar allows (7) — a deeper number is read to its third level,
+so `UIUX §4.5.1.1` cites `UIUX §4.5.1` — and it must resolve to a spec heading
 (check 3). A **bare cite** is `§<digits>` not preceded by a
 document name; it is counted per file, and the count is ratcheted against the
 baseline (9). Spec documents themselves are exempt from the bare-cite count.
@@ -313,7 +323,9 @@ The ledger preamble may carry one comment
 
     <!-- docket: bare-cites <file>=<n> <file>=<n> … -->
 
-with paths relative to the ledger's home (1). When the comment is present, a
+with paths relative to the ledger's home (1); a path that holds a space, a double
+quote, a backslash or `>` is written as a JSON string, `"Design Notes.md"=1`, as
+`append --baseline` writes it. When the comment is present, a
 file's bare-cite count may not exceed its allowance, and a file not listed has
 an allowance of 0 (check 4); the comment may list no file at all, and then every
 file's allowance is 0. When the comment is absent, counts are reported and

@@ -2996,6 +2996,57 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(e, { recursive: true, force: true });
   }
 
+  // ── the grammar as FORMAT.md writes it: numerals, depths, the contract's number, fences, a byte order mark, edges, baseline paths
+  {
+    const LD = 'test/fixture/DECISIONS.md';
+    const g = (dir, args) => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(args), dir);
+    // (1) sixteen digits is no id; fifteen is (FORMAT.md 2, 8)
+    let d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'app.js'), 'const big = 1; // R1234567890123456\n'));
+    let c = docket(['check'], { cwd: d });
+    ok('a numeral of sixteen digits after a prefix is no cite: check does not read R1234567890123456 as a dangling one (FORMAT.md 8)', c.code === 0 && !/R1234567890123456/.test(c.out), c.out);
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const fifteen = 1; // R123456789012345\n');
+    c = docket(['check'], { cwd: d });
+    ok('…while fifteen digits is one, and dangles', c.code === 1 && /check 1: cite R123456789012345 names no ruling/.test(c.out), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    // (2) three levels: a deeper cite reads to its third; a deeper heading is none (FORMAT.md 7, 8)
+    d = tempRepo(x => {
+      fs.appendFileSync(path.join(x, 'test', 'fixture', 'UIUX.md'), '\n### ' + SEC + '4.5.1 Deeper\n\n#### ' + SEC + '4.5.1.1 Deepest\n');
+      fs.appendFileSync(path.join(x, 'test', 'fixture', 'app.js'), 'const deep = 1; // UIUX ' + SEC + '4.5.1.1\n');
+    });
+    c = docket(['check'], { cwd: d });
+    const sp = JSON.parse(docket(['index', '--json', '--ledger', LD], { cwd: d }).out).specs.UIUX.map(h => h.num);
+    ok('a spec cite four levels deep reads to its third level and resolves there; a heading four levels deep is no spec heading (FORMAT.md 7, 8)', c.code === 0 && !/check 3/.test(c.out) && sp.includes('4.5.1') && !sp.includes('4.5.1.1'), c.out + ' ' + sp.join(','));
+    fs.rmSync(d, { recursive: true, force: true });
+    // (3) the contract line's number is the directive's own
+    d = tempRepo(x => edit(x, LD, '<!-- docket: contract from R8 -->', '<!-- docket: contract from R9 -->'));
+    c = docket(['check'], { cwd: d });
+    ok('a contract line naming the next entry, not yet written, is no dangling cite: its number is the directive\'s (FORMAT.md 11)', c.code === 0 && !/check 1/.test(c.out), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    // (4) a fence never closed in a file other than the ledger quotes the rest, and check names it
+    d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'app.js'), '/*\n```\n*/\nconst hidden = 1; // R99\n'));
+    c = docket(['check'], { cwd: d });
+    const at = read(path.join(d, 'test', 'fixture', 'app.js')).split('\n').indexOf('```') + 1;
+    ok('a fence never closed in a code file quotes every line after it, as FORMAT.md 8 reads it, and check names the line that opened it', c.code === 0 && !/R99/.test(c.out) && new RegExp('^info  test/fixture/app\\.js:' + at + ': a fence opened here is never closed').test(c.out.split('\n').find(l => l.includes('fence opened')) || ''), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    // (5) a byte order mark before a first-line heading is not text, and a write keeps it
+    d = tempRepo(x => { fs.mkdirSync(path.join(x, 'test', 'fixture', 'bom')); fs.writeFileSync(path.join(x, 'test', 'fixture', 'bom', 'DECISIONS.md'), '﻿### R1. First (issue #1)\nReason: one.\n\n### R2. Second (issue #2)\nReason: two.\n'); });
+    const BL = 'test/fixture/bom/DECISIONS.md';
+    let ix = JSON.parse(docket(['index', '--json', '--ledger', BL], { cwd: d }).out);
+    c = docket(['check'], { cwd: d });
+    ok('a byte order mark before the first line\'s heading hides no entry: R1 and R2, and check finds no numbering fault (FORMAT.md 1)', ix.rulings.map(r => r.id).join(',') === 'R1,R2' && !/bom\/DECISIONS\.md:\d+\s+check 2/.test(c.out), ix.rulings.map(r => r.id).join(',') + ' ' + c.out);
+    const ad = docket(['append', '--addendum', 'R2', '--text', 'a later note.', '--ledger', BL], { cwd: d, env: { DOCKET_TODAY: '2026-09-30' } });
+    const after = fs.readFileSync(path.join(d, BL), 'utf8');
+    ix = JSON.parse(docket(['index', '--json', '--ledger', BL], { cwd: d }).out);
+    ok('…and an append keeps the mark it was saved with, and the entries read the same after it', ad.code === 0 && after.charCodeAt(0) === 0xFEFF && after.charCodeAt(1) !== 0xFEFF && ix.rulings.map(r => r.id).join(',') === 'R1,R2' && ix.rulings[1].addenda.length === 1, ad.err + JSON.stringify(after.slice(0, 12)));
+    fs.rmSync(d, { recursive: true, force: true });
+    // (7) a baseline path with a space is a JSON string, written and read
+    d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'Design Notes.md'), 'The minimum is ' + SEC + '4.\n'));
+    const bl = docket(['append', '--baseline', '--ledger', LD], { cwd: d });
+    c = docket(['check'], { cwd: d });
+    ok('append --baseline writes a path with a space as a JSON string, and check 4 reads it back: no fault at the comment or the file (FORMAT.md 9)', bl.code === 0 && read(path.join(d, LD)).includes('"Design Notes.md"=1') && !/check 4/.test(c.out), bl.out + bl.err + c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {

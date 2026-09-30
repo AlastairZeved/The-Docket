@@ -104,6 +104,9 @@ function rel(from, to) { const r = path.relative(from, to); return r === '' ? '.
 // ends as files do read as 260 here, which is what the ledger says the witness counts and what
 // every window bound and every line number is measured against (FORMAT.md 1).
 function splitLines(text) { return text.replace(/\r?\n$/, '').split(/\r?\n/); }
+// A leading U+FEFF is the byte order mark an editor may write: an encoding mark, not text, so a heading on a ledger's or a spec
+// document's first line is read past it (FORMAT.md 1); the ledger's writer keeps it
+function unBom(s) { return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s; }
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function uniq(arr) { return Array.from(new Set(arr)); }
 function stripMarks(s) { return s.replace(/`/g, '').replace(/\*\*/g, ''); }
@@ -179,12 +182,12 @@ const NUMERAL_MAX_DIGITS = 15;                                        // FORMAT.
 const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+(.*?)[ \t]*$/s;   // s: a U+2028/U+2029 inside a heading is content to this reader, as it is to splitLines   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
 const SECTION_RE = /^## ([A-Za-z]+)\.\s+(.*?)\s*$/;
 const ADDENDUM_RE = /^> Addendum (\d{4}-\d{2}-\d{2}): (.*?)\s*$/;
-const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+)*)\s+(.*?)\s*$/;
+const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+){0,2})\s+(.*?)\s*$/;   // three levels at most (FORMAT.md 7): `§4.5.1.1` is no spec heading
 // One verb may name several targets joined by "/" ("keeps R1/R2"): one edge per target, the same clause.
 // A verb or adverb may open a sentence with a capital — "Supersedes R1", "In part reverses R6" — and is recorded in
 // lowercase; any other casing is no edge (FORMAT.md 5).
 function caseHead(words) { return words.map(w => '[' + w[0] + w[0].toUpperCase() + ']' + w.slice(1)); }
-const EDGE_RE = new RegExp('(?:' + NOT_WORD_BEFORE + '(' + caseHead(ADVERBS).join('|') + ')\\s+)?' + NOT_WORD_BEFORE + '(' + caseHead(VERBS).join('|') + ')\\s+([A-Za-z]+)([1-9]\\d*)((?:/[A-Za-z]+[1-9]\\d*)*)' + NOT_WORD_AFTER + '(?:\\s*\\(([^()]*)\\))?', 'gu');
+const EDGE_RE = new RegExp('(?:' + NOT_WORD_BEFORE + '(' + caseHead(ADVERBS).join('|') + ')\\s+)?' + NOT_WORD_BEFORE + '(' + caseHead(VERBS).join('|') + ')\\s+([A-Za-z]+)([1-9]\\d{0,14})((?:/[A-Za-z]+[1-9]\\d{0,14})*)' + NOT_WORD_AFTER + '(?:\\s*\\(([^()]*)\\))?', 'gu');
 
 // The index of the "(" that opens the meta: the first one outside a backtick span that begins the heading or follows
 // a space (FORMAT.md 3, 4). A parenthesis inside inline code is code, not the meta; a heading with an unpaired
@@ -310,7 +313,7 @@ function principleNamed(list, name) {
 // heading, or a `## ` line that is not a section heading, ends nothing and is read as body text (FORMAT.md 2, 7).
 function isBoundary(line) { return HEADING_RE.test(line) || SECTION_RE.test(line); }
 function parseLedger(text, ledgerPath) {
-  const lines = splitLines(text);
+  const lines = splitLines(unBom(text));
   const rulings = [], sections = [];
   // Keyed by the ledger's own text, a prefix or a path: a map with no prototype, where `constructor` or `__proto__` is a
   // key like any other and not a property every object already has (D1).
@@ -336,12 +339,15 @@ function parseLedger(text, ledgerPath) {
     if (m) {
       if (hasBaseline) { directiveFaults.push({ k: 4, line: li + 1, message: 'a second bare-cites comment (line ' + firstBareCites + ' is the baseline); the preamble carries one (FORMAT.md 9)' }); continue; }
       hasBaseline = true; firstBareCites = li + 1;
-      for (const kv of m[1].trim().split(/\s+/).filter(Boolean)) {
-        const eq = kv.lastIndexOf('=');
+      for (const kv of m[1].trim().match(/"(?:[^"\\]|\\.)*"=\S*|\S+/g) || []) {
+        // a path holding a space, a quote, a backslash or ">" is a JSON string, "Design Notes.md"=1 (FORMAT.md 9)
+        const q = /^("(?:[^"\\]|\\.)*")=(\S*)$/.exec(kv), eq = q ? -1 : kv.lastIndexOf('=');
+        let key = null; try { key = q ? JSON.parse(q[1]) : eq > 0 ? kv.slice(0, eq) : null; } catch (e) { key = null; }
+        const count = q ? q[2] : kv.slice(eq + 1);
         // One file, one allowance: a repeated key would let the later number raise a reviewed allowance
         // in silence, as a second baseline comment or a second contract line would (FORMAT.md 9, 11).
-        if (eq > 0 && Object.prototype.hasOwnProperty.call(baseline, kv.slice(0, eq))) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: ' + kv.slice(0, eq) + ' is listed twice; a file carries one allowance (FORMAT.md 9)' });
-        else if (eq > 0 && /^\d+$/.test(kv.slice(eq + 1))) baseline[kv.slice(0, eq)] = Number(kv.slice(eq + 1));
+        if (key && Object.prototype.hasOwnProperty.call(baseline, key)) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: ' + key + ' is listed twice; a file carries one allowance (FORMAT.md 9)' });
+        else if (key && /^\d+$/.test(count)) baseline[key] = Number(count);
         else directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: "' + kv + '" is not <file>=<count> (FORMAT.md 9)' });   // a pair that is not a count is no allowance, and check says so
       }
     }
@@ -389,7 +395,7 @@ function parseLedger(text, ledgerPath) {
 }
 function parseSpec(text) {
   const heads = [];
-  splitLines(text).forEach((l, i) => { const m = SPEC_HEADING_RE.exec(l); if (m) heads.push({ num: m[1], title: stripMarks(m[2]), line: i + 1 }); });
+  splitLines(unBom(text)).forEach((l, i) => { const m = SPEC_HEADING_RE.exec(l); if (m) heads.push({ num: m[1], title: stripMarks(m[2]), line: i + 1 }); });
   return heads;
 }
 function loadLedger(ledgerPath) { return parseLedger(readText(ledgerPath), ledgerPath); }
@@ -407,7 +413,7 @@ function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 // Ruling cites: an id on word boundaries whose prefix is one of the ledger's; `exists` says whether the number is defined.
 function citesInLine(line, ledger) {
   if (!ledger.prefixes.length) return [];
-  const re = new RegExp(NOT_WORD_BEFORE + '(' + ledger.prefixes.map(escapeRe).join('|') + ')([1-9]\\d*)' + NOT_WORD_AFTER, 'gu');   // FORMAT.md 2, 8: no leading zero
+  const re = new RegExp(NOT_WORD_BEFORE + '(' + ledger.prefixes.map(escapeRe).join('|') + ')([1-9]\\d{0,14})' + NOT_WORD_AFTER, 'gu');   // FORMAT.md 2, 8: no leading zero, and fifteen digits at most — a longer numeral is no id
   const found = [];
   let m;
   const scan = maskCode(line);                                        // FORMAT.md 8: an id in a code span is quoted, not cited
@@ -429,14 +435,14 @@ function citesIn(text, ledger) {
   lines.forEach((l, i) => { if (fenced[i]) return; for (const c of citesInLine(l, ledger)) all.push(Object.assign({ line: i + 1, text: l }, c)); });
   return all;
 }
-const SPEC_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD) §(\d+(?:\.\d+)*)/gu;
+const SPEC_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD) §(\d+(?:\.\d+){0,2})/gu;   // the heading's depth (FORMAT.md 8): `UIUX §4.5.1.1` cites `UIUX §4.5.1`
 function specCitesIn(text) {
   const all = [], lines = splitLines(text), fenced = fencedLines(lines);
   lines.forEach((l, i) => { if (fenced[i]) return; SPEC_CITE_RE.lastIndex = 0; let m; while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) all.push({ doc: m[1], num: m[2], line: i + 1 }); });
   return all;
 }
 const BARE_CITE_RE = /(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD) )(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD))§\d/gu;
-const GLUED_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD)§(\d+(?:\.\d+)*)/gu;   // the document's name against the mark, with the space missing
+const GLUED_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD)§(\d+(?:\.\d+){0,2})/gu;   // the document's name against the mark, with the space missing
 function bareCitesIn(text) {
   const lines = splitLines(text), fenced = fencedLines(lines); let n = 0;
   lines.forEach((l, i) => { if (fenced[i]) return; const m = maskCode(l).match(BARE_CITE_RE); if (m) n += m.length; });
@@ -844,7 +850,16 @@ function runCheck(root, opts) {
     if (empty) info.push(rel(root, lp) + ': no entries; its subtree is ungoverned and no check runs on its ' + under + ' file' + (under === 1 ? '' : 's'));
     // 1. every cite names a ruling that exists
     for (const e of empty ? [] : files) {
-      for (const c of citesIn(fileText(e), ledger)) if (!c.exists) fail(e.path, c.line, 1, 'cite ' + c.id + ' names no ruling in ' + rel(root, lp));
+      const t = fileText(e);
+      // the contract line's number is the directive's own: the first entry it binds, which may not be written yet (FORMAT.md 11)
+      const own = c => e.path === lp && ledger.contractFromLine[c.prefix] === c.line && ledger.contractFrom[c.prefix] === c.n;
+      for (const c of citesIn(t, ledger)) if (!c.exists && !own(c)) fail(e.path, c.line, 1, 'cite ' + c.id + ' names no ruling in ' + rel(root, lp));
+      // a fence never closed quotes every line after it, cites included (FORMAT.md 8): in the ledger check 2 fails it; in any
+      // other file the rule reads it so, and the line that opened it is named, so what it quotes is never quoted unseen
+      if (e.path !== lp) {
+        const fl = splitLines(t).map((l, i) => (/^\s*```/.test(l) ? i + 1 : 0)).filter(Boolean);
+        if (fl.length % 2 === 1) info.push(rel(root, e.path) + ':' + fl[fl.length - 1] + ': a fence opened here is never closed; every line after it is quoted, cites included (FORMAT.md 8)');
+      }
     }
     // 2. numbering contiguous per prefix, in order of appearance
     const seenN = Object.create(null);                                 // keyed by prefix, which may be any letters
@@ -1144,6 +1159,7 @@ function writeLedger(ledger, text) {
   const crlf = (ledger.text.match(/\r\n/g) || []).length, lf = (ledger.text.match(/(^|[^\r])\n/g) || []).length;
   if (crlf && lf) die('append: ' + ledger.path + ' ends some lines with CRLF and some with LF; a write would have to give the whole file one ending, rewriting lines this entry does not touch, and the ledger is append only (FORMAT.md 1; D4)', 2);
   if (crlf) text = text.replace(/\r?\n/g, '\r\n');
+  if (ledger.text.charCodeAt(0) === 0xFEFF && text.charCodeAt(0) !== 0xFEFF) text = '\uFEFF' + text;   // the mark it was saved with stays (FORMAT.md 1)
   const tmp = ledger.path + '.docket-' + process.pid;
   fs.writeFileSync(tmp, text);
   fs.renameSync(tmp, ledger.path);
@@ -1290,7 +1306,8 @@ function rewriteBaseline(argv) {
   for (const e of ctx.files) {
     if (e.ledger !== ledger.path || isSpecDoc(e, ledger)) continue;
     const n = bareCitesIn(fileText(e));
-    if (n > 0) counts.push(rel(ledger.home, e.path) + '=' + n);
+    const p = rel(ledger.home, e.path);
+    if (n > 0) counts.push((/[\s"\\>]/.test(p) ? JSON.stringify(p).replace(/>/g, '\\u003e') : p) + '=' + n);   // FORMAT.md 9: such a path is a JSON string
   }
   const comment = '<!-- docket: bare-cites' + (counts.length ? ' ' + counts.join(' ') : '') + ' -->';
   const lines = ledger.lines.slice();
