@@ -3117,6 +3117,21 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(d, { recursive: true, force: true });
   }
 
+  // ── every rule and reason is stated as the repository's own: no tracked file names how the build was made, save the three
+  // published passages of the ledger that the ledger's own law keeps as written (D4)
+  {
+    const words = new RegExp(['the speci' + 'fication', '\\bthe pl' + 'an\\b', '\\bthe pha' + 'se (?:that|which|where)\\b', '\\bpha' + 'se [0-9]', 'readers who ' + 'were given',
+      '\\bspi' + 'ke\\b', 'muta' + 'nt', '\\bwa' + 've [0-9]', '\\bQA ba' + 'tch', 'SP' + 'EC\\.md', 'CLA' + 'IMS\\.md'].join('|'), 'i');
+    const kept = ['> Addendum 2026-09-22: The number added at the pha' + 'se that builds the intake', '### D17. The wedge holds: the reader names the ruling and declines to break it (the wedge measured at the pha' + 'se that', '> Addendum 2026-09-21: What this measured is confounded, found by readers who ' + 'were given the build'];
+    const found = [];
+    for (const f of sh('git', ['ls-files', '-z'], ROOT).stdout.split('\0').filter(Boolean)) {
+      const p = path.join(ROOT, f);
+      let t; try { const b = fs.readFileSync(p); if (b.subarray(0, 8000).includes(0)) continue; t = b.toString('utf8'); } catch (e) { continue; }
+      t.split('\n').forEach((l, i) => { if (words.test(l) && !(f === 'docs/DECISIONS.md' && kept.some(k => l.startsWith(k)))) found.push(f + ':' + (i + 1)); });
+    }
+    ok('no tracked file names how the build was made — the three published passages of the ledger excepted, which D4 keeps as written', found.length === 0, found.join(', '));
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {
