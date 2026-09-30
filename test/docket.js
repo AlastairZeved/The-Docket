@@ -2644,6 +2644,41 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate', '--session', 'g'], { cwd: dg5 });
     ok('gate: a change to the ledger alone → JUDGE naming the ledger', /^JUDGE [0-9a-f]{64} test\/fixture\/DECISIONS\.md\n$/.test(g.out), g.out);
     for (const x of [dg1, dg2, dg3, dg4, dg5]) fs.rmSync(x, { recursive: true, force: true });
+    // a rename is a deletion (D22): a governed file moved out of governance, the ledger moved, a file moved and stripped — each
+    // staged, as a maker stages before it stops, where git's rename detection would list the new path alone
+    const dr1 = tempRepo();
+    fs.mkdirSync(path.join(dr1, 'lib')); git(dr1, ['mv', 'test/fixture/app.js', 'lib/app.js']);
+    g = docket(['gate', '--session', 'g'], { cwd: dr1 });
+    ok('gate: a governed file moved out of governance with git mv → JUDGE naming the path HEAD governed', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g.out), g.out);
+    const dr2 = tempRepo();
+    git(dr2, ['mv', 'test/fixture/DECISIONS.md', 'test/fixture/LEDGER.md']);
+    g = docket(['gate', '--session', 'g'], { cwd: dr2 });
+    ok('…the ledger moved with git mv → JUDGE naming the ledger', /^JUDGE [0-9a-f]{64} (?:\S+ )*test\/fixture\/DECISIONS\.md(?: \S+)*\n$/.test(g.out), g.out);
+    const dr3 = tempRepo();
+    git(dr3, ['mv', 'test/fixture/app.js', 'test/fixture/moved.js']);
+    fs.writeFileSync(path.join(dr3, 'test', 'fixture', 'moved.js'), read(path.join(dr3, 'test', 'fixture', 'moved.js')).replace(/\b[RA]\d+\b/g, 'X'));
+    git(dr3, ['add', '-A']);
+    g = docket(['gate', '--session', 'g'], { cwd: dr3 });
+    ok('…and a governed file moved and stripped of its cites → JUDGE naming the path HEAD governed', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g.out), g.out);
+    // a file is text at HEAD by its bytes (FORMAT.md 1): multi-byte text with a NUL past byte 8000 is text, and its deletion is in
+    const mb = '// R1 cite\n' + '\u00e9'.repeat(4500) + '\u0000\n';
+    const dr4 = tempRepo(dir => fs.writeFileSync(path.join(dir, 'test', 'fixture', 'mb.js'), mb));
+    ok('…(the file: its first NUL past byte 8000, before character 8000)', Buffer.from(mb).indexOf(0) > 8000 && mb.indexOf('\u0000') < 8000, String(Buffer.from(mb).indexOf(0)));
+    fs.rmSync(path.join(dr4, 'test', 'fixture', 'mb.js'));
+    g = docket(['gate', '--session', 'g'], { cwd: dr4 });
+    ok('gate: a governed file of multi-byte text deleted → JUDGE naming it: HEAD is sniffed by bytes, as the working tree is', /^JUDGE [0-9a-f]{64} test\/fixture\/mb\.js\n$/.test(g.out), g.out);
+    // a name git would quote (FORMAT.md 16): listed as it is, and its hunk's rulings read
+    const nm = 'caf\u00e9 fa\u00e7ade.js';
+    const dr5 = tempRepo(dir => fs.writeFileSync(path.join(dir, 'test', 'fixture', nm), 'const cafe = 1; // R1\n'));
+    fs.appendFileSync(path.join(dr5, 'test', 'fixture', nm), 'const more = 2;\n');
+    g = docket(['gate', '--session', 'g', '--diff'], { cwd: dr5 });
+    ok('gate: a governed file whose name has a non-ASCII letter and a space is listed by its name, not git\'s quoted form, and its hunk\'s ruling is read', g.out.split('\n')[0] === 'JUDGE ' + g.out.split(' ')[1] + ' test/fixture/' + nm && /The rulings cited within 20 lines of each hunk/.test(g.out) && /^R1  Capture before shape  \(test\/fixture\/DECISIONS\.md:\d+\)$/m.test(g.out), g.out.slice(0, 300));
+    // check 7 names a committed ledger gone from the tree whatever its directory is called
+    const dr6 = tempRepo(dir => { const sub_ = path.join(dir, 'test', 'fixture', 'r\u00e9sum\u00e9'); fs.mkdirSync(sub_); fs.writeFileSync(path.join(sub_, 'DECISIONS.md'), '# Decisions\n\n### R1. One (issue #1)\nPrinciple: Capture precedes structure.\nBody. Reason: r.\n'); });
+    fs.rmSync(path.join(dr6, 'test', 'fixture', 'r\u00e9sum\u00e9', 'DECISIONS.md'));
+    g = docket(['check'], { cwd: dr6 });
+    ok('check 7: a committed ledger under a directory with a non-ASCII name, gone from the tree, is named', g.code === 1 && /r\u00e9sum\u00e9\/DECISIONS\.md:1  check 7: the ledger is gone from the working tree/.test(g.out), g.out);
+    for (const x of [dr1, dr2, dr3, dr4, dr5, dr6]) fs.rmSync(x, { recursive: true, force: true });
     // the judge's own state is never in the diff, even in a project that does not ignore it (D26)
     const dk = tmpDir('dotdocket-'); fs.cpSync(FIX, dk, { recursive: true });
     git(dk, ['init', '-q', '-b', 'main']); git(dk, ['add', '-A']); git(dk, ['commit', '-qm', 'fixture']);

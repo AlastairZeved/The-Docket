@@ -948,8 +948,8 @@ function runCheck(root, opts) {
   if (groot) {
     const base = baseRevision();
     const rev = base && sh('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], groot).status === 0 ? base : 'HEAD';
-    const ls = sh('git', ['ls-tree', '-r', '--name-only', rev], groot);
-    if (ls.status === 0) for (const p of ls.stdout.split('\n')) {
+    const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', rev], groot);   // -z: a name as it is, not quoted
+    if (ls.status === 0) for (const p of ls.stdout.split('\0')) {
       if (!/(^|\/)DECISIONS\.md$/.test(p)) continue;
       const full = path.join(groot, p);
       if (isWithin(full, path.resolve(root)) && !isFile(full)) fail(full, 1, 7, 'the ledger is gone from the working tree (append only); ' + rev + ' has it');
@@ -1352,8 +1352,8 @@ function status(argv) {
   if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
   if (!lp) {                                                          // no ledger governs the working directory
     const groot = gitRoot(cwd);
-    const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', 'HEAD'], groot) : null;
-    const gone = ls && ls.status === 0 ? ls.stdout.split('\n').filter(p => /(^|\/)DECISIONS\.md$/.test(p) && !isFile(path.join(groot, p))) : [];
+    const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], groot) : null;
+    const gone = ls && ls.status === 0 ? ls.stdout.split('\0').filter(p => /(^|\/)DECISIONS\.md$/.test(p) && !isFile(path.join(groot, p))) : [];
     if (gone.length) {                                                 // the committed ledger is gone: not an ungoverned project, an amended one
       if (argv.json) { out(JSON.stringify({ ledger: null, gone, below }, null, 2)); return 0; }
       out('Docket — the committed ledger ' + gone.join(', ') + ' is gone from the working tree; check 7 says so (D4)');
@@ -1727,13 +1727,15 @@ function sessionId(argv) {
 // file (D10), so each is in the diff (D22). Governed is read at HEAD: the file's text there cites a ruling that its
 // ledger there holds.
 function headGoverned(root, have) {
-  const ch = sh('git', ['diff', 'HEAD', '--relative', '--name-only', '-z'], root);
+  // --no-renames: a rename is the deletion it is, so the old path — governed at HEAD — is a candidate like any deleted file
+  const ch = sh('git', ['diff', 'HEAD', '--no-renames', '--relative', '--name-only', '-z'], root);
   if (ch.status !== 0) return [];
   const cand = ch.stdout.split('\0').filter(p => p && !have.has(p) && !p.split('/').includes('.docket'));
   if (!cand.length) return [];
   const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], root);
   const atHead = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);
   const show = p => { const r = sh('git', ['show', 'HEAD:./' + p], root); return r.status === 0 ? r.stdout : null; };
+  const showBytes = p => { const r = cp.spawnSync('git', ['show', 'HEAD:./' + p], { cwd: root, maxBuffer: 1 << 28 }); return r.status === 0 && r.stdout ? r.stdout : null; };   // the sniff is over bytes (FORMAT.md 1)
   const ledgers = new Map();
   const ledgerAt = p => {                                             // the nearest DECISIONS.md or docs/DECISIONS.md above p, at HEAD
     for (let dir = path.posix.dirname(p); ; dir = path.posix.dirname(dir)) {
@@ -1751,8 +1753,9 @@ function headGoverned(root, have) {
     const base = path.posix.basename(p);
     if (base === 'DECISIONS.md') { out.push(p); continue; }           // a ledger HEAD held
     if (/^DECISIONS.*\.md$/.test(base)) continue;                     // a ledger document is never governed code
-    const t = show(p);
-    if (t === null || t.slice(0, SNIFF_BYTES).includes('\u0000')) continue;
+    const b = showBytes(p);
+    if (b === null || b.subarray(0, SNIFF_BYTES).includes(0)) continue;   // binary at HEAD, as isTextFile reads the working tree
+    const t = b.toString('utf8');
     const L = ledgerAt(p);
     if (L && citesIn(t, L).some(c => c.exists)) out.push(p);
   }
@@ -1773,11 +1776,11 @@ function governedDiff(root) {
   const untrackedRels = rels.filter(r => !trackedRels.includes(r));
   let diffText = '', touched = [];
   if (trackedRels.length) {
-    const r = sh('git', ['diff', 'HEAD', '--'].concat(trackedRels), root);
+    const r = sh('git', ['diff', 'HEAD', '--no-renames', '--'].concat(trackedRels), root);
     if (r.status === 0) {
       diffText = r.stdout;
-      const n = sh('git', ['diff', 'HEAD', '--name-only', '--'].concat(trackedRels), root);
-      touched = n.stdout.split('\n').map(s => s.trim()).filter(Boolean);
+      const n = sh('git', ['diff', 'HEAD', '--no-renames', '--name-only', '-z', '--'].concat(trackedRels), root);   // -z: a name as it is, not quoted
+      touched = n.stdout.split('\0').filter(Boolean);
     } else {                                                           // no commit yet: everything governed is new
       for (const f of trackedRels) diffText += '+++ ' + f + '\n' + readText(path.join(root, f));
       touched = trackedRels.slice();
@@ -1792,7 +1795,7 @@ function governedDiff(root) {
 // function is on the page and not a file read away; a host caps a judge's turns (D30). Beneath it, each ruling cited
 // within the window of a hunk, as governs prints it — the rulings the judge's step 4 reads (D33). The hash never reads it.
 function wideDiff(root, d) {
-  const w = d.tracked.length ? sh('git', ['diff', 'HEAD', '--function-context', '--'].concat(d.tracked), root) : null;
+  const w = d.tracked.length ? sh('git', ['diff', 'HEAD', '--no-renames', '--function-context', '--'].concat(d.tracked), root) : null;
   const body = w && w.status === 0 ? w.stdout + d.untrackedText : d.text;
   const rs = touchedRulings(root, d);
   if (!rs.length) return body;
@@ -1812,7 +1815,7 @@ function touchedRulings(root, d) {
     const ranges = [];
     if (!tracked.has(rf)) ranges.push([1, N]);
     else {
-      const h = sh('git', ['diff', 'HEAD', '-U0', '--', rf], root);
+      const h = sh('git', ['diff', 'HEAD', '--no-renames', '-U0', '--', rf], root);
       for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
         const c = Number(m[1]), n = m[2] === undefined ? 1 : Number(m[2]);
         ranges.push([Math.max(1, c - WINDOW), Math.min(N, c + Math.max(n, 1) - 1 + WINDOW)]);

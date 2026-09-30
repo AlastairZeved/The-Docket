@@ -521,7 +521,8 @@ hash is the SHA-256 of `git diff HEAD` over every governed file and every ledger
 under the root — those the working tree governs, and those `HEAD` governed that
 the working tree does not: a governed file deleted or stripped of its last cite,
 a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
-(D22) — followed by, for each untracked governed file in path order, a line
+(D22), a rename read as the deletion and the addition it is and a file at `HEAD`
+read as text by its bytes, as 1 reads one — followed by, for each untracked governed file in path order, a line
 `+++ <path>` and the file's content. `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times since the last PASS or
