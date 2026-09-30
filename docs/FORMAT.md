@@ -538,7 +538,7 @@ one; an untracked governed file is read as if added — intent to add, in a copy
 the index, never the repository's own — so its diff is a new file's and the hash
 is the same before `git add` and after. `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
-`SURFACE` when the session has been blocked five times since the last PASS or
+`SURFACE` when the session has been blocked five times since its last PASS or
 its located failures have not fallen across the last two verdicts after the
 third block, with the residue printed beneath and the session marked surfaced —
 the residue's last verdict is `last`, one for the repository (below), and one

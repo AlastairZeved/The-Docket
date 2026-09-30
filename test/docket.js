@@ -404,6 +404,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('status: the docket names the ledger, the last three rulings, uncited rulings, pending addenda, the last verdict and the witness', /^Docket — test\/fixture\/DECISIONS\.md \(9 rulings; prefixes A, R\)\nLast rulings:\n  R8  /.test(s.out) && /Cited nowhere: none/.test(s.out) && /Addenda pending: \n  R2 \(2026-09-11\)/.test(s.out) && /Last verdict: none/.test(s.out) && /Witness: FAIL \(1\)/.test(s.out), s.out);
   const sj = docket(['status', '--json'], { cwd: path.join(sRepo, 'test', 'fixture') });
   const sjo = sj.code === 0 ? JSON.parse(sj.out) : {};
+  ok('status --json lists the last three rulings in the text\'s order, newest first', (sjo.last || []).map(x => x.id).join(',') === 'R8,R7,R6' && /^Last rulings:\n  R8  [^\n]*\n  R7  [^\n]*\n  R6  /m.test(s.out), JSON.stringify(sjo.last));
   ok('status --json carries each pending addendum whole', (sjo.pendingAddenda || []).some(a => a.id === 'R2' && /reading still writes nothing, and the rule stands as written\.$/.test(a.text)), sj.out);
   ok('status --json carries the whole docket: ledger, rulings, prefixes, last, uncited, pendingAddenda, lastVerdict, surfaced, surfacedSessions, witness', Object.keys(sjo).join(',') === 'ledger,rulings,prefixes,last,uncited,pendingAddenda,lastVerdict,surfaced,surfacedSessions,witness' && sjo.rulings === 9 && sjo.uncited.length === 0 && sjo.pendingAddenda.length === 1 && sjo.pendingAddenda[0].id === 'R2' && sjo.lastVerdict === null && sjo.witness.ok === false && sjo.witness.failures.length === 1, sj.out);
   const pfull = docket(['principles'], { cwd: FIX });
@@ -2241,6 +2242,26 @@ const SEC = String.fromCharCode(0xa7);
         ok('…and the witness’s own checks do not inherit a DOCKET_BASE from the environment it runs in: CI names one for the repository it checks, which a scratch repository does not hold', inherited.code === 0 && /^check: ok/m.test(inherited.out) && !/does not hold/.test(inherited.out), inherited.out); }
       fs.rmSync(dir, { recursive: true, force: true });
     }
+    // DOCKET_BASE unheld, and no earlier version of the ledger at all: the skip names the revision (FORMAT.md 13)
+    {
+      const dir = tempRepo();
+      const r = docket(['check'], { cwd: dir, env: { DOCKET_BASE: 'feedfacefeedfacefeedfacefeedfacefeedface' } });
+      ok('check 7 skipped on a first commit under an unheld DOCKET_BASE names the revision, not the general skip alone', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md: check 7 skipped — DOCKET_BASE names feedfacefeedfacefeedfacefeedfacefeedface, which this repository does not hold, and HEAD's parent has no such file/m.test(r.out), r.out);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    // status points at check past five witness failures (D14's addendum); governs and status cut one glance by code points, marked
+    {
+      const dir = tempRepo(d => {
+        fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), Array.from({ length: 7 }, (_, i) => 'const bad' + i + ' = 1; // R' + (90 + i)).join('\n') + '\n');
+        fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const astral = 1; // R2 ' + 'x'.repeat(75) + '\u{1F732} tail\n');   // the astral character is the hundredth
+      });
+      const s = docket(['status'], { cwd: path.join(dir, 'test', 'fixture') }), n = JSON.parse(docket(['status', '--json'], { cwd: path.join(dir, 'test', 'fixture') }).out).witness.failures.length;
+      ok('status: more than five witness failures print five and a pointer, "+N more — docket check lists them all" (D14\'s addendum)', n === 8 && new RegExp('^Witness: FAIL \\(' + n + '\\)\\n(?:  [^\\n]*\\n){5}  \\+' + (n - 5) + ' more — docket check lists them all$', 'm').test(s.out), n + '\n' + s.out);
+      const g = docket(['governs', 'R2'], { cwd: path.join(dir, 'test', 'fixture') });
+      const line = g.out.split('\n').find(l => l.includes('const astral'));
+      ok('governs cuts a cited line past one hundred characters at ninety-nine code points and a mark, never a split character (FORMAT.md 3, D14)', !!line && Array.from(line.replace(/^  \S+  /, '')).length === 100 && line.endsWith('…') && !line.includes('�') && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(line), JSON.stringify(line));
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
     // DOCKET_BASE naming a commit the repository holds from before the ledger was added: check 7 is skipped and says so;
     // the tip's parent, inside the push, never stands in — it would pass an amendment in the middle and fail one at the tip
     {
@@ -2492,13 +2513,13 @@ const SEC = String.fromCharCode(0xa7);
     for (let i = 0; i < 3; i++) docket(['verdict', 'FAIL', '--hash', h, '--failures', '3', '--session', 'a', '--reason', held(3)], { cwd: d });
     docket(['verdict', 'FAIL', '--hash', h, '--failures', '1', '--session', 'b', '--reason', held(1)], { cwd: d });
     const g = docket(['gate', '--session', 'a'], { cwd: d });
-    ok('gate: a session surfaced after another session recorded the last verdict names that session on the residue\u2019s last-verdict line, not this one (FORMAT.md 16)', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: FAIL at \S+ \(1 located failure\), recorded by another session, b, not this one\n  code · F3 · /.test(g.out), g.out);
+    ok('gate: a session surfaced after another session recorded the last verdict names that session on the residue\u2019s last-verdict line, not this one (FORMAT.md 16)', /^SURFACE\nresidue: 3 blocks this session since its last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: FAIL at \S+ \(1 located failure\), recorded by another session, b, not this one\n  code · F3 · /.test(g.out), g.out);
     const sa = docket(['status'], { cwd: path.join(d, 'test', 'fixture') }), sj = docket(['status', '--json'], { cwd: path.join(d, 'test', 'fixture') });
-    ok('…and status names that surfaced session, which the last verdict does not: its line gives its blocks and its failures per verdict, and --json lists it (FORMAT.md 16; the protocol\u2019s release: status names it)', /^Last verdict: FAIL at \S+ \(1 located failure\)\nSurfaced: a \(3 blocks since the last PASS; located failures per verdict: 3 → 3 → 3\) — each waits for the human, who releases it with a PASS naming it$/m.test(sa.out) && JSON.stringify(JSON.parse(sj.out).surfacedSessions) === '["a"]', sa.out + sj.out);
+    ok('…and status names that surfaced session, which the last verdict does not: its line gives its blocks and its failures per verdict, and --json lists it (FORMAT.md 16; the protocol\u2019s release: status names it)', /^Last verdict: FAIL at \S+ \(1 located failure\)\nSurfaced: a \(3 blocks since its last PASS; located failures per verdict: 3 → 3 → 3\) — each waits for the human, who releases it with a PASS naming it$/m.test(sa.out) && JSON.stringify(JSON.parse(sj.out).surfacedSessions) === '["a"]', sa.out + sj.out);
     const n0 = tempRepo(); fs.mkdirSync(path.join(n0, '.docket'), { recursive: true });
     fs.writeFileSync(path.join(n0, '.docket', 'verdict.json'), JSON.stringify({ last: null, sessions: { s1: { blocks: 5, history: [], surfaced: true } } }));
     const s0 = docket(['status'], { cwd: path.join(n0, 'test', 'fixture') }), s0j = docket(['status', '--json'], { cwd: path.join(n0, 'test', 'fixture') });
-    ok('…and a session surfaced by blocks with no verdict recorded, the last verdict none, is named too (D38)', /^Last verdict: none\nSurfaced: s1 \(5 blocks since the last PASS; located failures per verdict: none recorded\) — each waits for the human, who releases it with a PASS naming it$/m.test(s0.out) && JSON.stringify(JSON.parse(s0j.out).surfacedSessions) === '["s1"]', s0.out + s0j.out);
+    ok('…and a session surfaced by blocks with no verdict recorded, the last verdict none, is named too (D38)', /^Last verdict: none\nSurfaced: s1 \(5 blocks since its last PASS; located failures per verdict: none recorded\) — each waits for the human, who releases it with a PASS naming it$/m.test(s0.out) && JSON.stringify(JSON.parse(s0j.out).surfacedSessions) === '["s1"]', s0.out + s0j.out);
     fs.rmSync(n0, { recursive: true, force: true });
     fs.rmSync(d, { recursive: true, force: true });
   }
@@ -2527,7 +2548,7 @@ const SEC = String.fromCharCode(0xa7);
     const gj = JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out);
     ok('gate --json carries the decision, the session, the hash and the files', gj.decision === 'JUDGE' && gj.session === 's1' && gj.hash === hash && gj.files.join() === 'test/fixture/app.js', JSON.stringify(gj));
     let v = docket(['verdict', 'FAIL', '--hash', hash, '--failures', '3', '--session', 's1', '--reason', held(3)], { cwd: d });
-    ok('verdict FAIL records and bumps the session block count', v.code === 0 && /^verdict recorded: FAIL \(3 located failures\); session s1: 1 block since the last PASS$/m.test(v.out), v.out + v.err);
+    ok('verdict FAIL records and bumps the session block count', v.code === 0 && /^verdict recorded: FAIL \(3 located failures\); session s1: 1 block since its last PASS$/m.test(v.out), v.out + v.err);
     const st = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
     ok('verdict writes .docket/verdict.json with the last verdict, its reason, and the session', st.last.verdict === 'FAIL' && st.last.hash === hash && /R2 keeps positions/.test(st.last.reason) && st.sessions.s1.blocks === 1 && st.sessions.s1.history[0] === 3, JSON.stringify(st));
     g = docket(['gate', '--session', 's1'], { cwd: d });
@@ -2544,7 +2565,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: two flat blocks are not yet a plateau — the test is made from the fourth stop on → JUDGE', /^JUDGE /.test(g.out), g.out);
     docket(['verdict', 'STALE', '--hash', hash2, '--failures', '3', '--session', 's1', '--reason', gone(3)], { cwd: d });
     g = docket(['gate', '--session', 's1'], { cwd: d });
-    ok('gate: after the third block with failures not decreasing → SURFACE with the residue, the last verdict’s reason lines, and the relay line', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: STALE at \S+ \(3 located failures\)\n(?:  code · F3 · test\/fixture\/app\.js:4[123] · R2 keeps positions read-only · reason gone: nothing reads a position now \(test\/fixture\/app\.js:40\) · \/rule --addendum R2\n){3}report this to the user verbatim, then stop again\n$/.test(g.out), g.out);
+    ok('gate: after the third block with failures not decreasing → SURFACE with the residue, the last verdict’s reason lines, and the relay line', /^SURFACE\nresidue: 3 blocks this session since its last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: STALE at \S+ \(3 located failures\)\n(?:  code · F3 · test\/fixture\/app\.js:4[123] · R2 keeps positions read-only · reason gone: nothing reads a position now \(test\/fixture\/app\.js:40\) · \/rule --addendum R2\n){3}report this to the user verbatim, then stop again\n$/.test(g.out), g.out);
     g = docket(['gate', '--session', 's1'], { cwd: d });
     ok('gate: a surfaced session answers SKIP from then on', g.out === 'SKIP\n', g.out);
     ok('…and gate --json says why', JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out).reason === 'this session is surfaced until a PASS or a new session', 'no reason');
@@ -2558,7 +2579,7 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate'], { cwd: d, env: { DOCKET_SESSION: 's2' } });
     ok('gate reads the session from DOCKET_SESSION when --session is not given', /^JUDGE /.test(g.out), g.out);
     v = docket(['verdict', 'PASS', '--hash', hash2, '--failures', '0', '--session', 's1'], { cwd: d });
-    ok('verdict PASS resets the session, releases the surfaced mark, and records the pass hash', /session s1: 0 blocks since the last PASS/.test(v.out) && (() => { const s = JSON.parse(read(path.join(d, '.docket', 'verdict.json'))); return s.lastPassHash === hash2 && s.sessions.s1.surfaced === false && s.sessions.s1.history.length === 0; })(), v.out);
+    ok('verdict PASS resets the session, releases the surfaced mark, and records the pass hash', /session s1: 0 blocks since its last PASS/.test(v.out) && (() => { const s = JSON.parse(read(path.join(d, '.docket', 'verdict.json'))); return s.lastPassHash === hash2 && s.sessions.s1.surfaced === false && s.sessions.s1.history.length === 0; })(), v.out);
     g = docket(['gate', '--session', 's1'], { cwd: d });
     ok('gate: the hash of the last PASS → SKIP', g.out === 'SKIP\n', g.out);
     g = docket(['gate', '--session', 's3'], { cwd: d });
@@ -2583,7 +2604,7 @@ const SEC = String.fromCharCode(0xa7);
     const h = docket(['gate', '--session', 'c'], { cwd: d2 }).out.split(' ')[1];
     for (const n of [9, 8, 7, 6, 5]) docket(['verdict', 'FAIL', '--hash', h, '--failures', String(n), '--session', 'c', '--reason', held(n)], { cwd: d2 });
     g = docket(['gate', '--session', 'c'], { cwd: d2 });
-    ok('gate: five blocks since the last PASS → SURFACE even while failures decrease (the cap binds)', /^SURFACE\nresidue: 5 blocks/.test(g.out), g.out);
+    ok('gate: five blocks since its last PASS → SURFACE even while failures decrease (the cap binds)', /^SURFACE\nresidue: 5 blocks/.test(g.out), g.out);
     const st3 = JSON.parse(read(path.join(d2, '.docket', 'verdict.json')));
     ok('gate writes the surfaced mark itself', st3.sessions.c.surfaced === true, JSON.stringify(st3.sessions));
     for (const sid of ['__proto__', 'constructor']) {                  // a session id is the host's text: no name is a property every object has
@@ -2614,7 +2635,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: 4 → 3 → 2 still falls at the fourth stop → JUDGE', /^JUDGE /.test(g.out), g.out);
     docket(['verdict', 'FAIL', '--hash', h4, '--failures', '2', '--session', 'u', '--reason', held(2)], { cwd: d4 });
     g = docket(['gate', '--session', 'u'], { cwd: d4 });
-    ok('…and 4 → 3 → 2 → 2 is the plateau, shown at the fifth → SURFACE', /^SURFACE\nresidue: 4 blocks this session since the last PASS; located failures per verdict: 4 → 3 → 2 → 2\n/.test(g.out), g.out);
+    ok('…and 4 → 3 → 2 → 2 is the plateau, shown at the fifth → SURFACE', /^SURFACE\nresidue: 4 blocks this session since its last PASS; located failures per verdict: 4 → 3 → 2 → 2\n/.test(g.out), g.out);
     fs.rmSync(d4, { recursive: true, force: true });
     // the other half of "have not fallen": failures that rise. Two blocks are below the third, whatever they do; at
     // the third, a rise is no fall
@@ -2626,7 +2647,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: 1 → 2, rising at the second block → JUDGE: the plateau test starts after the third', /^JUDGE /.test(g.out), g.out);
     docket(['verdict', 'FAIL', '--hash', h5, '--failures', '4', '--session', 'w', '--reason', held(4)], { cwd: d5 });
     g = docket(['gate', '--session', 'w'], { cwd: d5 });
-    ok('…and 1 → 2 → 4 has not fallen — it rose — so the fourth stop → SURFACE', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 1 → 2 → 4\n/.test(g.out), g.out);
+    ok('…and 1 → 2 → 4 has not fallen — it rose — so the fourth stop → SURFACE', /^SURFACE\nresidue: 3 blocks this session since its last PASS; located failures per verdict: 1 → 2 → 4\n/.test(g.out), g.out);
     fs.rmSync(d5, { recursive: true, force: true });
     // what HEAD governed is in the diff too (D22): a governed file deleted, or struck from the index, its last cite
     // stripped, a ledger gone; while a change to a file that cites nothing stays out, and a ledger's own change is in
@@ -3047,7 +3068,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and .docket/judge.log keeps the command, how the judge ended, and what it printed', jlog.startsWith('$ ' + judgeCmd('words') + '\nthe judge ended after ') && /The stop stands: I read the diff and it is fine\./.test(jlog), jlog);
     ok('…the judge ran in the hook input’s project directory, not the stop’s own', read(path.join(jd, 'cwd')).trim() === fs.realpathSync(path.join(d, 'test')), read(path.join(jd, 'cwd')));
     { const s0 = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
-      ok('…and the judge’s silence is one block of the session’s five and nothing more: no verdict recorded, no answer in its history, and the block says it counts (D38)', s0.last === null && s0.lastPassHash === null && JSON.stringify(s0.sessions.q1) === '{"blocks":1,"history":[],"surfaced":false}' && /This block is 1 of the 5 a session may take since the last PASS before the docket surfaces it; the judge’s own output is in \.docket\/judge\.log\.$/.test(b), JSON.stringify(s0) + ' ' + b); }
+      ok('…and the judge’s silence is one block of the session’s five and nothing more: no verdict recorded, no answer in its history, and the block says it counts (D38)', s0.last === null && s0.lastPassHash === null && JSON.stringify(s0.sessions.q1) === '{"blocks":1,"history":[],"surfaced":false}' && /This block is 1 of the 5 a session may take since its last PASS before the docket surfaces it; the judge’s own output is in \.docket\/judge\.log\.$/.test(b), JSON.stringify(s0) + ' ' + b); }
     forget();
     r = stopIn({ session_id: 'q2' }, ['--judge', judgeCmd('exit3')]);
     b = block(r);
@@ -3083,12 +3104,12 @@ const SEC = String.fromCharCode(0xa7);
     const st2 = JSON.parse(read(sp)); st2.sessions.z = { blocks: 5, history: [1, 1, 1, 1, 1], surfaced: false }; fs.writeFileSync(sp, JSON.stringify(st2));
     r = stopIn({ session_id: 'z' }, ['--judge', judgeCmd('PASS')]);
     b = block(r);
-    ok('stop: a session its gate surfaces is blocked with the residue and the relay sentence, and no judge starts (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since the last PASS; located failures per verdict: 1 → 1 → 1 → 1 → 1/.test(b) && /Report this to the user verbatim, then stop again\./.test(b) && !started(), r.out);
+    ok('stop: a session its gate surfaces is blocked with the residue and the relay sentence, and no judge starts (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since its last PASS; located failures per verdict: 1 → 1 → 1 → 1 → 1/.test(b) && /Report this to the user verbatim, then stop again\./.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'z' }, ['--judge', judgeCmd('PASS')]);
     ok('…and the stop after it is allowed, the session surfaced, and still no judge', r.code === 0 && r.out === '' && !started(), r.out);
     r = stopIn({ session_id: 's' }, ['--judge', judgeCmd('surface')], { JUDGE_REASON: held(1) });
     b = block(r);
-    ok('stop: a session surfaced while its judge ran is relayed with the residue (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 3 blocks this session since the last PASS; located failures per verdict: 1 → 1 → 1/.test(b), r.out);
+    ok('stop: a session surfaced while its judge ran is relayed with the residue (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 3 blocks this session since its last PASS; located failures per verdict: 1 → 1 → 1/.test(b), r.out);
     // one stop counts once, whatever the judge names (D11, D38): a judge that names no session records the stop's; a record
     // of another session is not this stop's answer; a hash the working tree does not hash to is refused
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const ns1 = 1; // R2\n');
@@ -3113,7 +3134,7 @@ const SEC = String.fromCharCode(0xa7);
     forget();
     r = stopIn({ session_id: 'n' }, ['--judge', judgeCmd('words')]);
     b = block(r);
-    ok('…and the sixth is the surfacing block, with no judge started: the residue counts five blocks, five with no verdict recorded, and asks for the relay (D11, D38)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since the last PASS, 5 of them with no verdict recorded; located failures per verdict: none recorded/.test(b) && /Report this to the user verbatim, then stop again\./.test(b) && !started(), r.out);
+    ok('…and the sixth is the surfacing block, with no judge started: the residue counts five blocks, five with no verdict recorded, and asks for the relay (D11, D38)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since its last PASS, 5 of them with no verdict recorded; located failures per verdict: none recorded/.test(b) && /Report this to the user verbatim, then stop again\./.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'n' }, ['--judge', judgeCmd('words')]);
     ok('…and the seventh is allowed, the session surfaced, and no judge starts', r.code === 0 && r.out === '' && !started(), r.out);
     r = stopIn({ session_id: 'm' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
@@ -3122,7 +3143,7 @@ const SEC = String.fromCharCode(0xa7);
     forget();
     r = stopIn({ session_id: 'm' }, ['--judge', judgeCmd('PASS')]);
     b = block(r);
-    ok('stop: two answers of one failure and a third block with no record is the plateau after the third block: the fourth stop surfaces, the residue naming the block with no verdict and the two answers (D11, D38)', b && /residue: 3 blocks this session since the last PASS, 1 of them with no verdict recorded; located failures per verdict: 1 → 1\n/.test(b) && !started(), r.out);
+    ok('stop: two answers of one failure and a third block with no record is the plateau after the third block: the fourth stop surfaces, the residue naming the block with no verdict and the two answers (D11, D38)', b && /residue: 3 blocks this session since its last PASS, 1 of them with no verdict recorded; located failures per verdict: 1 → 1\n/.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'w' }, ['--judge', judgeCmd('PASS'), '--wait', 'soon']);
     ok('stop: --wait takes a whole number of seconds, exit 2', r.code === 2 && /whole number of seconds/.test(r.err), r.err);
     r = stopIn({ session_id: 'w' }, ['--judge', judgeCmd('PASS'), '--wait', '0']);

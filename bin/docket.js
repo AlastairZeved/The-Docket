@@ -39,7 +39,7 @@ const os = require('os');
 const WINDOW = 20;        // D2: ±20 lines; D16: two to five rulings is what this yields, measured
 const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture never reaches it, a denser window would
 const TITLE_MAX = 72;     // D7: the title rule's cut
-const BLOCK_CAP = 5;      // D11: five blocks per session since the last PASS
+const BLOCK_CAP = 5;      // D11: five blocks per session since its last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
 const STOP_WAIT = 600;    // D14, logged in D19 and D37: the seconds `stop` gives the judge it starts before it stops it — more than twice the longest judge measured at a stop
 const SNIFF_BYTES = 8000;   // git's own binary sniff: a file with a NUL in its first 8000 bytes is not text
@@ -107,6 +107,9 @@ function splitLines(text) { return text.replace(/\r?\n$/, '').split(/\r?\n/); }
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function uniq(arr) { return Array.from(new Set(arr)); }
 function stripMarks(s) { return s.replace(/`/g, '').replace(/\*\*/g, ''); }
+// One glance (D14): a text of more than GLANCE characters — code points (FORMAT.md 3), so no character is split — keeps
+// GLANCE - 1 of them and a mark, so the cut is never silent; governs cuts a cited line and status a pending addendum by it
+function glance(s) { const t = Array.from(s); return t.length > GLANCE ? t.slice(0, GLANCE - 1).join('').trimEnd() + '\u2026' : s; }
 
 // ─── 1. discovery (D5) ──────────────────────────────────────────────────────
 
@@ -806,7 +809,7 @@ function governsBlock(root, ledger, r, cites) {
   lines.push('Addenda:');
   if (!r.addenda.length) lines.push('  none'); for (const a of r.addenda) lines.push('  ' + a.date + ': ' + a.text);
   lines.push('Code cites:');
-  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + c.text.trim().slice(0, GLANCE));
+  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + glance(c.text.trim()));
   return lines.join('\n');
 }
 function principles(argv) {
@@ -1001,13 +1004,14 @@ function committedText(root, filePath, workingText, note) {
     else { if (note) note('skipped — DOCKET_BASE names ' + base + ', which has no such file, so no version from before the push is there to compare', true); return null; }   // FORMAT.md 13
   }
   const said = what => { if (lost && note) note('compared with ' + what + ': DOCKET_BASE names ' + lost + ', which this repository does not hold'); };
+  const none = what => { if (lost && note) note('skipped — DOCKET_BASE names ' + lost + ', which this repository does not hold, and ' + what + ' has no such file, so no earlier version is there to compare', true); return null; };
   const head = sh('git', ['show', 'HEAD:' + p], groot);
-  if (head.status !== 0) return null;
+  if (head.status !== 0) return none('HEAD');
   let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
   if (working === undefined) { try { working = readText(filePath); } catch (e) { said('HEAD'); return head.stdout; } }
   if (normEol(working) !== normEol(head.stdout)) { said('HEAD'); return head.stdout; }   // FORMAT.md 1: both sides normalised
   const parent = sh('git', ['show', 'HEAD~1:' + p], groot);
-  if (parent.status !== 0) return null;
+  if (parent.status !== 0) return none('HEAD\'s parent');
   said('HEAD\'s parent'); return parent.stdout;
 }
 function check(argv) {
@@ -1431,7 +1435,7 @@ function status(argv) {
   const spec_ = runSpecCheck(root, ctx, lp);
   const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, ledgers: check_.ctx.ledgers.size, failures: check_.failures.concat(spec_.failures) };
   if (argv.json) {
-    out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, surfacedSessions: surfacedAll, witness }, null, 2));
+    out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).reverse().map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, surfacedSessions: surfacedAll, witness }, null, 2));
     return 0;
   }
   const L = [];
@@ -1441,13 +1445,13 @@ function status(argv) {
   L.push('Cited nowhere: ' + (uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
   L.push('Addenda pending: ' + (pend.length ? '' : 'none'));
   for (const a of pend) {                                              // D14: one line each, cut at a glance; governs <id> prints the whole, and --json carries it
-    const t = Array.from(a.text);
-    L.push('  ' + a.id + ' (' + a.date + '): ' + (t.length > GLANCE ? t.slice(0, GLANCE - 1).join('').trimEnd() + '\u2026' : a.text));
+    L.push('  ' + a.id + ' (' + a.date + '): ' + glance(a.text));
   }
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
-  if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since the last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
+  if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since its last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
+  if (witness.failures.length > 5) L.push('  +' + (witness.failures.length - 5) + ' more — docket check lists them all');   // D14's addendum: five, then the pointer
   out(L.join('\n'));
   return 0;
 }
@@ -1911,12 +1915,12 @@ function touchedRulings(root, d) {
   return found;
 }
 function freshSession() { return { blocks: 0, history: [], surfaced: false }; }
-// The residue a surfaced session reports: its blocks since the last PASS, how many of them had no verdict recorded (D38),
+// The residue a surfaced session reports: its blocks since its last PASS, how many of them had no verdict recorded (D38),
 // the failures per verdict, and the last verdict with the lines it was recorded with (D11). The gate prints it at SURFACE,
 // and `stop` relays it (D22).
 function residueLines(st, sess, id) {
   const h = sess.history, L = [], none = sess.blocks - h.length;
-  L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since the last PASS' + (none > 0 ? ', ' + none + ' of them with no verdict recorded' : '') + '; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
+  L.push('residue: ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' this session since its last PASS' + (none > 0 ? ', ' + none + ' of them with no verdict recorded' : '') + '; located failures per verdict: ' + (h.length ? h.join(' → ') : 'none recorded'));
   if (st.last) {
     const other = st.last.session !== id;                              // `last` is one for the repository: a verdict another session recorded is named as its (FORMAT.md 16)
     L.push('last verdict: ' + st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' +
@@ -2089,7 +2093,7 @@ function verdict(argv) {
   try { fs.appendFileSync(path.join(root, '.docket', 'verdicts.jsonl'), JSON.stringify(st.last) + '\n'); } catch (e) { process.stderr.write('note: .docket/verdicts.jsonl could not be appended to (' + e.code + '); the verdict is recorded in .docket/verdict.json\n'); }
   const left = v === 'PASS' && !flag(argv, '--session') ? Object.keys(st.sessions).filter(k => k !== id && st.sessions[k].surfaced) : [];   // a PASS releases the session it names, and this one was not named
   if (argv.json) { out(JSON.stringify({ verdict: v, failures, session: id, blocks: sess.blocks, hash, stillSurfaced: left }, null, 2)); return 0; }
-  out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since the last PASS');
+  out('verdict recorded: ' + v + ' (' + failures + ' located failure' + (failures === 1 ? '' : 's') + '); session ' + id + ': ' + sess.blocks + ' block' + (sess.blocks === 1 ? '' : 's') + ' since its last PASS');
   for (const k of left) out('note: session ' + k + ' is still surfaced; a PASS releases it only with --session ' + k);
   return 0;
 }
@@ -2103,7 +2107,7 @@ function verdict(argv) {
 // session's five (D38). The judge's own output is kept in .docket/judge.log for a person to read; the stop judges nothing,
 // and writes nothing else but that count.
 function surfacedReason(st, sess, tail, id) {
-  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since the last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
+  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since its last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
 }
 function judgePrompt(core, perm, input) {
   core = /^[\w\/.@:+-]+$/.test(core) ? core : JSON.stringify(core);   // a path the shell would split is written quoted, as the rule allows
@@ -2158,7 +2162,7 @@ function stop(argv) {
   try { withState(root, s => { sess = Object.assign(freshSession(), s.sessions[id] || {}); sess.blocks += 1; s.sessions[id] = sess; }); } catch (e) { /* the block stands without its count */ }
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
   // whose job it is, what to do — nothing, then stop again — and where a person finds the judge's own words.
-  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since the last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since its last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
   out(JSON.stringify({ decision: 'block', reason }));
   return 0;
 }
@@ -2282,7 +2286,7 @@ const USAGE = [
   '  docket vendor <dir>                 copy the witness to <dir>/test/docket.js and print the CI step',
   '  docket constitute --answers <json>  a new project\'s PRD, UIUX and DECISIONS from the four answers, the witness vendored, check run (--target <dir>)',
   '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
-  '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the diff since the last PASS, decided mechanically (D10, D11); --diff prints it',
+  '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the session\'s diff from its base, decided mechanically (D10, D11, D40); --diff prints it',
   '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
   '  docket stop --judge "<command>" [--permission "<rule>"] [--wait <s>]   stdin: the stop hook\'s input; starts the judge on a governed stop and turns its record into the stop\'s answer',
   '  docket protocol                     print judge/PROTOCOL.md',
