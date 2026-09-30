@@ -12,13 +12,13 @@ refusal rules, the escalation, the confirm block. It is `intake/CONSTITUTE.md`,
 spliced here at load through the core, the one command this skill may run, so
 that no file need be read from wherever the plugin is installed:
 
-!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js intake constitute`
+!`node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" intake constitute`
 
 Stop at the block and wait for the person. On their `confirm`, write the answers to
 a temporary JSON file and run
 
 ```
-node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js constitute --answers <file>
+node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" constitute --answers <file>
 ```
 
 from the project's root. Report its output as printed. It ends with a section

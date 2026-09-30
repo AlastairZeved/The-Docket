@@ -2367,8 +2367,8 @@ const SEC = String.fromCharCode(0xa7);
     // the intake skills splice their intake at load, so no file need be read from any install layout
     {
       const rule = read(path.join(ROOT, 'skills', 'rule', 'SKILL.md')), con = read(path.join(ROOT, 'skills', 'constitute', 'SKILL.md'));
-      ok('skills/rule splices intake/RULE.md at load with a ! command through the core, so the intake is in context without a Read', /^!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js intake rule`$/m.test(rule), rule);
-      ok('skills/constitute splices intake/CONSTITUTE.md the same way', /^!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js intake constitute`$/m.test(con), con);
+      ok('skills/rule splices intake/RULE.md at load with a ! command through the core, so the intake is in context without a Read', /^!`node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" intake rule`$/m.test(rule), rule);
+      ok('skills/constitute splices intake/CONSTITUTE.md the same way', /^!`node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" intake constitute`$/m.test(con), con);
       // A host runs a splice under the skill's own allow-list and refuses to read a file outside the project by any
       // other command: a `cat` of the plugin's file is blocked from every project but the plugin's own tree, and the
       // skill then never reaches the model. Only the core, which the allow-list names, may print the intake.
@@ -2470,11 +2470,11 @@ const SEC = String.fromCharCode(0xa7);
   // ── the skills: thin bindings that point at the core (D13) ──
   {
     const rule = read(path.join(ROOT, 'skills', 'rule', 'SKILL.md')), con = read(path.join(ROOT, 'skills', 'constitute', 'SKILL.md')), dk = read(path.join(ROOT, 'skills', 'docket', 'SKILL.md'));
-    ok('skills/rule names itself, limits its tools to the core, follows intake/RULE.md, and splices the principles', /^name:\s*rule$/m.test(rule) && /^allowed-tools:\s*Bash\(node \*docket\.js\*\)$/m.test(rule) && /intake\/RULE\.md/.test(rule) && /!`node \$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js principles`/.test(rule), rule);
+    ok('skills/rule names itself, limits its tools to the core, follows intake/RULE.md, and splices the principles', /^name:\s*rule$/m.test(rule) && /^allowed-tools:\s*Bash\(node \*docket\.js\*\)$/m.test(rule) && /intake\/RULE\.md/.test(rule) && /!`node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" principles`/.test(rule), rule);
     ok('…and stops at the confirm block for the person, and only then runs append', /Stop at the confirm\nblock and wait for the person\. On their `confirm`, run `append`/.test(rule), rule);
     ok('skills/constitute names itself, cannot be invoked by the model, limits its tools, and follows intake/CONSTITUTE.md', /^name:\s*constitute$/m.test(con) && /^disable-model-invocation:\s*true$/m.test(con) && /^allowed-tools:\s*Bash\(node \*docket\.js\*\)$/m.test(con) && /intake\/CONSTITUTE\.md/.test(con) && /constitute --answers <file>/.test(con), con);
     ok('…and it is the binding that names CLAUDE.md, not the core', /CLAUDE\.md/.test(con) && !/CLAUDE\.md/.test(read(CORE).replace(/CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT/g, '')), 'the host file is named in the wrong layer');
-    ok('skills/docket now advertises /docket diff, which the core has', /\/docket diff <a> <b>/.test(dk) && /docket\.js diff <a> <b>/.test(dk), 'diff not advertised');
+    ok('skills/docket now advertises /docket diff, which the core has', /\/docket diff <a> <b>/.test(dk) && /docket\.js" diff <a> <b>/.test(dk), 'diff not advertised');
     ok('the intake and template directories are named in D13’s list of host-agnostic files', /`packs\/`, `intake\/`, `templates\/`/.test(read(path.join(ROOT, 'docs', 'DECISIONS.md'))), 'D13 does not name them');
   }
 
@@ -3045,6 +3045,51 @@ const SEC = String.fromCharCode(0xa7);
     c = docket(['check'], { cwd: d });
     ok('append --baseline writes a path with a space as a JSON string, and check 4 reads it back: no fault at the comment or the file (FORMAT.md 9)', bl.code === 0 && read(path.join(d, LD)).includes('"Design Notes.md"=1') && !/check 4/.test(c.out), bl.out + bl.err + c.out);
     fs.rmSync(d, { recursive: true, force: true });
+  }
+
+  // ── commands that do what they were asked: a colour, a --diff under --json, a blame past re-ended lines, usage before the lock,
+  // a skill's splice under a path with a space
+  {
+    const LD = 'test/fixture/DECISIONS.md';
+    const g = (dir, args) => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(args), dir);
+    // (1) spec-check compares colours
+    let d = tempRepo(x => {
+      edit(x, 'test/fixture/UIUX.md', "| `--line` | `#7a8fa6` | frames and rules |\n", "| `--line` | `#7a8fa6` | frames and rules |\n| `--hi` | `#fff` | a highlight |\n| `--lo` | `#000000ff` | a shadow |\n");
+      edit(x, 'test/fixture/styles.css', '  --line: #7a8fa7;\n', '  --line: #7a8fa7;\n  --hi: #FFFFFF;\n  --lo: #000;\n');
+    });
+    let r = docket(['spec-check'], { cwd: path.join(d, 'test', 'fixture') });
+    ok('spec-check (a) compares colours, not spellings: #fff is #FFFFFF, #000000ff is #000, and only the fixture\'s own mismatch fails (FORMAT.md 13)', r.code === 1 && !/--hi|--lo/.test(r.out) && /--line is #7a8fa6/.test(r.out), r.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    // (2) gate --json --diff carries the diff
+    d = tempRepo(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const gj = 1; // R2\n');
+    const gt = docket(['gate', '--session', 'j', '--diff'], { cwd: d }), gjs = docket(['gate', '--session', 'j', '--json', '--diff'], { cwd: d });
+    let gj = null; try { gj = JSON.parse(gjs.out); } catch (e) {}
+    ok('gate --json --diff carries the diff the text form prints, not the option dropped', !!gj && gj.decision === 'JUDGE' && typeof gj.diff === 'string' && gj.diff.includes('const gj = 1; // R2') && gt.out.includes(gj.diff), gjs.out.slice(0, 300));
+    fs.rmSync(d, { recursive: true, force: true });
+    // (3) a commit that only re-ends the ledger's lines answers no addendum
+    d = tempRepo();
+    docket(['append', '--addendum', 'R6', '--text', 'the plane moved; the reason no longer holds.', '--ledger', LD], { cwd: d, env: { DOCKET_TODAY: '2026-09-30' } }); g(d, ['commit', '-qam', 'addendum']);
+    const pend = () => JSON.parse(docket(['status', '--json'], { cwd: path.join(d, 'test', 'fixture') }).out).pendingAddenda.map(a => a.id).sort().join(',');
+    const before = pend();
+    fs.writeFileSync(path.join(d, LD), read(path.join(d, LD)).replace(/\n/g, '\r\n')); g(d, ['commit', '-qam', 'crlf']);
+    const after = pend();
+    ok('a commit that only re-ends the ledger\'s lines answers no pending addendum: each line keeps the commit that wrote it (FORMAT.md 6, D21)', before.split(',').includes('R6') && after === before, before + ' → ' + after);
+    fs.rmSync(d, { recursive: true, force: true });
+    // (4) a usage error is refused before the ledger's lock, never after waiting on it
+    d = tempRepo(); fs.writeFileSync(path.join(d, LD + '.lock'), 'docket 999999\n');
+    const t0 = Date.now();
+    const ue = docket(['append', '--issue', '1', '--principle', 'Capture precedes structure', '--body', 'Reason: r.', '--ledger', LD], { cwd: d });
+    const ua = docket(['append', '--addendum', 'R2', '--ledger', LD], { cwd: d });
+    ok('append with no --title, or an addendum with no --text, is refused at once, the ledger\'s lock held by another: usage before the lock', ue.code === 2 && /--title is required/.test(ue.err) && ua.code === 2 && /--text is required/.test(ua.err) && !/held by another append/.test(ue.err + ua.err) && Date.now() - t0 < 4000, ue.err + ua.err + (Date.now() - t0) + ' ms');
+    fs.rmSync(d, { recursive: true, force: true });
+    // (5) a skill's splice runs from a plugin under a path with a space
+    const pr = path.join(tmpDir('docket-'), 'my plugin');
+    fs.mkdirSync(path.join(pr, 'bin'), { recursive: true }); fs.copyFileSync(CORE, path.join(pr, 'bin', 'docket.js')); fs.cpSync(path.join(ROOT, 'intake'), path.join(pr, 'intake'), { recursive: true });
+    const skills = ['rule', 'constitute', 'docket'].map(s => read(path.join(ROOT, 'skills', s, 'SKILL.md'))).join('\n');
+    const splice = /^!`(node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" intake rule)`$/m.exec(skills);
+    r = splice ? cp.spawnSync('/bin/sh', ['-c', splice[1]], { cwd: FIX, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PLUGIN_ROOT: pr }) }) : null;
+    ok('the skills quote every splice of the plugin root, as the hooks do: the rule intake prints from a plugin under "my plugin"', !/node \$\{CLAUDE_PLUGIN_ROOT\}/.test(skills) && !!r && r.status === 0 && r.stdout.includes(read(path.join(ROOT, 'intake', 'RULE.md')).split('\n')[0]), r ? r.status + ' ' + r.stderr : 'no quoted splice');
+    fs.rmSync(path.dirname(pr), { recursive: true, force: true });
   }
 
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session

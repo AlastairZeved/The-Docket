@@ -11,11 +11,11 @@ rules, the escalation, the confirm block. It is `intake/RULE.md`, spliced here
 at load through the core, the one command this skill may run, so that no file
 need be read from wherever the plugin is installed:
 
-!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js intake rule`
+!`node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" intake rule`
 
 The principles to choose from, spliced now from the ledger's own reading:
 
-!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js principles`
+!`node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" principles`
 
 The arguments given: `$ARGUMENTS`. None: a new ruling, from the five
 questions. `--addendum <id> "<why>"`: an addendum, from the intake's last
@@ -23,6 +23,6 @@ section — the route a judge's STALE verdict gives, put to the person behind
 its own confirm block.
 
 Run every command the intake names as
-`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js <subcommand> …`. Stop at the confirm
+`node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" <subcommand> …`. Stop at the confirm
 block and wait for the person. On their `confirm`, run `append` and report its
 output as printed.

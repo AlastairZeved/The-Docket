@@ -1063,6 +1063,9 @@ function hexToRgb(hex) {
   const n = parseInt(h.slice(0, 6), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+// A colour, not its spelling (FORMAT.md 13): shorthand expanded, lower case, an opaque alpha dropped — #fff, #FFFFFF and
+// #ffffffff are one value, and a token row matches the declaration that says its colour however either writes it
+function colourOf(hex) { let h = hex.replace('#', '').toLowerCase(); if (h.length === 3 || h.length === 4) h = h.split('').map(c => c + c).join(''); return '#' + (h.length === 8 && h.endsWith('ff') ? h.slice(0, 6) : h); }
 function luminance(hex) {
   const [r, g, b] = hexToRgb(hex).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -1109,8 +1112,8 @@ function runSpecCheck(root, ctx, onlyLedger) {
       specValue.set(token, hex);
       const d = decls.get(token);
       if (!d) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but is declared in no CSS file that resolves to ' + rel(root, lp) });
-      else if (!d.some(x => x.value === hex)) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but ' + d.map(x => x.value + ' at ' + rel(root, x.file) + ':' + x.line).join(', ') });
-      else for (const x of d) if (x.value !== hex) info.push(rel(root, docs.uiux) + ':' + (i + 1) + ': ' + token + ' is ' + hex + ' in the spec and one declaration matches; ' + x.value + ' at ' + rel(root, x.file) + ':' + x.line + ' is a second value (a theme, or a stray)');
+      else if (!d.some(x => colourOf(x.value) === colourOf(hex))) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'a', message: token + ' is ' + hex + ' in the spec but ' + d.map(x => x.value + ' at ' + rel(root, x.file) + ':' + x.line).join(', ') });
+      else for (const x of d) if (colourOf(x.value) !== colourOf(hex)) info.push(rel(root, docs.uiux) + ':' + (i + 1) + ': ' + token + ' is ' + hex + ' in the spec and one declaration matches; ' + x.value + ' at ' + rel(root, x.file) + ':' + x.line + ' is a second value (a theme, or a stray)');
     });
     const valueOf = t => specValue.get(t) || (decls.get(t) ? decls.get(t)[0].value : null);
     specLines.forEach((l, i) => {
@@ -1203,6 +1206,7 @@ function parseEdgeArg(s) {
   return { adverb: (m[1] || '').toLowerCase(), verb: m[2].toLowerCase(), tos: m[3].split('/'), qualifier: m[4] || '' };
 }
 function appendEntry(argv) {
+  entryArgs(argv);                                                     // usage first, outside the lock
   const { root, ledger, release } = lockedLedger(argv);
   const entry = buildEntry(argv, root, ledger);
   const text = (ledger.text.trim() ? ensureNl(ledger.text) + '\n' : '') + entry;   // an empty ledger opens with its entry, not with blank lines
@@ -1212,7 +1216,9 @@ function appendEntry(argv) {
 }
 // Everything append refuses, it refuses here, before any write; constitute builds its first entry through
 // this same function so a constitution cannot carry what a ruling could not.
-function buildEntry(argv, root, ledger) {
+// The refusals that read the arguments alone: append makes them before it takes the ledger's lock, so a malformed call
+// never waits on the lock, or holds it, while another append needs it; buildEntry makes them again, for constitute
+function entryArgs(argv) {
   const title = flag(argv, '--title'), issue = flag(argv, '--issue'), principle = flag(argv, '--principle'), body = flag(argv, '--body');
   const edges = flags(argv, '--edge');
   if (!title || !title.trim()) die('append: --title is required (one line, the ruling in a phrase)', 2);
@@ -1223,10 +1229,6 @@ function buildEntry(argv, root, ledger) {
   if (/[\r\n\u2028\u2029]/.test(issue)) die('append: --issue is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
   if (/[;()]/.test(issue)) die('append: --issue may not contain ";", "(" or ")" — the meta is one parenthetical whose clauses are split on ";" (FORMAT.md 4)', 2);
   if (!principle || !principle.trim()) die('append: --principle is required (one of `docket principles`)', 2);
-  const prin = principlesOf(ledger);
-  if (!prin.list.length) die('append: no principles list found (the first section of PRD.md, or a "Principles" list in the ledger preamble)', 2);
-  const pr = principleNamed(prin.list, principle);
-  if (!pr) die('append: principle "' + principle + '" is not one of: ' + prin.list.map(p => p.name).join(' · '), 2);
   if (!body || !body.trim()) die('append: --body is required (the ruling in prose, with its Reason:)', 2);
   for (const [name, v] of [['--title', title], ['--issue', issue], ['--principle', principle], ['--body', body]].concat(edges.map(e => ['--edge', e]))) {
     const um = UNSAFE_RE.exec(v);                                      // check 2 would fail the entry for ever; it is refused before it is written
@@ -1238,6 +1240,14 @@ function buildEntry(argv, root, ledger) {
   if (splitLines(body).some(l => ADDENDUM_RE.test(l))) die('append: --body may not carry an addendum line; an addendum is written by append --addendum and dated by the tool (FORMAT.md 6)', 2);
   if (splitLines(body).some(isBoundary)) die('append: --body may not carry an entry or section heading line — a body opens no entry; the heading is the tool\'s to write (FORMAT.md 2, 7, 11)', 2);
   { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && /^Principle:\s/.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }
+  return { title, issue, principle, body, edges };
+}
+function buildEntry(argv, root, ledger) {
+  const { title, issue, principle, body, edges } = entryArgs(argv);
+  const prin = principlesOf(ledger);
+  if (!prin.list.length) die('append: no principles list found (the first section of PRD.md, or a "Principles" list in the ledger preamble)', 2);
+  const pr = principleNamed(prin.list, principle);
+  if (!pr) die('append: principle "' + principle + '" is not one of: ' + prin.list.map(p => p.name).join(' · '), 2);
   let prefix = flag(argv, '--prefix');
   if (!prefix) prefix = ledger.rulings.length ? ledger.rulings[ledger.rulings.length - 1].prefix : null;
   if (!prefix) die('append: --prefix is required for an empty ledger', 2);
@@ -1283,8 +1293,9 @@ function afterWrite(argv, root, ledger, printed) {
   return res.failures.length ? 1 : 0;
 }
 function appendAddendum(argv) {
-  const { root, ledger, release } = lockedLedger(argv);
   const id = flag(argv, '--addendum'), text = flag(argv, '--text');
+  if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);   // usage first, outside the lock
+  const { root, ledger, release } = lockedLedger(argv);
   const r = ledger.byId.get(id);
   if (!r) die('append: --addendum ' + id + ' names no ruling in ' + rel(root, ledger.path), 2);
   if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);
@@ -1379,7 +1390,9 @@ function withState(root, change) {
 // once named an entry has not moved the law past the clause a later addendum is about. With no history to read — no
 // repository, or a ledger never committed — a later entry's edge resolves it, as before.
 function blameCommits(ledgerPath) {
-  const r = sh('git', ['blame', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));
+  // -w: a commit that changes only a line's whitespace or ending — CRLF, a renormalisation — wrote no line, so each keeps the
+  // commit that wrote its words, and an addendum is not answered by the commit that re-ended it (FORMAT.md 6, D21)
+  const r = sh('git', ['blame', '-w', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));
   if (r.status !== 0) return null;
   const m = new Map();
   for (const line of r.stdout.split('\n')) { const h = /^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/.exec(line); if (h) m.set(Number(h[2]), h[1]); }
@@ -1974,7 +1987,7 @@ function gate(argv) {
     say('SURFACE', { residue: L.slice(1, -1) }); if (!argv.json) out(L.join('\n'));
     return 0;
   }
-  say('JUDGE');
+  say('JUDGE', has(argv, '--diff') ? { diff: wideDiff(root, d) } : null);   // an option accepted is an option honoured, --json or not
   if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(wideDiff(root, d)); }
   return 0;
 }

@@ -231,7 +231,9 @@ and `status --json` carries it. `docket append --addendum <id>
 dated by the tool and never by hand.
 
 Which was written first is read from history (D21): the line holding the edge
-was added in a commit that descends from the one that added the addendum's line,
+was added in a commit that descends from the one that added the addendum's line
+(a commit that changes only a line's whitespace or its ending, such as a
+renormalisation to CRLF or back, adds no line: each keeps the commit that wrote it),
 or in that same commit — the preamble's order, the addendum first and the ruling
 second — or it is not committed yet. An in-edge older than the addendum does not
 resolve it: supersession is clause-level (D3), so a ruling that once named an
@@ -432,7 +434,8 @@ it always does, and `{}` for a stop it allows, where it otherwise prints nothing
 ledger nearest the working directory (a fixture ledger under `test/` is reached
 from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a
 **token row**, whose first two cells are a `--token` and a hex colour of 3, 4,
-6 or 8 digits, matched by one CSS declaration of that token (a) — a second
+6 or 8 digits, matched by one CSS declaration of that token (a) — as a colour,
+not a spelling: `#fff`, `#FFFFFF` and `#ffffffff` are one value; a second
 declaration of another value beside it is a theme's and is reported, not failed;
 a value inside a CSS comment is not a declaration, and a comment never closed
 runs to the end of the file, as CSS reads it; and a

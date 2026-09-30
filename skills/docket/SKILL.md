@@ -22,14 +22,14 @@ first, loudly — any existing heading or body that changed.
 Run the subcommand the argument names and show its output. With no argument,
 run `status`:
 
-!`node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js status`
+!`node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" status`
 
 For `query`, `governs` and `diff`, run the command yourself with the arguments given:
 
 ```
-node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js query <term>
-node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js governs <id>
-node ${CLAUDE_PLUGIN_ROOT}/bin/docket.js diff <a> <b>
+node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" query <term>
+node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" governs <id>
+node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" diff <a> <b>
 ```
 
 The output is the ledger's own reading. Report it; do not restate a ruling in
