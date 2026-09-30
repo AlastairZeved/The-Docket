@@ -522,13 +522,20 @@ cited in the text being replaced are what the edit most needs to know.
 ## 16. The gate, the verdict file and the core's breadcrumb (D10, D11)
 
 `docket gate --session <id>` decides mechanically whether a stop is judged. Its
-hash is the SHA-256 of `git diff HEAD` over every governed file and every ledger
-under the root — those the working tree governs, and those `HEAD` governed that
-the working tree does not: a governed file deleted or stripped of its last cite,
-a file under a ledger that is gone, and the ledger itself, each read at `HEAD`
-(D22), a rename read as the deletion and the addition it is and a file at `HEAD`
-read as text by its bytes, as 1 reads one — followed by, for each untracked governed file in path order, a line
-`+++ <path>` and the file's content. `SKIP` when that text is empty, when its hash
+hash is the SHA-256 of `git diff <base>` over every governed file, every ledger
+and the spec documents beside it under the root (D40). The base is the session's:
+the commit `HEAD` was at when the session started — `status --session-start`, the
+SessionStart hook, records it from the hook's input — moved to `HEAD` by a PASS
+recorded while nothing governed differs from `HEAD`; a session with none, or whose
+base is no longer an ancestor of `HEAD`, reads from `HEAD`. So a change the maker
+commits before it stops is in the diff. The files are those the working tree
+governs, and those the base governed that the working tree does not: a governed file deleted or stripped of its last cite,
+a file under a ledger that is gone, and the ledger itself, each read at the base
+(D22), a spec document gone as a ledger gone, a rename read as the deletion and
+the addition it is and a file at the base read as text by its bytes, as 1 reads
+one; an untracked governed file is read as if added — intent to add, in a copy of
+the index, never the repository's own — so its diff is a new file's and the hash
+is the same before `git add` and after. `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times since the last PASS or
 its located failures have not fallen across the last two verdicts after the
@@ -537,8 +544,7 @@ the residue's last verdict is `last`, one for the repository (below), and one
 another session recorded is named on its line as that session's, not this one's;
 else `JUDGE <hash>
 <files…>`, and with `--diff` the diff beneath, each touched function whole
-(`git diff HEAD --function-context` over the same files, then the untracked
-ones as above), and beneath it each ruling cited within the window of a hunk
+(`git diff <base> --function-context` over the same files, read the same way), and beneath it each ruling cited within the window of a hunk
 (15) — a new file read whole — as `governs` prints it; the hash reads neither
 (D30, D33). `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
@@ -561,7 +567,8 @@ line is; a PASS carries no reason (D23).
 
 The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
 failures, time, session, and the reason it was recorded with), `lastPassHash`,
-and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`;
+and `sessions`, one entry per identifier with `blocks`, `history` and `surfaced`,
+and `base`, the commit its diff runs from, once one is recorded;
 `docket status` names the last verdict's session when it is surfaced, and every other
 session the file marks surfaced on a line of its own with its blocks and its failures
 per verdict, since `last` names one session and each surfaced session waits for the

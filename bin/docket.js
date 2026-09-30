@@ -31,6 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const crypto = require('crypto');
+const os = require('os');
 
 // ─── 0. utilities ───────────────────────────────────────────────────────────
 
@@ -1312,7 +1313,8 @@ function loadState(root) {
   if (st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions)) for (const k of Object.keys(st.sessions)) {
     const s = st.sessions[k];
     if (!s || typeof s !== 'object' || Array.isArray(s)) continue;
-    sessions[k] = { blocks: Number.isInteger(s.blocks) && s.blocks >= 0 ? s.blocks : 0, history: Array.isArray(s.history) ? s.history.filter(n => Number.isInteger(n) && n >= 0) : [], surfaced: s.surfaced === true };
+    sessions[k] = Object.assign({ blocks: Number.isInteger(s.blocks) && s.blocks >= 0 ? s.blocks : 0, history: Array.isArray(s.history) ? s.history.filter(n => Number.isInteger(n) && n >= 0) : [], surfaced: s.surfaced === true },
+      typeof s.base === 'string' && /^[0-9a-f]{40,64}$/.test(s.base) ? { base: s.base } : {});   // the commit its diff runs from (D40)
   }
   const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
@@ -1376,10 +1378,24 @@ function pendingAddenda(ledger) {
   }
   return pend;
 }
+// The SessionStart hook's input on stdin (D40): the session's identifier, why it starts, and the project directory. A session
+// that starts afresh — a new one, or one cleared — records HEAD as the base its diff runs from; one resumed or compacted
+// keeps the base it has, and takes HEAD only when it has none. It prints nothing: the docket is the hook's output.
+function sessionStart() {
+  let input = {};
+  try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
+  if (typeof input !== 'object' || Array.isArray(input) || typeof input.session_id !== 'string' || !input.session_id) return;
+  const root = stopRoot(typeof input.cwd === 'string' && isDir(input.cwd) ? input.cwd : process.cwd());   // the stop's root (D28)
+  const head = headCommit(root);
+  if (!head) return;
+  const afresh = input.source === 'startup' || input.source === 'clear';
+  try { withState(root, st => { const x = Object.assign(freshSession(), st.sessions[input.session_id] || {}); if (afresh || !x.base) x.base = head; st.sessions[input.session_id] = x; }); } catch (e) { /* the docket prints without it */ }
+}
 function status(argv) {
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
   const below = lp ? [] : ledgersBelow(cwd, root);                    // a walk goes up: a ledger below is named, not found
   if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
+  if (has(argv, '--session-start') && (lp || below.length)) sessionStart();   // the SessionStart hook: the session's base (D40)
   if (!lp) {                                                          // no ledger governs the working directory
     const groot = gitRoot(cwd);
     const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], groot) : null;
@@ -1752,25 +1768,35 @@ function sessionId(argv) {
   if (process.env.DOCKET_SESSION) return process.env.DOCKET_SESSION;
   return 'default';
 }
-// Files HEAD governed that the working tree does not show as governed — deleted, stripped of their last cite, or under
-// a ledger that is gone — and a ledger HEAD held that is gone. A diff that removes a governed file touches a governed
-// file (D10), so each is in the diff (D22). Governed is read at HEAD: the file's text there cites a ruling that its
-// ledger there holds.
-function headGoverned(root, have) {
-  // --no-renames: a rename is the deletion it is, so the old path — governed at HEAD — is a candidate like any deleted file
-  const ch = sh('git', ['diff', 'HEAD', '--no-renames', '--relative', '--name-only', '-z'], root);
+// The commit a session's diff runs from (D40): the base its SessionStart recorded — moved to HEAD by a PASS recorded while
+// nothing governed differs from HEAD — while that commit is an ancestor of HEAD; else HEAD. A maker that commits its work
+// before it stops commits into the range the gate reads, so the stop still judges it; a base the history no longer holds,
+// after a reset or a rebase, is dropped for HEAD.
+function sessionBase(root, st, id) {
+  const s = st.sessions[id], b = s && s.base;
+  if (b && sh('git', ['merge-base', '--is-ancestor', b, 'HEAD'], root).status === 0) return b;
+  return 'HEAD';
+}
+function headCommit(root) { const r = sh('git', ['rev-parse', '--verify', '-q', 'HEAD'], root); return r.status === 0 ? r.stdout.trim() : null; }
+// Files the base governed that the working tree does not show as governed — deleted, stripped of their last cite, or under
+// a ledger that is gone — a ledger the base held that is gone, and a spec document beside it that is gone. A diff that
+// removes a governed file touches a governed file (D10), so each is in the diff (D22). Governed is read at the base: the
+// file's text there cites a ruling that its ledger there holds.
+function governedAt(root, have, base) {
+  // --no-renames: a rename is the deletion it is, so the old path — governed at the base — is a candidate like any deleted file
+  const ch = sh('git', ['diff', base, '--no-renames', '--relative', '--name-only', '-z'], root);
   if (ch.status !== 0) return [];
   const cand = ch.stdout.split('\0').filter(p => p && !have.has(p) && !p.split('/').includes('.docket'));
   if (!cand.length) return [];
-  const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], root);
-  const atHead = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);
-  const show = p => { const r = sh('git', ['show', 'HEAD:./' + p], root); return r.status === 0 ? r.stdout : null; };
-  const showBytes = p => { const r = cp.spawnSync('git', ['show', 'HEAD:./' + p], { cwd: root, maxBuffer: 1 << 28 }); return r.status === 0 && r.stdout ? r.stdout : null; };   // the sniff is over bytes (FORMAT.md 1)
+  const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', base], root);
+  const atBase = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);
+  const show = p => { const r = sh('git', ['show', base + ':./' + p], root); return r.status === 0 ? r.stdout : null; };
+  const showBytes = p => { const r = cp.spawnSync('git', ['show', base + ':./' + p], { cwd: root, maxBuffer: 1 << 28 }); return r.status === 0 && r.stdout ? r.stdout : null; };   // the sniff is over bytes (FORMAT.md 1)
   const ledgers = new Map();
-  const ledgerAt = p => {                                             // the nearest DECISIONS.md or docs/DECISIONS.md above p, at HEAD
+  const ledgerAt = p => {                                             // the nearest DECISIONS.md or docs/DECISIONS.md above p, at the base
     for (let dir = path.posix.dirname(p); ; dir = path.posix.dirname(dir)) {
       for (const c of dir === '.' ? ['DECISIONS.md', 'docs/DECISIONS.md'] : [dir + '/DECISIONS.md', dir + '/docs/DECISIONS.md']) {
-        if (!atHead.has(c)) continue;
+        if (!atBase.has(c)) continue;
         if (!ledgers.has(c)) { const t = show(c); ledgers.set(c, t === null ? null : parseLedger(t, path.join(root, c))); }
         return ledgers.get(c);
       }
@@ -1779,54 +1805,69 @@ function headGoverned(root, have) {
   };
   const out = [];
   for (const p of cand) {
-    if (!atHead.has(p)) continue;                                     // new since HEAD: the working tree's reading decides it
-    const base = path.posix.basename(p);
-    if (base === 'DECISIONS.md') { out.push(p); continue; }           // a ledger HEAD held
-    if (/^DECISIONS.*\.md$/.test(base)) continue;                     // a ledger document is never governed code
+    if (!atBase.has(p)) continue;                                     // new since the base: the working tree's reading decides it
+    const name = path.posix.basename(p), dir = path.posix.dirname(p);
+    if (name === 'DECISIONS.md') { out.push(p); continue; }           // a ledger the base held
+    if ((name === 'UIUX.md' || name === 'PRD.md') && atBase.has(dir === '.' ? 'DECISIONS.md' : dir + '/DECISIONS.md')) { out.push(p); continue; }   // a spec document beside it (D40)
+    if (/^DECISIONS.*\.md$/.test(name)) continue;                     // a ledger document is never governed code
     const b = showBytes(p);
-    if (b === null || b.subarray(0, SNIFF_BYTES).includes(0)) continue;   // binary at HEAD, as isTextFile reads the working tree
+    if (b === null || b.subarray(0, SNIFF_BYTES).includes(0)) continue;   // binary at the base, as isTextFile reads the working tree
     const t = b.toString('utf8');
     const L = ledgerAt(p);
     if (L && citesIn(t, L).some(c => c.exists)) out.push(p);
   }
   return out;
 }
-// The diff the judge reads and the gate hashes: `git diff HEAD` over every governed file and every ledger — those the
-// working tree governs, and those HEAD governed that it no longer shows (D22) — then, for each untracked governed file
-// in path order, a line `+++ <path>` and its content. Empty when nothing governed moved.
-function governedDiff(root) {
+// `git diff <base>` over the given paths, one run for each list of extra arguments, with every untracked path among them read
+// as if added — intent to add, in a copy of the index, so the repository's own index is never touched: an untracked file's
+// diff is then the one `git add` gives it, and the gate's hash is the same before the add and after it (D40).
+function diffsFrom(root, base, rels, untracked, runs) {
+  let env = process.env, tmp = null;
+  if (untracked.length) {
+    tmp = path.join(os.tmpdir(), 'docket-index-' + process.pid + '-' + crypto.randomBytes(4).toString('hex'));
+    const ip = sh('git', ['rev-parse', '--git-path', 'index'], root);
+    try { const src = path.resolve(root, ip.stdout.trim()); if (ip.status === 0 && isFile(src)) fs.copyFileSync(src, tmp); } catch (e) { /* no index yet: git starts one */ }
+    env = Object.assign({}, process.env, { GIT_INDEX_FILE: tmp });
+    cp.spawnSync('git', ['add', '-N', '--'].concat(untracked), { cwd: root, env, encoding: 'utf8' });
+  }
+  try {
+    return runs.map(extra => { const r = cp.spawnSync('git', ['diff', base, '--no-renames'].concat(extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '' }; });
+  } finally { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* the copy is the reading's own */ } } }
+}
+// The diff the judge reads and the gate hashes (D40): `git diff <base>` — the session's base, HEAD when it has none — over
+// every governed file, every ledger and the spec documents beside it: those the working tree holds, and those the base
+// governed that it no longer shows (D22), every untracked one among them read as if added. Empty when nothing governed moved.
+function governedDiff(root, base) {
+  base = base || 'HEAD';
   const ctx = loadContext(root, { includeUntracked: true });
   const tracked = new Set(trackedFiles(root) || []);
   const files = new Set();
-  for (const [lp, ledger] of ctx.ledgers) { files.add(lp); for (const f of governedFiles(ctx, ledger)) files.add(f); }
+  for (const [lp, ledger] of ctx.ledgers) {
+    files.add(lp);
+    const sd = specDocs(lp); for (const s of [sd.uiux, sd.prd]) if (s) files.add(s);   // the spec documents beside it, as the ledger (D40)
+    for (const f of governedFiles(ctx, ledger)) files.add(f);
+  }
   const now = Array.from(files).map(f => rel(root, f));
-  const gone = headGoverned(root, new Set(now));
+  const gone = governedAt(root, new Set(now), base);
   const rels = uniq(now.concat(gone)).sort();
-  const trackedRels = rels.filter(r => tracked.has(path.join(root, r)) || gone.includes(r));
-  const untrackedRels = rels.filter(r => !trackedRels.includes(r));
-  let diffText = '', touched = [];
-  if (trackedRels.length) {
-    const r = sh('git', ['diff', 'HEAD', '--no-renames', '--'].concat(trackedRels), root);
-    if (r.status === 0) {
-      diffText = r.stdout;
-      const n = sh('git', ['diff', 'HEAD', '--no-renames', '--name-only', '-z', '--'].concat(trackedRels), root);   // -z: a name as it is, not quoted
-      touched = n.stdout.split('\0').filter(Boolean);
-    } else {                                                           // no commit yet: everything governed is new
-      for (const f of trackedRels) diffText += '+++ ' + f + '\n' + readText(path.join(root, f));
-      touched = trackedRels.slice();
+  const untracked = rels.filter(r => !tracked.has(path.join(root, r)) && !gone.includes(r));
+  let text = '', touched = [], fromGit = true;
+  if (rels.length) {
+    const [dr, nr] = diffsFrom(root, base, rels, untracked, [[], ['--name-only', '-z']]);
+    if (dr.status === 0) { text = dr.stdout; touched = nr.stdout.split('\0').filter(Boolean); }
+    else {                                                             // no commit yet: everything governed is new
+      fromGit = false;
+      for (const f of rels) if (isFile(path.join(root, f))) { text += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
     }
   }
-  let untrackedText = '';
-  for (const f of untrackedRels) { untrackedText += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
-  const text = diffText + untrackedText;
-  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, tracked: diffText ? trackedRels : [], untrackedText };
+  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, base, rels: fromGit ? rels : [], untracked };
 }
 // The diff the judge reads: the hashed text with each touched function whole, so that a ruling's premise in the same
 // function is on the page and not a file read away; a host caps a judge's turns (D30). Beneath it, each ruling cited
 // within the window of a hunk, as governs prints it — the rulings the judge's step 4 reads (D33). The hash never reads it.
 function wideDiff(root, d) {
-  const w = d.tracked.length ? sh('git', ['diff', 'HEAD', '--no-renames', '--function-context', '--'].concat(d.tracked), root) : null;
-  const body = w && w.status === 0 ? w.stdout + d.untrackedText : d.text;
+  const w = d.rels.length ? diffsFrom(root, d.base, d.rels, d.untracked, [['--function-context']])[0] : null;
+  const body = w && w.status === 0 ? w.stdout : d.text;
   const rs = touchedRulings(root, d);
   if (!rs.length) return body;
   let ctx = null;
@@ -1836,16 +1877,16 @@ function wideDiff(root, d) {
 // The rulings cited within WINDOW lines of each hunk of each touched file — read as near reads an edit (D7), a new file
 // whole — each once, in the order of the files and their lines. A deleted file has no lines to read.
 function touchedRulings(root, d) {
-  const found = [], ledgers = new Map(), tracked = new Set(d.tracked);
+  const found = [], ledgers = new Map(), untracked = new Set(d.untracked);
   for (const rf of d.touched) {
     const abs = path.join(root, rf), lp = findLedger(abs, root);
     if (!lp || !isFile(abs) || !isTextFile(abs)) continue;
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
     const ledger = ledgers.get(lp), lines = splitLines(normEol(readText(abs))), N = lines.length, fenced = fencedLines(lines);
     const ranges = [];
-    if (!tracked.has(rf)) ranges.push([1, N]);
+    if (!d.rels.length || untracked.has(rf)) ranges.push([1, N]);         // a new file whole, as near reads a Write
     else {
-      const h = sh('git', ['diff', 'HEAD', '--no-renames', '-U0', '--', rf], root);
+      const h = sh('git', ['diff', d.base, '--no-renames', '-U0', '--', rf], root);
       for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
         const c = Number(m[1]), n = m[2] === undefined ? 1 : Number(m[2]);
         ranges.push([Math.max(1, c - WINDOW), Math.min(N, c + Math.max(n, 1) - 1 + WINDOW)]);
@@ -1879,7 +1920,7 @@ function residueLines(st, sess, id) {
 }
 // The gate's decision (D10, D11), `gate`'s and `stop`'s alike: SKIP; SURFACE, with the session marked surfaced here; or JUDGE.
 function gateDecide(root, id) {
-  const st = loadState(root), d = governedDiff(root);
+  const st = loadState(root), d = governedDiff(root, sessionBase(root, st, id));   // from the session's base (D40)
   const sess = Object.assign(freshSession(), st.sessions[id] || {});
   if (d.empty || d.hash === st.lastPassHash) return { decision: 'SKIP', reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff', d, st, sess };   // D10
   if (sess.surfaced) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
@@ -2012,15 +2053,16 @@ function verdict(argv) {
   // A verdict is the judgement of the diff in front of the judge: a hash the working tree does not hash to is another diff's,
   // and counted here it would be counted again by the stop, which reads no record for its own, or reset the count at every
   // stop and never surface the session (D11, D38). It is refused, with the way to record it.
-  const now = governedDiff(root).hash, given = flag(argv, '--hash');
+  const now = governedDiff(root, sessionBase(root, loadState(root), id)).hash, given = flag(argv, '--hash');
   if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
   const hash = now;
+  const moveTo = v === 'PASS' && governedDiff(root, 'HEAD').empty ? headCommit(root) : null;   // a PASS on a committed tree: the diff since it runs from HEAD (D40)
   let sess;
   const st = withState(root, s => {
     sess = Object.assign(freshSession(), s.sessions[id] || {});
     s.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
     if (reason) s.last.reason = reason;
-    if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; }   // reset only on PASS (D11); a changed hash never resets
+    if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; if (moveTo) sess.base = moveTo; }   // reset only on PASS (D11); a changed hash never resets
     else { sess.blocks += 1; sess.history.push(failures); }
     s.sessions[id] = sess;
   });
@@ -2207,6 +2249,7 @@ const USAGE = [
   '  docket                              the witness: check, and spec-check when a UIUX.md sits beside a ledger',
   '  docket near                         stdin: an edit; stdout: what governs the region (silent when nothing does)',
   '  docket status                       the docket: last rulings, uncited rulings, pending addenda, last verdict, witness',
+  '                                      (--session-start, as the SessionStart hook: its input on stdin records the session\'s base)',
   '  docket check                        the seven checks (exit 1 on a failure)',
   '  docket spec-check [--all]           token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
   '  docket index                        the whole parse as JSON',
@@ -2232,13 +2275,13 @@ const USAGE = [
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
 const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait', '--permission', '--judge']);
-const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list']);
+const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
 const OPTIONS = {
   near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
-  query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger'],
+  query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger', '--session-start'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: ['--json'],
   gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: ['--json'], pack: ['--json', '--list'], transcript: ['--json', '--last'],
   stop: ['--json', '--session', '--wait', '--permission', '--judge'],

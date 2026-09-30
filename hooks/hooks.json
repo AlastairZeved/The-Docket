@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "DOCKET_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}\" node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" status",
+            "command": "DOCKET_PLUGIN_ROOT=\"${CLAUDE_PLUGIN_ROOT}\" node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" status --session-start",
             "timeout": 5
           }
         ]

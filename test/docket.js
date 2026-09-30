@@ -2317,7 +2317,7 @@ const SEC = String.fromCharCode(0xa7);
       let r = docket(['check', '--text-only']);
       ok('an option the subcommand does not read is a usage error naming its options, exit 2', r.code === 2 && /^check: --text-only is not an option of check; its options are --json$/m.test(r.err) && r.out === '', r.code + ' ' + r.err);
       r = docket(['status', '--session', 'abc']);
-      ok('…for a flag that takes a value too', r.code === 2 && /^status: --session is not an option of status; its options are --json, --ledger$/m.test(r.err), r.err);
+      ok('…for a flag that takes a value too', r.code === 2 && /^status: --session is not an option of status; its options are --json, --ledger, --session-start$/m.test(r.err), r.err);
       r = docket(['governs', 'D8', '--ledger', 'docs/DECISIONS.md']);
       ok('…while a subcommand’s own options pass', r.code === 0 && /^D8  /m.test(r.out), r.err);
     }
@@ -2553,10 +2553,10 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: the hash of the last PASS → SKIP', g.out === 'SKIP\n', g.out);
     g = docket(['gate', '--session', 's3'], { cwd: d });
     ok('gate: the last PASS hash skips for every session', g.out === 'SKIP\n', g.out);
-    // an untracked governed file is part of the diff: `+++ <path>` and its content
+    // an untracked governed file is part of the diff, read as if added: a new file's diff, as `git add` would show it (D40)
     fs.writeFileSync(path.join(d, 'test', 'fixture', 'new.js'), 'const n = 1; // R1\n');
     g = docket(['gate', '--session', 's4', '--diff'], { cwd: d });
-    ok('gate: an untracked governed file makes the diff non-empty and is printed as +++ path and its content', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js test\/fixture\/new\.js\n/.test(g.out) && /\+\+\+ test\/fixture\/new\.js\nconst n = 1; \/\/ R1\n/.test(g.out), g.out.slice(0, 200) + '…' + g.out.slice(-80));
+    ok('gate: an untracked governed file makes the diff non-empty and is printed as a new file’s diff, as `git add` would show it (D40)', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js test\/fixture\/new\.js\n/.test(g.out) && /\n--- \/dev\/null\n\+\+\+ b\/test\/fixture\/new\.js\n@@ -0,0 \+1 @@\n\+const n = 1; \/\/ R1\n/.test(g.out), g.out.slice(0, 200) + '…' + g.out.slice(-80));
     // the two refusals: a PASS with failures, a FAIL without
     v = docket(['verdict', 'PASS', '--hash', hash2, '--failures', '2', '--session', 's1'], { cwd: d });
     ok('verdict refuses a PASS that names failures', v.code === 2 && /a PASS has no located failures; this names 2/.test(v.err), v.code + ' ' + v.err);
@@ -2875,6 +2875,71 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(r0, { recursive: true, force: true });
   }
 
+  // ── the gate reads from the session's base (D40): a change committed before the stop is judged; a PASS on a committed tree
+  //    moves the base; a base the history no longer holds is dropped; the spec documents are in; an untracked file hashes as
+  //    added, and the repository's own index is never touched ──
+  {
+    const d = tempRepo();
+    const head = dir => sh('git', ['rev-parse', 'HEAD'], dir).stdout.trim();
+    const gc = (...a) => git(d, ['-c', 'user.name=m', '-c', 'user.email=m@m'].concat(a));
+    const ss = docket(['status', '--session-start'], { cwd: d, input: JSON.stringify({ session_id: 'cs', source: 'startup', cwd: d }) });
+    const sp = path.join(d, '.docket', 'verdict.json');
+    const state = () => { try { return JSON.parse(read(sp)); } catch (e) { return { sessions: {} }; } };   // a failure is an assertion that fails, never a thrown run
+    const baseOf = id => (state().sessions[id] || {}).base;
+    const setBase = (id, b) => { const x = state(); x.sessions[id] = Object.assign(x.sessions[id] || {}, { base: b }); fs.mkdirSync(path.dirname(sp), { recursive: true }); fs.writeFileSync(sp, JSON.stringify(x)); };
+    ok('status --session-start prints the docket as status does, and records the session’s base, HEAD (D40)', ss.code === 0 && /^Docket — /m.test(ss.out) && baseOf('cs') === head(d), ss.out + ss.err);
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const cs1 = 1; // R2\n');
+    gc('commit', '-qam', 'the work, committed');
+    let g = docket(['gate', '--session', 'cs'], { cwd: d });
+    ok('gate: a governed change committed before the stop is in the session’s diff → JUDGE naming it (D40)', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g.out), g.out);
+    g = docket(['gate', '--session', 'other'], { cwd: d });
+    ok('…while a session with no base reads from HEAD, as before: nothing uncommitted → SKIP', g.out === 'SKIP\n', g.out);
+    const hp = docket(['gate', '--session', 'cs'], { cwd: d }).out.split(' ')[1];
+    docket(['verdict', 'PASS', '--hash', hp, '--failures', '0', '--session', 'cs'], { cwd: d });
+    ok('verdict PASS on a committed tree moves the session’s base to HEAD, and the gate then SKIPs (D40)', baseOf('cs') === head(d) && docket(['gate', '--session', 'cs'], { cwd: d }).out === 'SKIP\n', JSON.stringify(state()));
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const cs2 = 2; // R2\n');
+    g = docket(['gate', '--session', 'cs', '--diff'], { cwd: d });
+    ok('…and the diff since that PASS is the next change alone', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n/.test(g.out) && /^\+const cs2 = 2; \/\/ R2$/m.test(g.out) && !/^\+const cs1 = 1; \/\/ R2$/m.test(g.out), g.out.slice(0, 400));
+    // a PASS while the change is uncommitted keeps the base: the passed change is still in the diff, and its hash holds
+    const hq = g.out.split(' ')[1];
+    docket(['verdict', 'PASS', '--hash', hq, '--failures', '0', '--session', 'cs'], { cwd: d });
+    const baseKept = baseOf('cs');
+    gc('commit', '-qam', 'the next change, committed after its PASS');
+    ok('verdict PASS on an uncommitted change keeps the base, and the change committed after it still hashes as passed → SKIP', !!baseKept && baseKept !== head(d) && docket(['gate', '--session', 'cs'], { cwd: d }).out === 'SKIP\n', baseKept + ' ' + head(d));
+    // a base the history no longer holds is dropped for HEAD
+    setBase('cs', 'f'.repeat(40));
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const cs3 = 3; // R2\n'); gc('commit', '-qam', 'committed again');
+    ok('gate: a base that is no ancestor of HEAD is dropped, and the session reads from HEAD: nothing uncommitted → SKIP', docket(['gate', '--session', 'cs'], { cwd: d }).out === 'SKIP\n', JSON.stringify(state()));
+    ok('status --session-start on a resumed session keeps its base; a cleared one takes HEAD', (() => {
+      const was = head(d); setBase('cs', was);
+      gc('commit', '-q', '--allow-empty', '-m', 'one more');
+      docket(['status', '--session-start'], { cwd: d, input: JSON.stringify({ session_id: 'cs', source: 'resume', cwd: d }) });
+      const kept = baseOf('cs');
+      docket(['status', '--session-start'], { cwd: d, input: JSON.stringify({ session_id: 'cs', source: 'clear', cwd: d }) });
+      return kept === was && kept !== head(d) && baseOf('cs') === head(d);
+    })(), JSON.stringify(state()));
+    fs.rmSync(d, { recursive: true, force: true });
+    // the spec documents beside a ledger are in the diff, as the ledger is
+    const d2 = tempRepo();
+    fs.writeFileSync(path.join(d2, 'test', 'fixture', 'UIUX.md'), read(path.join(d2, 'test', 'fixture', 'UIUX.md')).replace('#f4efe6', '#ffffff'));
+    g = docket(['gate', '--session', 'u'], { cwd: d2 });
+    ok('gate: a change to UIUX.md alone → JUDGE naming it: the spec documents beside a ledger are in the diff (D40)', /^JUDGE [0-9a-f]{64} test\/fixture\/UIUX\.md\n$/.test(g.out), g.out);
+    fs.rmSync(path.join(d2, 'test', 'fixture', 'PRD.md'));
+    g = docket(['gate', '--session', 'u'], { cwd: d2 });
+    ok('…and PRD.md deleted is in it, as a ledger deleted is', /^JUDGE [0-9a-f]{64} test\/fixture\/PRD\.md test\/fixture\/UIUX\.md\n$/.test(g.out), g.out);
+    fs.rmSync(d2, { recursive: true, force: true });
+    // an untracked governed file hashes as added
+    const d3 = tempRepo();
+    fs.writeFileSync(path.join(d3, 'test', 'fixture', 'fresh.js'), 'const fresh = 1; // R1\n');
+    const h1 = docket(['gate', '--session', 'f'], { cwd: d3 }).out.split(' ')[1];
+    const st1 = sh('git', ['status', '--porcelain'], d3).stdout;
+    git(d3, ['add', 'test/fixture/fresh.js']);
+    const h2 = docket(['gate', '--session', 'f'], { cwd: d3 }).out.split(' ')[1];
+    ok('gate: an untracked governed file hashes as added — the same hash before `git add` and after, so a PASS still holds (D40)', /^[0-9a-f]{64}$/.test(h1 || '') && h1 === h2, h1 + ' ' + h2);
+    ok('…and reading it touches the repository’s own index not at all: the file is still untracked after the gate', /^\?\? test\/fixture\/fresh\.js$/m.test(st1), st1);
+    fs.rmSync(d3, { recursive: true, force: true });
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {
@@ -3029,7 +3094,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…one or more: a judge given no time is no judge', r.code === 2 && /one or more/.test(r.err), r.err);
     r = docket(['stop', '--judge', judgeCmd('words')], { cwd: d, input: 'not json' });
     ok('stop with input that is not JSON reads no flag and no session, and still decides from the tree', block(r) && /recorded no verdict/.test(block(r)), r.out);
-    ok('stop writes one file of its own, the judge’s log, and a block with no record into the session’s count: the state holds what verdict, gate and that count wrote, and nothing else', Object.keys(JSON.parse(read(sp))).sort().join() === 'last,lastPassHash,sessions' && Object.values(JSON.parse(read(sp)).sessions).every(x => Object.keys(x).sort().join() === 'blocks,history,surfaced'), read(sp));
+    ok('stop writes one file of its own, the judge’s log, and a block with no record into the session’s count: the state holds what verdict, gate and that count wrote, and nothing else', Object.keys(JSON.parse(read(sp))).sort().join() === 'last,lastPassHash,sessions' && Object.values(JSON.parse(read(sp)).sessions).every(x => /^(base,)?blocks,history,surfaced$/.test(Object.keys(x).sort().join())), read(sp));
     forget(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const jj = 1; // R2\n');
     r = stopIn({ session_id: 'j1' }, ['--json', '--judge', judgeCmd('PASS')]);
     ok('stop --json: the judge’s PASS allows with {}, the judge having run', r.code === 0 && r.out === '{}\n' && started(), r.out + r.err);
@@ -3144,7 +3209,7 @@ const SEC = String.fromCharCode(0xa7);
     const stop = ((H.hooks.Stop || [])[0] || {}).hooks && H.hooks.Stop[0].hooks[0];
     ok('the Stop handler is one command, the core’s stop through the plugin root, quoted, with no matcher and no model: the stop starts the judge itself (D37)', stop && stop.type === 'command' && /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" stop --permission "Bash\(node \*docket\.js\*\)" --judge "/.test(stop.command) && !('model' in stop) && !('matcher' in H.hooks.Stop[0]), JSON.stringify(stop));
     ok('…with a timeout thirty seconds past the bound the core keeps on its judge, so the stop can outwait the judge and still answer (D37)', stop && stop.timeout === 630 && /^const STOP_WAIT = 600;/m.test(read(CORE)), stop && String(stop.timeout));
-    ok('the command hooks pass the plugin root to the core under the core’s own name, so the host’s variable stays in the binding (D13)', /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" near$/.test(H.hooks.PreToolUse[0].hooks[0].command) && /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" status$/.test(H.hooks.SessionStart[0].hooks[0].command) && !/CLAUDE_PLUGIN_ROOT/.test(read(CORE).replace(/\/\/[^\n]*/g, '')), H.hooks.PreToolUse[0].hooks[0].command);
+    ok('the command hooks pass the plugin root to the core under the core’s own name, so the host’s variable stays in the binding (D13)', /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" near$/.test(H.hooks.PreToolUse[0].hooks[0].command) && /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" status --session-start$/.test(H.hooks.SessionStart[0].hooks[0].command) && !/CLAUDE_PLUGIN_ROOT/.test(read(CORE).replace(/\/\/[^\n]*/g, '')), H.hooks.PreToolUse[0].hooks[0].command);
     // the hook's own command, run through a shell as the host runs it: the judge's command is a string inside a string, and
     // a stand-in for the host's command-line tool keeps each word it is given, the prompt, and where it ran
     {

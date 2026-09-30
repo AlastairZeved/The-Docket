@@ -27,12 +27,16 @@ else the core uses the git root. The stop's commands — `gate`, `verdict` and
 `stop` — use the git root either way, so the judge and the stop read one state
 whichever of them the host tells the project directory (D28).
 
-**2. At session start** — show `docket status` to the agent:
+**2. At session start** — show `docket status` to the agent, with the hook's
+input on stdin:
 
-    node bin/docket.js status
+    node bin/docket.js status --session-start
 
 It prints the docket: the last rulings, rulings cited nowhere, pending addenda,
 the last verdict and whether its session is surfaced, and the witness result.
+From the input it reads the session's identifier (`session_id`) and why it starts
+(`source`), and records the commit its diff runs from, so a change the maker
+commits before it stops is still judged (D40).
 
 **3. At "done"** — run the core's `stop` with the hook's input on stdin — a
 JSON object with the session identifier (`session_id`), the maker's transcript
