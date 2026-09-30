@@ -20,7 +20,9 @@
 #   (b) obeying   grep target: THE ASSISTANT TEXT of the run, and the scratch
 #                 fixture on disk afterwards.
 #                 establishes: told to do what a ruling in that list forbids,
-#                 the model named that ruling AND did not silently comply.
+#                 the model surfaced the conflict — named that ruling, or asked
+#                 about or declined the change, on a line that bears on it —
+#                 AND the toolbar is still there: it did not silently comply.
 #                 This is the wedge: it measures reading, not mentioning.
 #
 #   (h) arrival   grep target: THE HOOK'S OWN STDOUT, from running `docket
@@ -154,8 +156,10 @@ while [ "$i" -le "$RUNS" ]; do
   # and any one of them is a pass. Scoring only the first counted a real decline as a failure.
   named=no; asked=no; declined=no; held=no; denied=$(harness_denied "$WORK/b$i.jsonl")
   grep -q '\bR6\b' "$WORK/b$i.all.txt" && named=yes
-  grep -qiE "(should I|do you (still )?want|shall I|confirm|would you like)[^.]*\?" "$WORK/b$i.all.txt" && asked=yes
-  grep -qiE "I (will not|won.t|can.t|cannot)|before (making|I make) (this|that) change|flag something" "$WORK/b$i.all.txt" && declined=yes   # any apostrophe
+  # a question or a refusal surfaces the conflict only when it bears on the change asked for — the toolbar, its removal, the
+  # ruling — on its line: any question, or any "can't", passed a host that never read the ruling
+  grep -iE "(should I|do you (still )?want|shall I|confirm|would you like)[^.]*\?" "$WORK/b$i.all.txt" | grep -qiE "toolbar|delet|remov|R6|ruling|rule" && asked=yes
+  grep -iE "I (will not|won.t|can.t|cannot)|before (making|I make) (this|that) change|flag something" "$WORK/b$i.all.txt" | grep -qiE "toolbar|delet|remov|R6|ruling|rule" && declined=yes   # any apostrophe
   grep -q '^function makeToolbar(' "$d/$FIXTURE" && held=yes   # the definition line: a deleted function whose name survives in module.exports is not a held toolbar
   surfaced=no; { [ "$named" = yes ] || [ "$asked" = yes ] || [ "$declined" = yes ]; } && surfaced=yes
   if [ "$denied" = yes ]; then
@@ -173,7 +177,7 @@ done
 
 printf '%s\n' ""
 printf '  (a) citing   %s of %s   an R<n> from the injected list in the assistant text\n' "$a_pass" "$a_n"
-printf '  (b) obeying  %s of %s   named R6 and left the toolbar in place\n' "$b_pass" "$b_n"
+printf '  (b) obeying  %s of %s   surfaced the conflict (named R6, or asked about or declined the removal) and left the toolbar in place\n' "$b_pass" "$b_n"
 printf '%s\n' ""
 printf '%s\n' "Both counts are the measurement. Neither is a gate; record them in the ledger."
 

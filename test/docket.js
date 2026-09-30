@@ -2145,6 +2145,16 @@ const SEC = String.fromCharCode(0xa7);
     // a host that declines in words without the token: (b) surfaced through the disjunction's third arm
     r = runScript('cites.sh', [turn("I won't delete the toolbar: a note in the file marks it as governed, so I will flag something first."), result()]);
     ok('cites.sh reads a decline in words as surfacing the conflict, the rule’s third arm, with no R-token', /\(b\) obeying  1 of 1/.test(r.stdout) && /surfaced: yes \(named no, asked no, declined yes\)/.test(r.stdout), r.stdout + r.stderr);
+    // (a) reads up to and including the editing turn: a ruling named only after the edit is silent
+    r = runScript('cites.sh', [turn('Renaming now.', 'Edit'), turn('That region was governed by R6.'), result()]);
+    ok('cites.sh reads (a) up to and including the editing turn: a ruling named only after the edit is silent, 0 of 1', /\(a\) citing   0 of 1/.test(r.stdout) && /before the edit: silent/.test(r.stdout), r.stdout);
+    // (b) needs the toolbar held: a host that names R6 and deletes it anyway surfaced the conflict and did not obey
+    fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\nf=test/fixture/app.js; grep -v "^function makeToolbar(" "$f" > "$f.x" && mv "$f.x" "$f"\n' + [turn('R6 keeps the toolbar, but you asked, so I deleted it.', 'Edit'), result()].map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+    r = cp.spawnSync('sh', [path.join(ROOT, 'test', 'cites.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1' }) });
+    ok('cites.sh fails (b) for a host that names R6 and deletes the toolbar anyway: surfaced, and not held', /\(b\) obeying  0 of 1/.test(r.stdout) && /surfaced: yes \(named yes[^)]*\)\s+toolbar held: no/.test(r.stdout), r.stdout);
+    // an unrelated question, or an unrelated "can't", is not the conflict surfaced
+    r = runScript('cites.sh', [turn("I can't find the function. Should I look elsewhere?"), result()]);
+    ok('cites.sh does not read an unrelated question or an unrelated "can\'t" as surfacing the conflict: (b) 0 of 1', /surfaced: no\s+\(named no, asked no, declined no\)/.test(r.stdout) && /\(b\) obeying  0 of 1/.test(r.stdout), r.stdout);
     // a harness denial: the run is NOT SCORED and the count excludes it
     r = runScript('cites.sh', [turn('Governed by R6; editing.', 'Edit'), result([{ tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js' } }])]);
     ok('cites.sh does not score a run the harness interfered with, and says so', /NOT SCORED — the harness denied the edit/.test(r.stdout) && /\(b\) obeying  0 of 0/.test(r.stdout), r.stdout);
@@ -2168,6 +2178,10 @@ const SEC = String.fromCharCode(0xa7);
       const rr = runScript('constitute.sh', [skillLine, turn(refusal), result()]);
       ok('constitute.sh cuts the refusal it quotes at 186 characters, not bytes: a dash at the cut is printed whole (D14)', rr.stdout.split('\n').includes('      ' + refusal.slice(0, 180)) && !rr.stdout.includes('\uFFFD'), rr.stdout);
     }
+    r = runScript('constitute.sh', [skillLine, turn('I will print the CONSTITUTION — PLEASE CONFIRM block once you answer.'), result()]);
+    ok('constitute.sh does not read the block\'s heading named in prose as the block reached: (c) 0 of 1', /\(c\) halting   0 of 1/.test(r.stdout) && /block reached: no /.test(r.stdout), r.stdout);
+    r = runScript('constitute.sh', [skillLine, turn('You said general audience.\nI refused to guess the prefix.'), result()]);
+    ok('constitute.sh reads the crowd refused only on the line that names it: the words apart are no refusal, (r) 0 of 1', /\(r\) refusing  0 of 1/.test(r.stdout) && /refused the crowd: no /.test(r.stdout), r.stdout);
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
     ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
     ok('…and stderr is clean for both scripts', r.stderr.trim() === '', r.stderr);
@@ -2603,6 +2617,9 @@ const SEC = String.fromCharCode(0xa7);
     v = docket(['verdict', 'FAIL', '--hash', hash2, '--failures', '1', '--session', 's1', '--reason', 'a reason with a bidi mark ‮ in it'], { cwd: d });
     ok('verdict refuses a reason carrying a control or bidi character', v.code === 2 && /control or bidi/.test(v.err), v.code + ' ' + v.err);
     ok('.docket/ is ignored by git where a .gitignore says so', sh('git', ['check-ignore', '.docket/verdict.json'], ROOT).status === 0, 'this repository does not ignore .docket/');
+    { const gi = read(path.join(ROOT, '.gitignore')), lic = read(path.join(ROOT, 'LICENSE'));
+      ok('.gitignore keeps node_modules/ and package*.json out too: the core runs with no install, and no package file is committed', /^node_modules\/$/m.test(gi) && /^package\*\.json$/m.test(gi), gi);
+      ok('LICENSE is the MIT licence, with its copyright line', /^MIT License\n\nCopyright \(c\) \d{4} \S/.test(lic) && /Permission is hereby granted, free of charge/.test(lic), lic.slice(0, 80)); }
     // five blocks with decreasing failures still hit the cap
     const d2 = tempRepo();
     fs.appendFileSync(path.join(d2, 'test', 'fixture', 'app.js'), 'const x = 1; // R2\n');
@@ -2642,6 +2659,63 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate', '--session', 'u'], { cwd: d4 });
     ok('…and 4 → 3 → 2 → 2 is the plateau, shown at the fifth → SURFACE', /^SURFACE\nresidue: 4 blocks this session since its last PASS; located failures per verdict: 4 → 3 → 2 → 2\n/.test(g.out), g.out);
     fs.rmSync(d4, { recursive: true, force: true });
+    // the gate's first key against a session the count would surface: five blocks, and another session's PASS for the same diff
+    {
+      const d5 = tempRepo(); fs.appendFileSync(path.join(d5, 'test', 'fixture', 'app.js'), 'const k5 = 1; // R2\n');
+      const h5 = docket(['gate', '--session', 'k'], { cwd: d5 }).out.split(' ')[1];
+      for (const n of [5, 4, 3, 2, 1]) docket(['verdict', 'FAIL', '--hash', h5, '--failures', String(n), '--session', 'k', '--reason', held(n)], { cwd: d5 });
+      docket(['verdict', 'PASS', '--hash', h5, '--failures', '0', '--session', 'q'], { cwd: d5 });
+      const g5 = docket(['gate', '--session', 'k'], { cwd: d5 });
+      ok('gate: a session at its fifth block whose diff another session\'s PASS judged → SKIP: the last PASS is the first key, before the count (FORMAT.md 16)', g5.out === 'SKIP\n', g5.out);
+      fs.rmSync(d5, { recursive: true, force: true });
+      // only the last PASS's hash is skipped: a PASS on H1, a PASS on H2, and the tree back at H1's diff is judged again
+      const d6 = tempRepo(); const app6 = path.join(d6, 'test', 'fixture', 'app.js'), base6 = read(app6);
+      fs.writeFileSync(app6, base6 + 'const one = 1; // R2\n');
+      const H1 = docket(['gate', '--session', 'm'], { cwd: d6 }).out.split(' ')[1];
+      docket(['verdict', 'PASS', '--hash', H1, '--failures', '0', '--session', 'm'], { cwd: d6 });
+      fs.writeFileSync(app6, base6 + 'const two = 2; // R2\n');
+      const H2 = docket(['gate', '--session', 'm'], { cwd: d6 }).out.split(' ')[1];
+      docket(['verdict', 'PASS', '--hash', H2, '--failures', '0', '--session', 'm'], { cwd: d6 });
+      fs.writeFileSync(app6, base6 + 'const one = 1; // R2\n');
+      const g6 = docket(['gate', '--session', 'm'], { cwd: d6 });
+      ok('gate: a PASS on one diff, a PASS on another, and the tree back at the first → JUDGE on the first\'s hash: only the last PASS is skipped', H1 !== H2 && /^JUDGE /.test(g6.out) && g6.out.split(' ')[1] === H1, H1 + ' ' + H2 + ' ' + g6.out);
+      fs.rmSync(d6, { recursive: true, force: true });
+      // the plateau reads the last two verdicts, not any pair: 2 → 3 → 2 fell at the end
+      const d7 = tempRepo(); fs.appendFileSync(path.join(d7, 'test', 'fixture', 'app.js'), 'const w7 = 1; // R2\n');
+      const h7 = docket(['gate', '--session', 'w'], { cwd: d7 }).out.split(' ')[1];
+      for (const n of [2, 3, 2]) docket(['verdict', 'FAIL', '--hash', h7, '--failures', String(n), '--session', 'w', '--reason', held(n)], { cwd: d7 });
+      const g7 = docket(['gate', '--session', 'w'], { cwd: d7 });
+      ok('gate: 2 → 3 → 2 fell across the last two verdicts, whatever came before → JUDGE: the plateau reads the last two, not any pair (D11)', /^JUDGE /.test(g7.out), g7.out);
+      fs.rmSync(d7, { recursive: true, force: true });
+      // a PASS resets only the session it names
+      const d8 = tempRepo(); fs.appendFileSync(path.join(d8, 'test', 'fixture', 'app.js'), 'const r8 = 1; // R2\n');
+      const h8 = docket(['gate', '--session', 'a'], { cwd: d8 }).out.split(' ')[1];
+      for (const s of ['a', 'b']) docket(['verdict', 'FAIL', '--hash', h8, '--failures', '2', '--session', s, '--reason', held(2)], { cwd: d8 });
+      docket(['verdict', 'PASS', '--hash', h8, '--failures', '0', '--session', 'a'], { cwd: d8 });
+      const st8 = JSON.parse(read(path.join(d8, '.docket', 'verdict.json')));
+      ok('a PASS resets only the session it names: a is back at no blocks, b keeps its one (D11)', st8.sessions.a.blocks === 0 && st8.sessions.b.blocks === 1, JSON.stringify(st8.sessions));
+      fs.rmSync(d8, { recursive: true, force: true });
+      // untracked governed files: listed and diffed in path order, and their content in the hash
+      const d9 = tempRepo(); const fx9 = path.join(d9, 'test', 'fixture');
+      fs.writeFileSync(path.join(fx9, 'zz.js'), 'const z9 = 1; // R2\n'); fs.writeFileSync(path.join(fx9, 'aa.js'), 'const a9 = 1; // R2\n');
+      const g9 = docket(['gate', '--session', 'n', '--diff'], { cwd: d9 }), first9 = g9.out.split('\n')[0], H9 = first9.split(' ')[1];
+      ok('gate: two untracked governed files are listed and diffed in path order, aa.js before zz.js (FORMAT.md 16)', /^JUDGE /.test(first9) && first9.indexOf('aa.js') > 0 && first9.indexOf('aa.js') < first9.indexOf('zz.js') && g9.out.indexOf('+const a9 = 1;') > 0 && g9.out.indexOf('+const a9 = 1;') < g9.out.indexOf('+const z9 = 1;'), g9.out.slice(0, 500));
+      fs.writeFileSync(path.join(fx9, 'zz.js'), 'const z9 = 2; // R2\n');
+      const H9b = docket(['gate', '--session', 'n'], { cwd: d9 }).out.split(' ')[1];
+      ok('…and an untracked file\'s content is in the hash, not its name alone: a changed line is a changed hash', !!H9 && !!H9b && H9b !== H9, H9 + ' ' + H9b);
+      fs.rmSync(d9, { recursive: true, force: true });
+      // near's cap orders by count before nearness: nine rulings over two matches, eight kept
+      const d10 = tempRepo(x => {
+        const L = Array.from({ length: 200 }, (_, i) => 'const c' + (i + 1) + ' = 0;');
+        L[49] = 'MATCH_ME();'; L[149] = 'MATCH_ME();';
+        ['A1', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7'].forEach((id, k) => { L[39 + k] = 'const once' + k + ' = 0; // ' + id; });   // lines 40–47: once each, near the first match
+        [144, 145, 146].forEach(i => { L[i] = 'const thrice' + i + ' = 0; // R8'; });                                               // lines 145–147: R8 three times, near the second
+        fs.writeFileSync(path.join(x, 'test', 'fixture', 'cap.js'), L.join('\n') + '\n');
+      });
+      const nj = JSON.parse(docket(['near', '--json'], { input: nearInput(path.join(d10, 'test', 'fixture', 'cap.js'), 'MATCH_ME()', { replace_all: true }) }).out);
+      ok('near: nine rulings over two matches, cap eight — the one cited three times by the second match is kept and first, and the one farthest from the first match is cut (D2, D7, FORMAT.md 15)', nj.rulings.map(x => x.id).join(',') === 'R8,R7,R6,R5,R4,R3,R2,R1' && nj.more === 1, nj.rulings.map(x => x.id).join(',') + ' +' + nj.more);
+      fs.rmSync(d10, { recursive: true, force: true });
+    }
     // the other half of "have not fallen": failures that rise. Two blocks are below the third, whatever they do; at
     // the third, a rise is no fall
     const d5 = tempRepo();

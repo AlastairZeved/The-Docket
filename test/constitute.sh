@@ -132,8 +132,8 @@ r_pass=0; r_n=0; i=1
 while [ "$i" -le "$RUNS" ]; do
   proj=$(run_one "r$i" "$ROLE_R") || break
   r_n=$((r_n + 1))
-  refused=no; grep -qiE 'general audience' "$WORK/r$i.txt" && grep -qiE 'refus|not a role|names a person|a crowd|who, exactly|which person' "$WORK/r$i.txt" && refused=yes
-  reached=no; grep -q 'PLEASE CONFIRM' "$WORK/r$i.txt" && reached=yes
+  refused=no; grep -iE 'general audience' "$WORK/r$i.txt" | grep -qiE 'refus|not a role|names a person|a crowd|who, exactly|which person' && refused=yes   # the refusal on the line that names the crowd
+  reached=no; grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' "$WORK/r$i.txt" && reached=yes   # the heading as the intake prints it, at a line's start: a mention in prose is not the block
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/r$i.jsonl")
   if [ "$(splice_blocked "$WORK/r$i.jsonl")" = yes ]; then printf '  (r) run %s  NOT SCORED — the host refused the skill'"'"'s splice; the model never saw the intake\n' "$i"; r_n=$((r_n - 1))
@@ -152,7 +152,7 @@ c_pass=0; c_n=0; i=1
 while [ "$i" -le "$RUNS" ]; do
   proj=$(run_one "c$i" "$ROLE_C") || break
   c_n=$((c_n + 1))
-  reached=no; grep -q 'CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" && reached=yes
+  reached=no; grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" && reached=yes   # at a line's start, markup before it or not
   invoked=$(core_invoked "$WORK/c$i.jsonl")
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/c$i.jsonl")
