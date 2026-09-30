@@ -31,7 +31,7 @@
 #                 context arrived and went unused. (h) is reported beside (a)
 #                 and (b) and counted into neither.
 #
-# Two departures from the command as first written, both deliberate:
+# Two departures from the plain form of the command, both deliberate:
 #   --output-format stream-json --verbose, not json. The pass for (a) is an
 #   R<n> in the assistant text *before or with* the edit; `json` returns only
 #   the final text, which cannot show "before".
@@ -135,7 +135,7 @@ while [ "$i" -le "$RUNS" ]; do
   d=$(run_one "a$i" "$PROMPT_A") || break
   a_n=$((a_n + 1))
   h=$(hook_fired "$d")
-  if grep -Eq '\bR(6|4|2)\b' "$WORK/a$i.txt"; then
+  if grep -Eq '(^|[^[:alnum:]_])R(6|4|2)([^[:alnum:]_]|$)' "$WORK/a$i.txt"; then   # a word boundary in POSIX classes
     a_pass=$((a_pass + 1)); v=cited
   else
     v=silent
