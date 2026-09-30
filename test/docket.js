@@ -3385,7 +3385,7 @@ const SEC = String.fromCharCode(0xa7);
     const H = JSON.parse(read(path.join(ROOT, 'hooks', 'hooks.json')));
     const stop = ((H.hooks.Stop || [])[0] || {}).hooks && H.hooks.Stop[0].hooks[0];
     ok('the Stop handler is one command, the core’s stop through the plugin root, quoted, with no matcher and no model: the stop starts the judge itself (D37)', stop && stop.type === 'command' && /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" stop --permission "Bash\(node \*docket\.js\*\)" --judge "/.test(stop.command) && !('model' in stop) && !('matcher' in H.hooks.Stop[0]), JSON.stringify(stop));
-    ok('…with a timeout thirty seconds past the bound the core keeps on its judge, so the stop can outwait the judge and still answer (D37)', stop && stop.timeout === 630 && /^const STOP_WAIT = 600;/m.test(read(CORE)), stop && String(stop.timeout));
+    ok('…with a timeout thirty seconds past the bound the core keeps on its judge, so the stop can outwait the judge and still answer (D37)', stop && stop.timeout === 730 && /^const STOP_WAIT = 700;/m.test(read(CORE)), stop && String(stop.timeout));
     ok('the command hooks pass the plugin root to the core under the core’s own name, so the host’s variable stays in the binding (D13)', /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" near$/.test(H.hooks.PreToolUse[0].hooks[0].command) && /^DOCKET_PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT\}" node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/docket\.js" status --session-start$/.test(H.hooks.SessionStart[0].hooks[0].command) && !/CLAUDE_PLUGIN_ROOT/.test(read(CORE).replace(/\/\/[^\n]*/g, '')), H.hooks.PreToolUse[0].hooks[0].command);
     // the hook's own command, run through a shell as the host runs it: the judge's command is a string inside a string, and
     // a stand-in for the host's command-line tool keeps each word it is given, the prompt, and where it ran
@@ -3515,7 +3515,7 @@ const SEC = String.fromCharCode(0xa7);
     const NUM5 = 'code · F3 · app.js:12 · R5 ruled three sections; this diff makes four with no entry · reason holds: three tabs still read three sections (app.js:14) · change the code, or supersede R5 through /rule';
     const NUM5S = 'code · F3 · app.js:12 · R5 ruled three tabs because the lot had three sections, and it has four · reason gone: the lot has four sections (app.js:12) · /rule --addendum R5 "the lot has four sections"';
     const NUM5X = 'code · F3 · app.js:12 · R5 ruled three sections; this diff makes four · reason holds: three tabs still read three sections (app.js:14) · /rule --addendum R5';
-    const SILENT = 'The docket’s judge recorded no verdict for this stop’s diff (app.js): it was stopped at the bound, 600 seconds, so this stop cannot stand';
+    const SILENT = 'The docket’s judge recorded no verdict for this stop’s diff (app.js): it was stopped at the bound, 700 seconds, so this stop cannot stand';
     const MAKER_VERDICT = toolTurn('Bash', { command: 'node /p/bin/docket.js verdict PASS --hash x --failures 0' });
     const EDIT_DENIED = [{ tool_name: 'Edit', tool_input: { file_path: 'app.js' } }];
     // the stub answers by the prompt it is given (the fifth scenario is a slash command)

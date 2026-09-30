@@ -41,7 +41,7 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since its last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
-const STOP_WAIT = 600;    // D14, logged in D19 and D37: the seconds `stop` gives the judge it starts before it stops it — more than twice the longest judge measured at a stop
+const STOP_WAIT = 700;    // D14, logged in D19 and D37: the seconds `stop` gives the judge it starts before it stops it — more than twice the longest judge measured at a stop (330, D37's addendum)
 const SNIFF_BYTES = 8000;   // git's own binary sniff: a file with a NUL in its first 8000 bytes is not text
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
 const GLANCE = 100;       // D14: one glance — governs cuts a cited line here, and status each pending addendum; the ledger holds the rest
@@ -62,7 +62,7 @@ function out(s) { const t = plain(s); process.stdout.write(t.endsWith('\n') ? t 
 process.stdout.on('error', e => { if (e && e.code === 'EPIPE') process.exit(0); throw e; });
 let TRAIL = null;                                                      // the trail this run wrote to, when DOCKET_TRAIL is set (D25)
 function die(msg, code) {
-  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + plain(msg).replace(/\s+/g, ' ').slice(0, 400) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
+  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + plain(msg).replace(/\s+/g, ' ').slice(0, 400 /* a refusal's first sentence: the line and the rule (D14's addendum) */) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
   process.stderr.write(plain(msg) + '\n'); process.exit(code === undefined ? 2 : code);
 }
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
@@ -72,7 +72,7 @@ function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return 
 function isDir(p) { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } }
 function today() { return process.env.DOCKET_TODAY || new Date().toISOString().slice(0, 10); }
 function sh(cmd, args, cwd) {
-  const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });   // 256 MiB: past any diff, blame or listing a session makes (D14's addendum)
   return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 function gitRoot(dir) {
@@ -2191,7 +2191,7 @@ function stop(argv) {
   const cwd = typeof input.cwd === 'string' && isDir(input.cwd) ? input.cwd : process.cwd();
   const start = Date.now();
   // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, input), env: Object.assign({}, process.env, { DOCKET_SESSION: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });
+  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, input), env: Object.assign({}, process.env, { DOCKET_SESSION: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
   const secs = Math.round((Date.now() - start) / 1000);
   const ended = r.error && r.error.code === 'ETIMEDOUT' ? 'was stopped at the bound, ' + waitS + ' second' + (waitS === 1 ? '' : 's')
     : r.error ? 'could not be started (' + (r.error.code || r.error.message) + ')'
@@ -2409,7 +2409,7 @@ function leaveTrail() {
   if (!process.env.DOCKET_TRAIL) return;
   try {
     const d = path.join(stopRoot(process.cwd()), '.docket');         // with the state it measures (D28)
-    if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
+    if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 /* what ran, not a body (D14's addendum) */ ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
   } catch (e) { /* the trail is the measurement's; the command runs whatever it does */ }
 }
 function main() {

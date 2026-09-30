@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/docket.js\" stop --permission \"Bash(node *docket.js*)\" --judge \"claude -p --no-session-persistence --settings '{\\\"disableAllHooks\\\":true}' --allowedTools 'Bash(node *docket.js*)' --disallowedTools 'Write Edit NotebookEdit' --max-turns 60\"",
-            "timeout": 630
+            "timeout": 730
           }
         ]
       }
