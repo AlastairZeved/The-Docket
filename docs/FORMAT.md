@@ -514,7 +514,8 @@ so a host that reads that shape can inject it; otherwise the text is printed
 bare. Silent means nothing is printed at all — no wrapper with an empty context —
 and the exit code is 0, with or without a `hook_event_name`.
 
-An `old_string` of more than one line covers the lines from its first to its last;
+An `old_string` of more than one line covers the lines from its first to its last
+(a final newline ends its last line and opens none, as a file's does, 1);
 the window is ±20 around the whole of it, the header names the span as
 `file:first–last`, and a line inside the span is at distance 0 — the rulings
 cited in the text being replaced are what the edit most needs to know.

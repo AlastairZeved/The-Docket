@@ -19,8 +19,8 @@ function ok(name, cond, detail) {
 function outerEnv() { const e = Object.assign({}, process.env); delete e.DOCKET_BASE; return e; }
 function docket(args, opts) {
   opts = opts || {};
-  const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}) });
-  return { code: r.status, out: r.stdout, err: r.stderr };
+  const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}), timeout: opts.timeout });
+  return { code: r.status, out: r.stdout, err: r.stderr, signal: r.signal };
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
 function read(p) { return fs.readFileSync(p, 'utf8'); }
@@ -2298,6 +2298,16 @@ const SEC = String.fromCharCode(0xa7);
       // every ruling cited inside the span is at distance 0, so they rank by line — R6 (41) to R8 (100) — and R2, cited above the span, last
       ok('…with the rulings inside the span ranked by their line, all at distance 0, and the one cited above the span last', j.rulings.map(x => x.id).join(',') === 'R6,R4,R7,R3,R8,R2', j.rulings.map(x => x.id + '@' + x.line).join(','));
       ok('a one-line old_string is unchanged by the span rule: near-41.txt byte for byte', docket(['near'], { input: nearInput(APP, 'makeToolbar(') }).out === expected('near-41.txt'), 'differs');
+      const rn = docket(['near'], { input: nearInput(APP, needle + '\n') });
+      ok('…and the same 60 lines with their final newline cover the same 60: a final newline ends the last line and opens none (FORMAT.md 15)', rn.out === r.out, rn.out.split('\n')[0]);
+    }
+    // near: a replace_all over a long file reads the file once, not once per match — inside the hook's 5 s
+    {
+      const dir = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'long.js'), Array.from({ length: 5000 }, (_, i) => '  const value_' + i + ' = compute(a, b, c, d); // R2').join('\n') + '\n'));
+      const t0 = Date.now();
+      const r = docket(['near'], { input: nearInput(path.join(dir, 'test', 'fixture', 'long.js'), ' ', { replace_all: true }), timeout: 5000 });
+      ok('near: a replace_all of a space over 5,000 lines answers inside the hook\'s 5 s, one reading of the file', r.code === 0 && r.signal === null && /^  R2  /m.test(r.out), (r.signal || '') + ' ' + (Date.now() - t0) + ' ms');
+      fs.rmSync(dir, { recursive: true, force: true });
     }
     // spec-check (a): one matching declaration is a match; a second value is reported, not failed; a comment is not a declaration
     {

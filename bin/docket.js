@@ -562,11 +562,16 @@ function noLedgerMessage(cwd, root) {
 
 // ─── 5. near: the pre-edit window (D1, D2, D7) ──────────────────────────────
 
-function lineOfIndex(text, idx) { let n = 1; for (let i = 0; i < idx; i++) if (text.charCodeAt(i) === 10) n++; return n; }
+// Each match's line, counted forward from the last match: the matches come in order, so the file is read once however
+// many there are — a replace_all over a long file stays inside the hook's 5 s (hooks.json)
 function findAll(text, needle) {
   const at = [];
-  let i = 0;
-  for (;;) { const j = text.indexOf(needle, i); if (j < 0) break; at.push(lineOfIndex(text, j)); i = j + needle.length; }
+  let i = 0, from = 0, line = 1;
+  for (;;) {
+    const j = text.indexOf(needle, i); if (j < 0) break;
+    for (let k = from; k < j; k++) if (text.charCodeAt(k) === 10) line++;
+    from = j; at.push(line); i = j + needle.length;
+  }
   return at;
 }
 function near(argv) {
@@ -600,7 +605,8 @@ function near(argv) {
     if (matches.length === 0) return 0;                                 // zero: silent
     if (matches.length > 1 && ti.replace_all !== true) return 0;        // D7 (1): the tool will reject; silent
     anchors = uniq(matches);                                            // two matches on one line are one anchor: the line is named once
-    span = normEol(needle).split('\n').length - 1;                     // the edit covers these lines too; the window is ±WINDOW around the whole of it
+    span = normEol(needle).replace(/\n$/, '').split('\n').length - 1;   // the edit covers these lines too; the window is ±WINDOW around the whole of it;
+                                                                       // a final newline ends the last line and opens none, as splitLines reads a file
     windows = anchors.map(l => [Math.max(1, l - WINDOW), Math.min(N, l + span + WINDOW)]);
     mode = matches.length === 1 ? 'one' : 'many';
   } else return 0;
