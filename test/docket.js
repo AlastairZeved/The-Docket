@@ -2472,8 +2472,8 @@ const SEC = String.fromCharCode(0xa7);
 {
   const git = (dir, args) => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(args), dir);
   // one located failure per line, in the protocol's form; a code line that names a ruling answers the reason question (D23)
-  const held = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (262 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (test/fixture/app.js:40) · change the code').join('\n');
-  const gone = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (262 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only · reason gone: nothing reads a position now (test/fixture/app.js:40) · /rule --addendum ' + (id || 'R2')).join('\n');
+  const held = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (41 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (test/fixture/app.js:40) · change the code').join('\n');
+  const gone = (n, id) => Array.from({ length: n }, (_, i) => 'code · F3 · test/fixture/app.js:' + (41 + i) + ' · ' + (id || 'R2') + ' keeps positions read-only · reason gone: nothing reads a position now (test/fixture/app.js:40) · /rule --addendum ' + (id || 'R2')).join('\n');
   // ── the residue's last verdict is `last`, one for the repository: one another session recorded says so (FORMAT.md 16) ──
   {
     const d = tempRepo();
@@ -2534,7 +2534,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: two flat blocks are not yet a plateau — the test is made from the fourth stop on → JUDGE', /^JUDGE /.test(g.out), g.out);
     docket(['verdict', 'STALE', '--hash', hash2, '--failures', '3', '--session', 's1', '--reason', gone(3)], { cwd: d });
     g = docket(['gate', '--session', 's1'], { cwd: d });
-    ok('gate: after the third block with failures not decreasing → SURFACE with the residue, the last verdict’s reason lines, and the relay line', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: STALE at \S+ \(3 located failures\)\n(?:  code · F3 · test\/fixture\/app\.js:26[234] · R2 keeps positions read-only · reason gone: nothing reads a position now \(test\/fixture\/app\.js:40\) · \/rule --addendum R2\n){3}report this to the user verbatim, then stop again\n$/.test(g.out), g.out);
+    ok('gate: after the third block with failures not decreasing → SURFACE with the residue, the last verdict’s reason lines, and the relay line', /^SURFACE\nresidue: 3 blocks this session since the last PASS; located failures per verdict: 3 → 3 → 3\nlast verdict: STALE at \S+ \(3 located failures\)\n(?:  code · F3 · test\/fixture\/app\.js:4[123] · R2 keeps positions read-only · reason gone: nothing reads a position now \(test\/fixture\/app\.js:40\) · \/rule --addendum R2\n){3}report this to the user verbatim, then stop again\n$/.test(g.out), g.out);
     g = docket(['gate', '--session', 's1'], { cwd: d });
     ok('gate: a surfaced session answers SKIP from then on', g.out === 'SKIP\n', g.out);
     ok('…and gate --json says why', JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out).reason === 'this session is surfaced until a PASS or a new session', 'no reason');
@@ -2713,7 +2713,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and one whose --failures is not the number of its lines', v.code === 2 && /--failures 2 but --reason carries 1 line/.test(v.err), v.err);
     v = vd('FAIL', 1, 'the toolbar change looks wrong, try again');
     ok('…and a line that is not in the located form', v.code === 2 && /line 1 is not a located failure/.test(v.err), v.err);
-    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only · change the code');
+    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only · change the code');
     ok('…and a code line that names a ruling and says nothing of its reason: step 4’s question is answered in the line (D23)', v.code === 2 && /line 1 names a ruling and says nothing of its reason/.test(v.err), v.err);
     v = vd('STALE', 1, held(1));
     ok('…and a STALE whose line says the reason holds: STALE is the verdict only when every failure is a stale one', v.code === 2 && /STALE is the verdict only when every failure is a stale one/.test(v.err), v.err);
@@ -2721,10 +2721,10 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and a STALE whose lines disagree, one stale and one whose reason holds: one holding line makes it a FAIL, and the refusal counts it', v.code === 2 && /STALE is the verdict only when every failure is a stale one \(protocol step 6\); 1 of these 2 is not/.test(v.err), v.err);
     v = vd('FAIL', 1, gone(1));
     ok('…and a FAIL whose every line is a stale one: that verdict is STALE', v.code === 2 && /every failure here is a stale one: the verdict is STALE, not FAIL/.test(v.err), v.err);
-    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only · reason holds, and reason gone · change the code');
+    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only · reason holds, and reason gone · change the code');
     ok('…and a line that says both', v.code === 2 && /says both that the reason holds and that it is gone/.test(v.err), v.err);
     // the answer carries its evidence (D27): a field of its own, the premise, and a line that shows it
-    const ans = a => 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only; this diff writes one · ' + a + ' · change the code';
+    const ans = a => 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only; this diff writes one · ' + a + ' · change the code';
     v = vd('FAIL', 1, ans('reason holds'));
     ok('verdict refuses a bare "reason holds": the answer carries the premise and the line that shows it (D27)', v.code === 2 && /line 1 answers the reason question without its evidence/.test(v.err), v.err);
     v = vd('FAIL', 1, ans('reason holds: (test/fixture/app.js:40)'));
@@ -2758,7 +2758,7 @@ const SEC = String.fromCharCode(0xa7);
       ok('…while a link within the tree reads the file it resolves to, and the answer is recorded', lr.code === 0, lr.code + ' ' + lr.err);
       fs.rmSync(ld, { recursive: true, force: true });
     }
-    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only; reason holds: said inside what the diff breaks (test/fixture/app.js:40) · change the code');
+    v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only; reason holds: said inside what the diff breaks (test/fixture/app.js:40) · change the code');
     ok('…and an answer that is not a field of its own', v.code === 2 && /without its evidence/.test(v.err), v.err);
     ok('…and a refusal quotes the field it could not read', /without its evidence \(read: "reason holds: the lot still reads positions"\)/.test(vd('FAIL', 1, ans('reason holds: the lot still reads positions')).err), 'no quote');
     // what a judge writes, read: a range, a list, a dash for the colon, the line before the words, a line the diff took away
@@ -2847,7 +2847,7 @@ const SEC = String.fromCharCode(0xa7);
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const e = 1; // R2\n');
     fs.unlinkSync(path.join(d, 'test', 'fixture', 'styles.css'));
     const H = docket(['gate', '--session', 'e'], { cwd: d }).out.split(' ')[1];
-    const v = docket(['verdict', 'STALE', '--hash', H, '--failures', '1', '--session', 'e', '--reason', 'code · F3 · test/fixture/app.js:262 · R2 keeps positions read-only · reason gone: the stylesheet that read them is deleted (test/fixture/styles.css:3) · /rule --addendum R2 "nothing reads a position"'], { cwd: d });
+    const v = docket(['verdict', 'STALE', '--hash', H, '--failures', '1', '--session', 'e', '--reason', 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only · reason gone: the stylesheet that read them is deleted (test/fixture/styles.css:3) · /rule --addendum R2 "nothing reads a position"'], { cwd: d });
     ok('verdict takes as evidence a line of a file the diff deleted, read as it was at HEAD (D27)', v.code === 0 && /verdict recorded: STALE/.test(v.out), v.err);
     fs.rmSync(d, { recursive: true, force: true });
   }
@@ -2940,6 +2940,31 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(d3, { recursive: true, force: true });
   }
 
+  // ── a failure's own location is held as its evidence is, and a path in backticks may hold a space or a parenthesis (D23) ──
+  {
+    const d = tempRepo(dir => { const g = path.join(dir, 'test', 'fixture', '(auth) x'); fs.mkdirSync(g); fs.writeFileSync(path.join(g, 'login.js'), Array.from({ length: 50 }, (_, i) => 'const l' + (i + 1) + ' = ' + (i + 1) + '; // R2').join('\n') + '\n'); });
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const loc = 1; // R2\n');
+    const H = docket(['gate', '--session', 'l'], { cwd: d }).out.split(' ')[1];
+    const rec = (v, line) => docket(['verdict', v, '--hash', H, '--failures', '1', '--session', 'l', '--reason', line], { cwd: d });
+    for (const [what, where] of [['words where the location goes', 'nowhere in particular'], ['a file that does not exist', 'nosuch.css:3'], ['a line past the file’s end', 'test/fixture/styles.css:999']]) {
+      const r = rec('FAIL', 'design · F5 · ' + where + ' · the tokens drift · fix the token');
+      ok('verdict refuses a failure located at ' + what + ': its own location is held as evidence is, exit 2, naming it (D23)', r.code === 2 && r.err.includes(where) && /locates its failure/.test(r.err), r.err);
+    }
+    let r = rec('FAIL', 'code · F2 · `test/fixture/(auth) x/login.js`:46 · the check fails · run it');
+    ok('verdict records a failure located in a path with a space and a parenthesis, written in backticks (D23)', r.code === 0, r.err);
+    r = rec('FAIL', 'code · F3 · `test/fixture/(auth) x/login.js`:46 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (`test/fixture/(auth) x/login.js`:40) · change the code');
+    ok('…and an answer whose evidence is such a path, in backticks inside its parentheses', r.code === 0, r.err);
+    r = rec('FAIL', 'code · F2 · test/fixture/(auth) x/login.js:46 · the check fails · run it');
+    ok('…while the same path bare is not one path: refused, and the refusal says how to write it', r.code === 2 && /backticks/.test(r.err), r.err);
+    fs.rmSync(d, { recursive: true, force: true });
+    // the state's directory a file: named and refused, never a stack trace
+    const e = tempRepo(); fs.appendFileSync(path.join(e, 'test', 'fixture', 'app.js'), 'const e1 = 1; // R2\n');
+    fs.writeFileSync(path.join(e, '.docket'), 'x\n');
+    const pv = docket(['verdict', 'PASS', '--failures', '0', '--session', 'e'], { cwd: e });
+    ok('verdict with .docket a file refuses, exit 2, naming it, with no stack trace', pv.code === 2 && /\.docket is a file, not a directory/.test(pv.err) && !/\n\s+at /.test(pv.err), pv.err);
+    fs.rmSync(e, { recursive: true, force: true });
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {
@@ -3021,7 +3046,7 @@ const SEC = String.fromCharCode(0xa7);
       ok('stop: a judge still running at the bound is stopped there, and the stop says so rather than wait on it', block(r) && /: it was stopped at the bound, 1 second, so this stop cannot stand/.test(block(r)) && took < 10000, took + 'ms ' + r.out); }
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
     b = block(r);
-    ok('stop: the judge’s FAIL is the block, with the recorded lines and the route through the law (D35)', r.code === 0 && b && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:262 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions \(test\/fixture\/app\.js:40\) · change the code\nChange the code, or supersede the ruling through \/rule\./.test(b), r.out);
+    ok('stop: the judge’s FAIL is the block, with the recorded lines and the route through the law (D35)', r.code === 0 && b && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:41 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions \(test\/fixture\/app\.js:40\) · change the code\nChange the code, or supersede the ruling through \/rule\./.test(b), r.out);
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('STALE')], { JUDGE_REASON: gone(1) });
     ok('…and its STALE the same way, with the addendum route', /recorded STALE for this stop/.test(r.out) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
     r = stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('words')]);

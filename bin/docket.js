@@ -1327,6 +1327,7 @@ function saveState(root, st) { const p = statePath(root); fs.mkdirSync(path.dirn
 // note, because a stop that died on it would be allowed unjudged.
 function withState(root, change) {
   const p = statePath(root), lockPath = p + '.lock', mine = 'docket ' + process.pid + '\n';
+  if (exists(path.dirname(p)) && !isDir(path.dirname(p))) throw Object.assign(new Error(rel(root, path.dirname(p)) + ' is a file, not a directory: the state has nowhere to go; move it aside'), { docket: true });
   fs.mkdirSync(path.dirname(p), { recursive: true });
   let fd = null, waited = 0;
   while (fd === null) {
@@ -1927,7 +1928,9 @@ function gateDecide(root, id) {
   const h = sess.history;
   const stuck = sess.blocks >= THIRD_CYCLE && h.length >= 2 && h[h.length - 1] >= h[h.length - 2];   // failures not falling after the third block
   if (sess.blocks >= BLOCK_CAP || stuck) {                           // D11: the mark made under the state's lock
-    const now = withState(root, s => { s.sessions[id] = Object.assign(freshSession(), s.sessions[id] || {}, { surfaced: true }); });
+    let now;
+    try { now = withState(root, s => { s.sessions[id] = Object.assign(freshSession(), s.sessions[id] || {}, { surfaced: true }); }); }
+    catch (e) { if (!e.docket) throw e; now = st; now.sessions[id] = Object.assign(freshSession(), st.sessions[id] || {}, { surfaced: true }); }   // the answer stands; the mark has nowhere to go
     return { decision: 'SURFACE', d, st: now, sess: now.sessions[id] };
   }
   return { decision: 'JUDGE', d, st, sess };
@@ -1962,14 +1965,16 @@ const LOCATED_SEP = ' · ';
 // The answer's field: the token, the premise in words, and its line in parentheses anywhere in the field — one
 // location or several, each `<file>:<line>` or `<file>:<first>-<last>`, with words beside them if the judge adds
 // some, each a line of the file as the diff leaves it or as it stood at HEAD.
-const LOC_RE = /([^\s(),;]+?):(\d+)(?:\s*[-–]\s*(\d+))?/g;
+// A path in backticks is one path, a space or a parenthesis in it or not: `app/(group)/login.js`:46 (D23)
+const LOC_RE = /(?:`([^`\n]+)`|([^\s(),;`]+?)):(\d+)(?:\s*[-–]\s*(\d+))?/g;
+const locPath = L => (L[1] !== undefined ? L[1] : L[2]).trim();
 function lineCount(text) { return text === null ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0); }
 // A location is the file it resolves to, as FORMAT.md 1 reads a link for the walk: a link out of the tree is not the tree's
 // file, and a link to a ledger is that ledger. A path that resolves to nothing is kept as written (read at HEAD, or refused).
 function realOr(p) { try { return fs.realpathSync(p); } catch (e) { return p; } }
 function evidenceOf(root, fields, at) {
   const a = fields.map(x => x.trim()).find(x => /^reason (?:holds|gone)\b/i.test(x));
-  const groups = a ? [...a.matchAll(/\(([^()]*)\)/g)].filter(g => /:\d/.test(g[1])) : [];
+  const groups = a ? [...a.matchAll(/\(((?:`[^`\n]*`|[^()`])*)\)/g)].filter(g => /:\d/.test(g[1])) : [];   // a backticked path may hold a parenthesis
   const g = groups.length ? groups[groups.length - 1] : null;
   const premise = a && g ? a.replace(g[0], ' ').replace(/^reason (?:holds|gone)\b[\s:—–-]*/i, '').trim() : '';
   const locs = g ? [...g[1].trim().matchAll(LOC_RE)] : [], ev = [];
@@ -1980,7 +1985,7 @@ function evidenceOf(root, fields, at) {
 // A location held as evidence (D27): a line of a file in the repository, before or after the diff, the file its path
 // resolves to (FORMAT.md 1). `lead` says what points there, so a refusal names it.
 function heldLine(root, L, lead) {
-  const p = L[1].trim(), first = Number(L[2]), last = L[3] === undefined ? first : Number(L[3]), abs = path.resolve(root, p), where = L[0].trim();
+  const p = locPath(L), first = Number(L[3]), last = L[4] === undefined ? first : Number(L[4]), abs = path.resolve(root, p), where = L[0].trim();
   if (!isWithin(abs, root)) die(lead + ' outside the repository: ' + where, 2);
   const real = realOr(abs);
   if (!isWithin(real, realOr(root))) die(lead + ' outside the repository: ' + where + ' is a link to a file outside it (FORMAT.md 1)', 2);
@@ -1988,7 +1993,9 @@ function heldLine(root, L, lead) {
   if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
   const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
   const count = Math.max(lineCount(now), lineCount(then));
-  if (!(first >= 1 && last >= first && last <= count)) die(lead + ' at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)', 2);
+  // a bare path that follows a space or a parenthesis may be the tail of one that holds them: the refusal says how to write it whole
+  const cut = L[1] === undefined && L.index > 0 && /[\s(]/.test(L.input[L.index - 1]) ? '; a path with a space or a parenthesis is written in backticks, `like this.js`:12 (D23)' : '';
+  if (!(first >= 1 && last >= first && last <= count)) die(lead + ' at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)' + cut, 2);
   return { abs: real, first, last };
 }
 // An answer's evidence is never its own claim (D36): a "reason holds" whose every location lies in the entry of a ruling
@@ -1999,7 +2006,7 @@ function ownClaim(root, f, ev, at) {
   const named = new Set(f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []);
   const entries = [];
   for (const [lp, L] of loadContext(root).ledgers) for (const r of L.rulings) if (named.has(r.id)) entries.push({ abs: realOr(path.resolve(lp)), first: r.line, last: r.endLine, id: r.id, lp });
-  const own = [...String(f[2]).matchAll(LOC_RE)].map(L => ({ abs: realOr(path.resolve(root, L[1].trim())), first: Number(L[2]), last: L[3] === undefined ? Number(L[2]) : Number(L[3]) }));   // compared as the files they resolve to, the evidence's included
+  const own = [...String(f[2]).matchAll(LOC_RE)].map(L => ({ abs: realOr(path.resolve(root, locPath(L))), first: Number(L[3]), last: L[4] === undefined ? Number(L[3]) : Number(L[4]) }));   // compared as the files they resolve to, the evidence's included
   const inside = (e, s) => e.abs === s.abs && e.first >= s.first && e.last <= s.last;
   const why = ev.map(e => {
     const en = entries.find(s => inside(e, s));
@@ -2032,6 +2039,11 @@ function holdToLines(root, v, failures, lines) {
       for (const L of own) heldLine(root, L, at + ' says cite stale, whose evidence is its own location, and points');
     }
     if (gone) stale += 1;
+    // the failure's own location is held as its evidence is (D23, D27): a line of a file in the repository, before or after the
+    // diff — read after the answer, so a line that skipped the question is told so first
+    const own = [...String(f[2]).matchAll(LOC_RE)];
+    if (!own.length) die(at + ' locates its failure at "' + f[2] + '", which names no line of a file: the third field is <file:line> — a range <file:first-last>, or several with commas, will do, and a path with a space or a parenthesis is written in backticks, `like this.js`:12 (protocol step 4, D23)', 2);
+    for (const L of own) heldLine(root, L, at + ' locates its failure');
   });
   if (v === 'STALE' && stale < lines.length) die('verdict: STALE is the verdict only when every failure is a stale one (protocol step 6); ' + (lines.length - stale) + ' of these ' + lines.length + (lines.length - stale === 1 ? ' is' : ' are') + ' not: record FAIL, with the stale ones and their addendum route among its lines', 2);
   if (v === 'FAIL' && stale === lines.length) die('verdict: every failure here is a stale one: the verdict is STALE, not FAIL (protocol step 6)', 2);
@@ -2057,15 +2069,15 @@ function verdict(argv) {
   if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
   const hash = now;
   const moveTo = v === 'PASS' && governedDiff(root, 'HEAD').empty ? headCommit(root) : null;   // a PASS on a committed tree: the diff since it runs from HEAD (D40)
-  let sess;
-  const st = withState(root, s => {
+  let sess, st;
+  try { st = withState(root, s => {
     sess = Object.assign(freshSession(), s.sessions[id] || {});
     s.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
     if (reason) s.last.reason = reason;
     if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; if (moveTo) sess.base = moveTo; }   // reset only on PASS (D11); a changed hash never resets
     else { sess.blocks += 1; sess.history.push(failures); }
     s.sessions[id] = sess;
-  });
+  }); } catch (e) { if (e.docket) die('verdict: ' + e.message, 2); throw e; }
   // Every verdict, in order, one JSON line each: the judge's record for a person to read and for a measurement to score
   // the judge's first answer by. Nothing in the core reads it (D22).
   try { fs.appendFileSync(path.join(root, '.docket', 'verdicts.jsonl'), JSON.stringify(st.last) + '\n'); } catch (e) { process.stderr.write('note: .docket/verdicts.jsonl could not be appended to (' + e.code + '); the verdict is recorded in .docket/verdict.json\n'); }

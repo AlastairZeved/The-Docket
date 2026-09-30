@@ -563,7 +563,11 @@ words is not an answer — and an answer on any line, of any pack, naming a ruli
 is held to its line the same way; a `cite stale` line's evidence is its own location,
 held to the same rule (D27). A line is a stale one when its answer is `reason gone` or
 `cite stale`: STALE is refused unless every line is a stale one and FAIL when every
-line is; a PASS carries no reason (D23).
+line is; a PASS carries no reason (D23). A line's own location, its third field,
+is held as its evidence is: each `<file:line>` there a line of a file in the
+repository before or after the diff, or the record is refused. A path with a
+space or a parenthesis is written in backticks, `` `app/(group)/login.js`:46 ``,
+in the location and in the evidence alike (D23).
 
 The state lives in `.docket/verdict.json` under the stop's root (1): `last` (verdict, hash,
 failures, time, session, and the reason it was recorded with), `lastPassHash`,
