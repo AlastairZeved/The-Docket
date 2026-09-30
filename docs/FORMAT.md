@@ -409,7 +409,12 @@ says so rather than printing nothing.
 `--json` is on every subcommand. A subcommand that prints a file — `intake`,
 `protocol`, `pack <name>…` — prints, with it, the file's name and its whole text
 (a pack's with its domain); `transcript` prints the turns it keeps, each its role
-and its lines, and a line that is not JSON as `raw`; `stop` prints its answer as
+and its lines, and a line that is not JSON as `raw`. A turn's lines are its text,
+each tool call — the tool named in brackets, then every line of its command, or
+its file, pattern or prompt, each after the first indented under it — and each
+tool result, marked `[result]`, or `[result, error]` where the host marks it one;
+a call or result over forty lines prints its first ten and its last thirty with the
+count between, and a line over four hundred characters is cut, marked (D14); `stop` prints its answer as
 it always does, and `{}` for a stop it allows, where it otherwise prints nothing.
 `docket check` covers every ledger in the tree; `docket spec-check` covers the
 ledger nearest the working directory (a fixture ledger under `test/` is reached

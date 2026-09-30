@@ -2139,9 +2139,23 @@ function pack(argv) {
   out(texts.join('\n')); return 0;
 }
 // A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry
-// `message.content`, a list of blocks — `text`, and `tool_use` with a `name` and an `input`. Printed in order: the
-// assistant's text, and each tool call as one line naming the tool and its command or file. A line that is not JSON,
-// or a file that is not such a log, is printed as it is. `--last <n>` keeps the last n assistant turns.
+// `message.content`, a list of blocks — `text`, and `tool_use` with a `name` and an `input` — and a user turn carries the
+// `tool_result` of each call. Printed in order: the text; each tool call naming the tool, then every line of its command
+// or its file, pattern or prompt, a line after the first indented under it; and each result, marked as one. The judge
+// checks the maker's claims against the commands the transcript shows were run and their output (code F6), and a call
+// that writes the ledger on its second line is still the maker's call (protocol step 5): a first line alone hid both.
+// A call or a result over TRANSCRIPT_HEAD + TRANSCRIPT_TAIL lines keeps its first and last with the count between —
+// its head names what ran, and a runner prints its verdict last — and a line over TRANSCRIPT_WIDTH characters is cut,
+// marked (D14). A line that is not JSON, or a file that is not such a log, is printed as it is. `--last <n>` keeps the
+// last n assistant turns.
+const TRANSCRIPT_HEAD = 10, TRANSCRIPT_TAIL = 30, TRANSCRIPT_WIDTH = 400;
+function transcriptItem(label, text) {
+  let ls = String(text).replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
+  if (ls.length > TRANSCRIPT_HEAD + TRANSCRIPT_TAIL) ls = ls.slice(0, TRANSCRIPT_HEAD).concat(['\u2026 ' + (ls.length - TRANSCRIPT_HEAD - TRANSCRIPT_TAIL) + ' lines \u2026'], ls.slice(-TRANSCRIPT_TAIL));
+  ls = ls.map(l => { const a = Array.from(l); return a.length > TRANSCRIPT_WIDTH ? a.slice(0, TRANSCRIPT_WIDTH - 1).join('') + '\u2026' : l; });
+  return label + ' ' + ls[0] + ls.slice(1).map(l => '\n    ' + l).join('');
+}
+function resultText(c) { return typeof c === 'string' ? c : Array.isArray(c) ? c.filter(x => x && x.type === 'text' && typeof x.text === 'string').map(x => x.text).join('\n') : ''; }
 function transcript(argv) {
   const given = argv._[1];
   if (!given) die('usage: docket transcript <path> [--last <n>]', 2);
@@ -2163,7 +2177,8 @@ function transcript(argv) {
     for (const b of blocks) {
       if (!b || typeof b !== 'object') continue;
       if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) L.push(b.text.trim());
-      if (b.type === 'tool_use') { const inp = b.input || {}; L.push('[' + b.name + '] ' + (inp.command || inp.file_path || inp.pattern || inp.prompt || '').toString().split('\n')[0]); }
+      if (b.type === 'tool_use') { const inp = b.input || {}; L.push(transcriptItem('[' + b.name + ']', (inp.command || inp.file_path || inp.pattern || inp.prompt || '').toString())); }
+      if (b.type === 'tool_result') L.push(transcriptItem(b.is_error === true ? '[result, error]' : '[result]', resultText(b.content)));
     }
     if (L.length) turns.push({ role, lines: L });
   }

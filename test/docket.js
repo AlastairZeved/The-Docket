@@ -3113,6 +3113,24 @@ const SEC = String.fromCharCode(0xa7);
       ok('…with --last 1, the last assistant turn alone', JSON.stringify(tl) === JSON.stringify([{ role: 'assistant', lines: ['[Edit] app.js', 'Tests pass.'] }]), JSON.stringify(tl));
       const tp = (s => { try { return JSON.parse(s); } catch (e) { return null; } })(docket(['transcript', path.join(td, 'plain.txt'), '--json']).out);
       ok('…and a file with no JSON line as its lines, each raw', JSON.stringify(tp) === JSON.stringify([{ raw: 'just text' }, { raw: 'second line' }]), JSON.stringify(tp)); }
+    // every line of a call and every result (code F6, protocol step 5): a ledger write on a command's second line, a result that
+    // contradicts the claim after it, a result over forty lines, a line over four hundred characters
+    const more = [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'cd /repo\nnode /p/bin/docket.js append --addendum R6 --text "x"' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'appended\nR6: addendum written' }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'npm test' } }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't2', is_error: true, content: [{ type: 'text', text: '3 failing, 12 passing' }] }] } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'All tests pass.' }] } }),
+    ];
+    fs.writeFileSync(path.join(td, 'more.jsonl'), more.join('\n') + '\n');
+    r = docket(['transcript', path.join(td, 'more.jsonl')]);
+    ok('transcript prints every line of a call, each after the first indented under it, and each tool result, marked, an error marked as one: the second line’s ledger write and the output the claim contradicts are both on the page', r.code === 0 && r.out === '── assistant\n[Bash] cd /repo\n    node /p/bin/docket.js append --addendum R6 --text "x"\n── user\n[result] appended\n    R6: addendum written\n── assistant\n[Bash] npm test\n── user\n[result, error] 3 failing, 12 passing\n── assistant\nAll tests pass.\n', JSON.stringify(r.out));
+    const long = Array.from({ length: 100 }, (_, i) => 'line ' + (i + 1)).join('\n');
+    fs.writeFileSync(path.join(td, 'long.jsonl'), [JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't3', content: long }] } }), JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't4', content: 'y'.repeat(1000) }] } })].join('\n') + '\n');
+    r = docket(['transcript', path.join(td, 'long.jsonl')]);
+    { const ls = r.out.split('\n');
+      ok('…a result over forty lines keeps its first ten and its last thirty, the count between (D14)', ls[1] === '[result] line 1' && ls[10] === '    line 10' && ls[11] === '    \u2026 60 lines \u2026' && ls[12] === '    line 71' && ls[41] === '    line 100' && !r.out.includes('line 11\n'), JSON.stringify(ls.slice(0, 14)));
+      ok('…and a line over four hundred characters is cut there, marked', r.out.includes('[result] ' + 'y'.repeat(399) + '\u2026\n') && !r.out.includes('y'.repeat(400)), r.out.slice(-60)); }
     r = docket(['transcript', path.join(td, 'missing.jsonl')]);
     ok('transcript names a path it cannot read, exit 2', r.code === 2 && /cannot read/.test(r.err), r.err);
     r = docket(['transcript']);
