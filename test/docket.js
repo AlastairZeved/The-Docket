@@ -2875,6 +2875,29 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(r0, { recursive: true, force: true });
   }
 
+  // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
+  //    is read as what it holds ──
+  {
+    const dc = tempRepo();
+    fs.appendFileSync(path.join(dc, 'test', 'fixture', 'app.js'), 'const cc = 1; // R2\n');
+    const hc = docket(['gate', '--session', 'c0'], { cwd: dc }).out.split(' ')[1];
+    const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+    const burst = Array.from({ length: 12 }, (_, i) => 'node ' + q(CORE) + ' verdict FAIL --hash ' + hc + ' --failures 1 --session c' + i + ' --reason ' + q(held(1)) + ' >/dev/null 2>&1 &').join('\n') + '\nwait\n';
+    sh('sh', ['-c', burst], dc);
+    const sc = JSON.parse(read(path.join(dc, '.docket', 'verdict.json')));
+    ok('verdict: twelve judges recording at once lose nothing — every session its one block — the state changed under its lock and no lock left behind', Array.from({ length: 12 }, (_, i) => sc.sessions['c' + i] && sc.sessions['c' + i].blocks === 1).every(Boolean) && !fs.existsSync(path.join(dc, '.docket', 'verdict.json.lock')), JSON.stringify(sc.sessions));
+    ok('…and every verdict is in the record, in twelve lines', read(path.join(dc, '.docket', 'verdicts.jsonl')).trim().split('\n').length === 12, read(path.join(dc, '.docket', 'verdicts.jsonl')));
+    // a hand-edited file: a history that is not a list, a count that is text, a mark that is not true
+    fs.writeFileSync(path.join(dc, '.docket', 'verdict.json'), JSON.stringify({ sessions: { s: { blocks: 5, history: 'oops' }, t: { blocks: '2', history: [1], surfaced: 'yes' } } }));
+    const gs = docket(['gate', '--session', 's'], { cwd: dc });
+    ok('gate: a session whose history is not a list is read as having none: five blocks surface it, and the residue prints (FORMAT.md 16)', gs.code === 0 && /^SURFACE\nresidue: 5 blocks this session since /.test(gs.out) && /located failures per verdict: none recorded/.test(gs.out), gs.out + gs.err);
+    const st_ = docket(['status'], { cwd: path.join(dc, 'test', 'fixture') });
+    ok('…status answers, and a mark that is not true surfaces nothing', st_.code === 0 && !/Surfaced: t /.test(st_.out), st_.out + st_.err);
+    const vt = docket(['verdict', 'FAIL', '--hash', hc, '--failures', '1', '--session', 't', '--reason', held(1)], { cwd: dc });
+    ok('…and a count written as text holds nothing: the next FAIL is the first block, not "21"', vt.code === 0 && /session t: 1 block /.test(vt.out) && JSON.parse(read(path.join(dc, '.docket', 'verdict.json'))).sessions.t.blocks === 1, vt.out + vt.err);
+    fs.rmSync(dc, { recursive: true, force: true });
+  }
+
   // ── stop (D37): the gate's reading first, then the judge it starts, then the judge's record — and nothing it says ──
   {
     const d = tempRepo();
@@ -2892,6 +2915,8 @@ const SEC = String.fromCharCode(0xa7);
       "const w = process.argv[2];",
       "if (w === 'PASS') run(['verdict', 'PASS', '--hash', h(), '--failures', '0', '--session', sid]);",
       "else if (w === 'FAIL' || w === 'STALE') run(['verdict', w, '--hash', h(), '--failures', '1', '--session', sid, '--reason', process.env.JUDGE_REASON]);",
+      "else if (w === 'nosession') run(['verdict', 'FAIL', '--hash', h(), '--failures', '1', '--reason', process.env.JUDGE_REASON]);",
+      "else if (w === 'other') run(['verdict', 'FAIL', '--hash', h(), '--failures', '1', '--session', 'someone-else', '--reason', process.env.JUDGE_REASON]);",
       "else if (w === 'words') console.log('The stop stands: I read the diff and it is fine.');",
       "else if (w === 'exit3') { console.error('the host would not start the agent'); process.exit(3); }",
       "else if (w === 'slow') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20000);",
@@ -2964,6 +2989,21 @@ const SEC = String.fromCharCode(0xa7);
     r = stopIn({ session_id: 's' }, ['--judge', judgeCmd('surface')], { JUDGE_REASON: held(1) });
     b = block(r);
     ok('stop: a session surfaced while its judge ran is relayed with the residue (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 3 blocks this session since the last PASS; located failures per verdict: 1 → 1 → 1/.test(b), r.out);
+    // one stop counts once, whatever the judge names (D11, D38): a judge that names no session records the stop's; a record
+    // of another session is not this stop's answer; a hash the working tree does not hash to is refused
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const ns1 = 1; // R2\n');
+    r = stopIn({ session_id: 'ns' }, ['--judge', judgeCmd('nosession')], { JUDGE_REASON: held(1) });
+    { const s1 = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
+      ok('stop: a judge whose verdict names no session records the stop’s — it runs with DOCKET_SESSION set — so the FAIL is relayed and counted once, for this session', /recorded FAIL for this stop/.test(r.out) && s1.sessions.ns && s1.sessions.ns.blocks === 1 && !s1.sessions.default, JSON.stringify(s1.sessions) + r.out); }
+    r = stopIn({ session_id: 'os' }, ['--judge', judgeCmd('other')], { JUDGE_REASON: held(1) });
+    { const s2 = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
+      ok('…a FAIL recorded for another session is not this stop’s answer: the no-record block, counted once, for this session', block(r) && /recorded no verdict for this stop/.test(block(r)) && s2.sessions.os && s2.sessions.os.blocks === 1, JSON.stringify(s2.sessions) + r.out); }
+    { const hn = docket(['gate', '--session', 'hs'], { cwd: d }).out.split(' ')[1];
+      const stale = docket(['verdict', 'PASS', '--hash', 'f'.repeat(64), '--failures', '0', '--session', 'hs'], { cwd: d });
+      const s3 = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
+      ok('verdict: a --hash the working tree does not hash to is refused, exit 2, naming the diff’s hash and the way to record, and nothing is recorded', stale.code === 2 && stale.err.includes('is not the diff in front of you') && stale.err.includes(hn) && !s3.sessions.hs && s3.lastPassHash !== 'f'.repeat(64), stale.err + JSON.stringify(s3)); }
+    for (const bad of ['0x1', '1e0', ' 1', '1.0']) { const fb = docket(['verdict', 'FAIL', '--failures', bad, '--session', 'fb', '--reason', held(1)], { cwd: d });
+      ok('verdict: --failures ' + JSON.stringify(bad) + ' is not a whole number written as one: refused, exit 2', fb.code === 2 && /--failures must be a non-negative integer/.test(fb.err), fb.err); }
     // a judge that never records: each block counts, the fifth is the last, and the stop after it surfaces the session with
     // no judge started (D38) — so the cap D11 sets holds for a judge that cannot record as for one that cannot pass
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q3 = 3; // R2\n');

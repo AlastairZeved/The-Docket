@@ -565,7 +565,12 @@ verdict is also appended, one JSON line each and in order, to
 `.docket/verdicts.jsonl`: the judge's record, for a person to read and for a
 measurement to score the judge's first answer by; nothing in the core reads it.
 A file that is missing, half-written or hand-edited is read as what it holds and
-nothing more. `.docket/` is ignored by git, and a constituted project is told to
+nothing more: a session's count that is not a whole number, a history that is not
+a list of them, a mark that is not `true`, holds nothing. Each change is made under
+a lock beside the file, `verdict.json.lock`, the state re-read inside it and written
+whole to a new file renamed over the old, so judges recording at once lose nothing.
+`verdict` records the diff in front of the judge: a `--hash` the working tree does
+not hash to is refused, exit 2. `.docket/` is ignored by git, and a constituted project is told to
 ignore it too.
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,
@@ -581,8 +586,9 @@ surfaces the session. For any other stop it starts the judge with a prompt that
 names the core by its path, the permission's spelling when given, and the hook
 input; waits for it to end, up to `--wait` seconds (600 by default), then stops
 it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
-for this diff since the judge started is relayed as a block carrying the
-recorded reason and its route; a session surfaced while the judge ran is relayed
+for this diff and this session since the judge started is relayed as a block
+carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`
+set to the stop's session, so a verdict that names none is this session's; a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
 error, or was stopped at the bound — is blocked once, with a reason that names
 the files, how the judge ended and where its output is, and the block counts in

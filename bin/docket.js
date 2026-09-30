@@ -1306,12 +1306,42 @@ function loadState(root) {
   // Every field is filled here so that a file written by hand, or half-written, informs rather than throws (D1).
   // A session id is the host's text, or a person's: a map with no prototype, where a session named __proto__ or
   // constructor is stored and read like any other and not the prototype of the map (D11).
+  // Each session is read field by field: a count that is not a whole number, a history that is not a list of them, a mark
+  // that is not true — hand-edited or half-written — holds nothing and is read as nothing (FORMAT.md 16).
   const sessions = Object.create(null);
-  if (st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions)) for (const k of Object.keys(st.sessions)) sessions[k] = st.sessions[k];
+  if (st.sessions && typeof st.sessions === 'object' && !Array.isArray(st.sessions)) for (const k of Object.keys(st.sessions)) {
+    const s = st.sessions[k];
+    if (!s || typeof s !== 'object' || Array.isArray(s)) continue;
+    sessions[k] = { blocks: Number.isInteger(s.blocks) && s.blocks >= 0 ? s.blocks : 0, history: Array.isArray(s.history) ? s.history.filter(n => Number.isInteger(n) && n >= 0) : [], surfaced: s.surfaced === true };
+  }
   const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
 }
-function saveState(root, st) { fs.mkdirSync(path.dirname(statePath(root)), { recursive: true }); fs.writeFileSync(statePath(root), JSON.stringify(st, null, 2) + '\n'); }
+function saveState(root, st) { const p = statePath(root); fs.mkdirSync(path.dirname(p), { recursive: true }); const tmp = p + '.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n'); fs.renameSync(tmp, p); }
+// The state is one file the gate, the verdict and the stop each read, change and write: two judges recording at once would
+// each read the same state, and the later write would carry the earlier away — a session's count, a surfaced mark, the last
+// PASS (D11). So each change is made under a lock beside the file, the state re-read inside it and written whole, as the
+// ledger's append is (D4). A lock whose holder is gone is taken over; one held past the wait is written through, with a
+// note, because a stop that died on it would be allowed unjudged.
+function withState(root, change) {
+  const p = statePath(root), lockPath = p + '.lock', mine = 'docket ' + process.pid + '\n';
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  let fd = null, waited = 0;
+  while (fd === null) {
+    try { fd = fs.openSync(lockPath, 'wx'); fs.writeSync(fd, mine); }
+    catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      let holder = 0; try { holder = Number((/^docket (\d+)$/m.exec(fs.readFileSync(lockPath, 'utf8')) || [])[1]); } catch (e2) {}
+      let alive = true; if (holder) { try { process.kill(holder, 0); } catch (e2) { alive = e2.code === 'EPERM'; } }
+      if (holder && !alive) { try { fs.unlinkSync(lockPath); } catch (e2) {} continue; }
+      if (waited >= LOCK_WAIT_MS) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); waited += 25;
+    }
+  }
+  if (fd === null) process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + LOCK_WAIT_MS / 1000 + ' seconds; the state is changed without it\n');
+  try { const st = loadState(root); change(st); saveState(root, st); return st; }
+  finally { if (fd !== null) { try { fs.closeSync(fd); } catch (e) {} try { if (fs.readFileSync(lockPath, 'utf8') === mine) fs.unlinkSync(lockPath); } catch (e) {} } }
+}
 // An addendum is pending until a ruling written after it has an edge into its entry (FORMAT.md 6, D21). Which came
 // first is read from history: the edge's line was added in a commit that descends from the one that added the
 // addendum's line, or in that same commit (the preamble's order: the addendum, then the ruling), or it is not committed
@@ -1855,7 +1885,10 @@ function gateDecide(root, id) {
   if (sess.surfaced) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
   const h = sess.history;
   const stuck = sess.blocks >= THIRD_CYCLE && h.length >= 2 && h[h.length - 1] >= h[h.length - 2];   // failures not falling after the third block
-  if (sess.blocks >= BLOCK_CAP || stuck) { sess.surfaced = true; st.sessions[id] = sess; saveState(root, st); return { decision: 'SURFACE', d, st, sess }; }   // D11
+  if (sess.blocks >= BLOCK_CAP || stuck) {                           // D11: the mark made under the state's lock
+    const now = withState(root, s => { s.sessions[id] = Object.assign(freshSession(), s.sessions[id] || {}, { surfaced: true }); });
+    return { decision: 'SURFACE', d, st: now, sess: now.sessions[id] };
+  }
   return { decision: 'JUDGE', d, st, sess };
 }
 function gate(argv) {
@@ -1967,7 +2000,7 @@ function verdict(argv) {
   if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> [--session <id>] [--reason "<the located failures>"]', 2);
   const root = stopRoot(process.cwd());                               // D28
   const id = sessionId(argv);
-  const failures = Number(flag(argv, '--failures') || 0);
+  const fRaw = flag(argv, '--failures'), failures = fRaw === null ? 0 : /^\d+$/.test(String(fRaw)) ? Number(fRaw) : NaN;   // a whole number, written as one
   if (!Number.isInteger(failures) || failures < 0) die('verdict: --failures must be a non-negative integer', 2);
   if (v === 'PASS' && failures !== 0) die('verdict: a PASS has no located failures; this names ' + failures, 2);
   if (v !== 'PASS' && failures === 0) die('verdict: a ' + v + ' names at least one located failure; --failures is 0', 2);
@@ -1976,15 +2009,21 @@ function verdict(argv) {
   const lines = reason === null ? [] : String(reason).split('\n').map(x => x.trim()).filter(Boolean);
   if (v === 'PASS' && lines.length) die('verdict: a PASS names no located failures; --reason is for a FAIL or a STALE', 2);
   if (v !== 'PASS') holdToLines(root, v, failures, lines);            // D23
-  const hash = flag(argv, '--hash') || governedDiff(root).hash;
-  const st = loadState(root);
-  const sess = Object.assign(freshSession(), st.sessions[id] || {});
-  st.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
-  if (reason) st.last.reason = reason;
-  if (v === 'PASS') { st.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; }   // reset only on PASS (D11); a changed hash never resets
-  else { sess.blocks += 1; sess.history.push(failures); }
-  st.sessions[id] = sess;
-  saveState(root, st);
+  // A verdict is the judgement of the diff in front of the judge: a hash the working tree does not hash to is another diff's,
+  // and counted here it would be counted again by the stop, which reads no record for its own, or reset the count at every
+  // stop and never surface the session (D11, D38). It is refused, with the way to record it.
+  const now = governedDiff(root).hash, given = flag(argv, '--hash');
+  if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
+  const hash = now;
+  let sess;
+  const st = withState(root, s => {
+    sess = Object.assign(freshSession(), s.sessions[id] || {});
+    s.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
+    if (reason) s.last.reason = reason;
+    if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; }   // reset only on PASS (D11); a changed hash never resets
+    else { sess.blocks += 1; sess.history.push(failures); }
+    s.sessions[id] = sess;
+  });
   // Every verdict, in order, one JSON line each: the judge's record for a person to read and for a measurement to score
   // the judge's first answer by. Nothing in the core reads it (D22).
   try { fs.appendFileSync(path.join(root, '.docket', 'verdicts.jsonl'), JSON.stringify(st.last) + '\n'); } catch (e) { process.stderr.write('note: .docket/verdicts.jsonl could not be appended to (' + e.code + '); the verdict is recorded in .docket/verdict.json\n'); }
@@ -2037,7 +2076,8 @@ function stop(argv) {
   const perm = flag(argv, '--permission');
   const cwd = typeof input.cwd === 'string' && isDir(input.cwd) ? input.cwd : process.cwd();
   const start = Date.now();
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, input), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });
+  // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
+  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, input), env: Object.assign({}, process.env, { DOCKET_SESSION: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });
   const secs = Math.round((Date.now() - start) / 1000);
   const ended = r.error && r.error.code === 'ETIMEDOUT' ? 'was stopped at the bound, ' + waitS + ' second' + (waitS === 1 ? '' : 's')
     : r.error ? 'could not be started (' + (r.error.code || r.error.message) + ')'
@@ -2046,7 +2086,7 @@ function stop(argv) {
   const st = loadState(root), l = st.last;
   if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail, id) })); return 0; }   // surfaced while the judge ran (D11)
   if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS
-  if (l && l.hash === d.hash && Date.parse(l.at) >= start && (l.verdict === 'FAIL' || l.verdict === 'STALE')) {
+  if (l && l.hash === d.hash && l.session === id && Date.parse(l.at) >= start && (l.verdict === 'FAIL' || l.verdict === 'STALE')) {   // this session's record of this diff, and no other's
     const n = l.failures;
     const reason = 'The docket\'s judge recorded ' + l.verdict + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (l.verdict === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or supersede the ruling through /rule.') + tail;
     out(JSON.stringify({ decision: 'block', reason }));
@@ -2054,9 +2094,8 @@ function stop(argv) {
   }
   // A block with no record is a block (D38): it counts toward the session's five as a recorded one does, so a judge that
   // never records surfaces the session, and its residue reaches the person, as a judge that never passes does (D11).
-  const sess = Object.assign(freshSession(), st.sessions[id] || {});
-  sess.blocks += 1; st.sessions[id] = sess;
-  try { saveState(root, st); } catch (e) { /* the block stands without its count */ }
+  let sess = Object.assign(freshSession(), st.sessions[id] || {}, { blocks: (st.sessions[id] ? st.sessions[id].blocks : 0) + 1 });
+  try { withState(root, s => { sess = Object.assign(freshSession(), s.sessions[id] || {}); sess.blocks += 1; s.sessions[id] = sess; }); } catch (e) { /* the block stands without its count */ }
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
   // whose job it is, what to do — nothing, then stop again — and where a person finds the judge's own words.
   const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since the last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
