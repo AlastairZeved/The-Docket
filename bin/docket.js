@@ -2157,7 +2157,7 @@ function verdict(argv) {
 // session's five (D38). The judge's own output is kept in .docket/judge.log for a person to read; the stop judges nothing,
 // and writes nothing else but that count.
 function surfacedReason(st, sess, tail, id) {
-  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since its last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nReport this to the user verbatim, then stop again.' + tail;
+  return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since its last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nreport this to the user verbatim, then stop again\n' + tail.trimStart();   // the gate's relay line, as written (D11)
 }
 function judgePrompt(core, perm, input) {
   core = /^[\w\/.@:+-]+$/.test(core) ? core : JSON.stringify(core);   // a path the shell would split is written quoted, as the rule allows
