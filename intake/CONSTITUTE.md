@@ -6,6 +6,13 @@ which does everything mechanical. This file is host-agnostic (D13). The shape
 checks in `constitute` are the second line; the semantic refusals below — a
 category, a feature — are this intake's, because only a reader can tell them.
 
+**Reader.** The agent that runs `/constitute` for a person starting a project,
+and the person answering; it knows the refusal rule of each question below,
+and it does not know the project until the answers come. **Purpose.** Turn
+four answers into a first ledger, its spec documents and a vendored witness
+that `docket check` passes. **Source.** D8, D9, D13 and D18 in
+`docs/DECISIONS.md`, and `constitute` in `bin/docket.js`.
+
 ## The questions
 
 1. **What is this?** One sentence naming the object and the verb: "a page

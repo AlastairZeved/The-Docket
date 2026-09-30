@@ -19,7 +19,7 @@ D12, D15, D22, D23, D24 and D37 in `docs/DECISIONS.md`.
 | a working tree | the host's current directory |
 | the ledger and the spec documents | discovery, `docs/FORMAT.md` (1) |
 | the packs | `docket pack --list`, then `docket pack <pack> <pack> …`: the files beside the core, printed, because the judge reads nothing outside the project |
-| the diff since the last PASS, and the files it touches | `docket gate --session <id> --diff` |
+| the session's diff from its base (D40), and the files it touches | `docket gate --session <id> --diff` |
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
 | whether this stop was already blocked once in this turn | the host passes it in; if so, allow the stop at once |
@@ -156,8 +156,9 @@ Read a file only for what they leave out (D30).
    **PASS**: no feature failed, no ruling contradicted, every claim evidenced.
    **FAIL**: a ruling is contradicted and its stated reason still holds, or a
    feature fails, or a claim is unevidenced.
-   **STALE**: a ruling is contradicted whose stated reason no longer holds (the
-   code the reason describes is gone), or a cite no longer points at code that
+   **STALE**: a ruling is contradicted whose stated reason no longer holds (its
+   premise is false, as step 4 reads it — never the thing the ruling keeps,
+   removed), or a cite no longer points at code that
    implements the ruling. A diff that earns both is FAIL: FAIL names every
    located failure, the stale ones with their addendum route among them, and
    STALE is the verdict only when every failure is a stale one. A stale
@@ -213,7 +214,7 @@ app.js:1112: R6 keeps the toolbar; this diff removes it — never
 
     SKIP
     SURFACE
-    <the residue: the block count and the located-failure count of each verdict since the last PASS; the last verdict, its time, and the failure lines it was recorded with>
+    <the residue: the block count and the located-failure count of each verdict since its last PASS; the last verdict, its time, and the failure lines it was recorded with>
     report this to the user verbatim, then stop again
     JUDGE <hash> <file> <file> …
     <with --diff: the diff, as git prints it, then `+++ <path>` and the content of each untracked governed file>

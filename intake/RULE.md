@@ -6,6 +6,13 @@ block that only the human can answer; then one entry written by
 result. This file is host-agnostic (D13): a host binds it with a skill or its
 equivalent and runs the commands it names.
 
+**Reader.** The agent that runs `/rule` for a person, and the person answering;
+it knows the ledger's grammar through `docket`, and it does not know which
+rulings a change touches until `docket query` shows them. **Purpose.** Turn
+one decision into one entry the ledger accepts: five questions, a confirm only
+the person gives, and one `docket append`. **Source.** D8, D13 and D18 in
+`docs/DECISIONS.md`, and `append` in `bin/docket.js`.
+
 ## The questions
 
 1. **What changed** — one sentence naming the thing and the verb. Refused: a

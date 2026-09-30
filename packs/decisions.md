@@ -6,6 +6,12 @@ Domain: the ledger — `DECISIONS.md`, `docs/DECISIONS.md`; scored on every new 
 addendum in the diff, and records PASS or FAIL with a location. Each feature says
 how it is scored.
 
+**Reader.** The judge, at a stop whose diff adds an entry or an addendum to a
+ledger; it knows the header contract through `docket check`, and it does not
+know why the entry was written until it reads the entry and the transcript.
+**Purpose.** Score each new entry and addendum on eleven features, each with
+how it is scored. **Source.** D4, D8, D14 and D32 in `docs/DECISIONS.md`.
+
 ## Features
 
 **F1 — the entry satisfies the header contract.** How scored: `docket check`,
@@ -35,11 +41,17 @@ part stays distinct and still coheres: yes or no. How scored: a reading of the
 meta for a `keeps` clause, or of the body for the same statement in words.
 
 **F8 — scale.** The entry states the range it holds over — viewport, count,
-size — or says it is scale-free: yes or no. How scored: a reading.
+size — or says it is scale-free: yes or no. How scored: a reading of the body
+for a stated range (a viewport, a count, a size, a duration) or the words that
+say the ruling holds at every scale; neither is a failure, located at the
+heading.
 
 **F9 — the number.** The entry names the measurement, ratio, pattern or
 invariance underneath it, or records its absence as a finding: yes or no. An
-absence is not a failure; an unrecorded absence is. How scored: a reading.
+absence is not a failure; an unrecorded absence is. How scored: a reading of
+the body for the measurement, ratio, pattern or invariance, named with its value
+or where it was taken, or a sentence that records none was found; neither is a
+failure, located at the heading.
 
 **F10 — the number and its property.** If the entry changes a number an earlier
 ruling set, it names that ruling as superseded and gives the measurement that
