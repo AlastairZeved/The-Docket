@@ -391,8 +391,11 @@ function parseLedger(text, ledgerPath) {
   const prefixes = uniq(rulings.map(r => r.prefix));
   const byId = new Map();
   for (const r of rulings) if (!byId.has(r.id)) byId.set(r.id, r);     // FORMAT.md 12: a repeated id resolves to its first entry, the one at its position; the later one is check 2's failure
-  return { path: ledgerPath, dir: path.dirname(ledgerPath), home: ledgerHome(ledgerPath), text, lines, preambleLines, prefixes, rulings, sections, byId, contractFrom, contractFromLine, baseline, hasBaseline, directiveFaults };
+  return { path: ledgerPath, dir: path.dirname(ledgerPath), home: ledgerHome(ledgerPath), text, lines, preambleLines, prefixes, rulings, sections, byId, contractFrom, contractFromLine, baseline, hasBaseline, baselineLine: firstBareCites, directiveFaults };
 }
+// A pair of the bare-cites comment as it is written and read (FORMAT.md 9): a path holding a space, a quote, a backslash or ">"
+// is a JSON string, so the writer, the reader and check 7's record of a rise agree on one spelling
+function baselinePair(p, n) { return (/[\s"\\>]/.test(p) ? JSON.stringify(p).replace(/>/g, '\\u003e') : p) + '=' + n; }
 function parseSpec(text) {
   const heads = [];
   splitLines(unBom(text)).forEach((l, i) => { const m = SPEC_HEADING_RE.exec(l); if (m) heads.push({ num: m[1], title: stripMarks(m[2]), line: i + 1 }); });
@@ -966,6 +969,23 @@ function runCheck(root, opts) {
         if (cur.heading !== o.heading) fail(lp, cur.line, 7, o.id + ': heading changed (append only): "' + o.heading + '" → "' + cur.heading + '"');
         if (!bodyOnlyAppended(o.bodyLines, cur.bodyLines)) fail(lp, cur.line, 7, o.id + ': body changed other than by appended addendum lines (append only)');
       }
+      // The preamble's directives are held as the entries are (D41): a contract line binds from where it was written, and does
+      // not move or go; the bare-cites comment, once committed, does not go, and an allowance may fall but rises only when an
+      // entry written since carries its new pair — the ratchet is loosened on the record, with its reason, or not at all
+      for (const p of Object.keys(old.contractFrom)) {
+        const was = p + old.contractFrom[p], now = ledger.contractFrom[p] === undefined ? null : p + ledger.contractFrom[p];
+        if (now === null) fail(lp, 1, 7, 'the contract line for ' + p + ', from ' + was + ', is gone; the preamble\'s directives are held as its entries are (D41)');
+        else if (now !== was) fail(lp, ledger.contractFromLine[p], 7, 'the contract line for ' + p + ' moved from ' + was + ' to ' + now + '; it binds from where it was written (D4, D41)');
+      }
+      if (old.hasBaseline) {
+        const since = ledger.rulings.filter(r => !old.byId.has(r.id));
+        const recorded = pair => since.some(r => r.heading.includes(pair) || r.bodyLines.some(l => l.includes(pair)));
+        if (!ledger.hasBaseline) fail(lp, 1, 7, 'the bare-cites comment is gone, and every allowance with it; an allowance may fall, and rises only on the record (FORMAT.md 9, D41)');
+        else for (const f of Object.keys(ledger.baseline)) {
+          const was = Object.prototype.hasOwnProperty.call(old.baseline, f) ? old.baseline[f] : 0, now = ledger.baseline[f];
+          if (now > was && !recorded(baselinePair(f, now))) fail(lp, ledger.baselineLine, 7, 'bare-cites allowance for ' + f + ' rose from ' + was + ' to ' + now + ' with no entry recording it: an entry written since carries ' + baselinePair(f, now) + ' (FORMAT.md 9, D41)');
+        }
+      }
     }
   }
   // A ledger the compared revision has and the working tree lacks is the most complete amendment there is (D4).
@@ -1318,7 +1338,7 @@ function rewriteBaseline(argv) {
     if (e.ledger !== ledger.path || isSpecDoc(e, ledger)) continue;
     const n = bareCitesIn(fileText(e));
     const p = rel(ledger.home, e.path);
-    if (n > 0) counts.push((/[\s"\\>]/.test(p) ? JSON.stringify(p).replace(/>/g, '\\u003e') : p) + '=' + n);   // FORMAT.md 9: such a path is a JSON string
+    if (n > 0) counts.push(baselinePair(p, n));
   }
   const comment = '<!-- docket: bare-cites' + (counts.length ? ' ' + counts.join(' ') : '') + ' -->';
   const lines = ledger.lines.slice();

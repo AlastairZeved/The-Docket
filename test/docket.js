@@ -349,7 +349,10 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['check'], { cwd });
   ok('a fourth bare cite fails the ratchet before --baseline, with the count and the allowance', r.code === 1 && /check 4: bare-§ cites: 4 > allowance 3 for app\.js/.test(r.out), r.out);
   r = docket(['append', '--baseline'], { cwd });
-  ok('append --baseline rewrites the allowance from the counts and check passes', r.code === 0 && /<!-- docket: bare-cites app\.js=4 -->/.test(r.out) && /check: ok/.test(r.out), r.out + r.err);
+  ok('append --baseline rewrites the allowance from the counts; a rise no entry records fails check 7, naming the pair to record (D41)', r.code === 1 && /<!-- docket: bare-cites app\.js=4 -->/.test(r.out) && /check 7: bare-cites allowance for app\.js rose from 3 to 4 with no entry recording it: an entry written since carries app\.js=4/.test(r.out), r.out + r.err);
+  edit(d, 'test/fixture/app.js', 'const HIT_FLOOR = 44; // ' + SEC + '4 ' + SEC + '4 minimum', 'const HIT_FLOOR = 44; // ' + SEC + '4 minimum');
+  r = docket(['append', '--baseline'], { cwd });
+  ok('…and with the fourth cite gone the rewrite falls back to three, and check passes: a fall needs no record', r.code === 0 && /<!-- docket: bare-cites app\.js=3 -->/.test(r.out) && /check: ok/.test(r.out), r.out + r.err);
   const status = docket(['status'], { cwd });
   ok('status lists the pending addenda (R2 then R5) and the new last rulings', /Addenda pending: \n  R2 \(2026-09-11\)[^\n]*\n  R5 \(2026-09-12\): the lot now has four sections/.test(status.out) && /Last rulings:\n  R10  Read fn \(x\) before the call  · issue #23\n  R9  Pinned notes keep their size  · issue #21/.test(status.out) && /Cited nowhere: R9, R10 \(2 of 11\)/.test(status.out), status.out);
   const nop = tempRepo(d2 => edit(d2, 'test/fixture/PRD.md', '## ' + SEC + '1 Principles', '## ' + SEC + '3 Principles'));
@@ -1172,7 +1175,9 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['check'], { cwd: unl });
   ok('check 4: a governed file absent from a present baseline fails at its first bare cite with allowance 0, and app.js keeps its own allowance', r.code === 1 && /^test\/fixture\/second\.js:1  check 4: bare-§ cites: 1 > allowance 0 for second\.js$/m.test(r.out) && !/allowance \d+ for app\.js/.test(r.out), r.out);
   r = docket(['append', '--baseline'], { cwd: path.join(unl, 'test', 'fixture') });
-  ok('…and append --baseline lists it beside app.js, after which check passes', r.code === 0 && /^<!-- docket: bare-cites app\.js=3 second\.js=1 -->$/m.test(r.out) && /check: ok/.test(r.out), r.out + r.err);
+  ok('…and append --baseline lists it beside app.js; a file listed anew is a rise from nothing, which fails check 7 until an entry records it (D41)', r.code === 1 && /^<!-- docket: bare-cites app\.js=3 second\.js=1 -->$/m.test(r.out) && /check 7: bare-cites allowance for second\.js rose from 0 to 1/.test(r.out), r.out + r.err);
+  r = docket(['append', '--title', 'One bare cite in second.js', '--issue', '9', '--principle', 'Zero cognitive tax', '--body', 'The allowance second.js=1 admits the one bare cite the file quotes.\nReason: it quotes the spec as written.'], { cwd: path.join(unl, 'test', 'fixture') });
+  ok('…and an entry written since that carries the new pair records the rise, after which check passes', r.code === 0 && /check: ok/.test(r.out), r.out + r.err);
   // three appends at once: each writes its own entry with its own id — before the lock, one was silently carried away
   // while every caller was told "check: ok" (D4: a record that can be rewritten proves nothing about what was tried)
   // Six at once, three rounds: one round of three let the loss through about one run in six, because the
@@ -3043,7 +3048,7 @@ const SEC = String.fromCharCode(0xa7);
     d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'Design Notes.md'), 'The minimum is ' + SEC + '4.\n'));
     const bl = docket(['append', '--baseline', '--ledger', LD], { cwd: d });
     c = docket(['check'], { cwd: d });
-    ok('append --baseline writes a path with a space as a JSON string, and check 4 reads it back: no fault at the comment or the file (FORMAT.md 9)', bl.code === 0 && read(path.join(d, LD)).includes('"Design Notes.md"=1') && !/check 4/.test(c.out), bl.out + bl.err + c.out);
+    ok('append --baseline writes a path with a space as a JSON string, and check 4 reads it back: no fault at the comment or the file (FORMAT.md 9); check 7 asks for the rise to be recorded in that same written form (D41)', read(path.join(d, LD)).includes('"Design Notes.md"=1') && !/check 4/.test(c.out) && c.out.includes('an entry written since carries "Design Notes.md"=1'), bl.out + bl.err + c.out);
     fs.rmSync(d, { recursive: true, force: true });
   }
 
@@ -3090,6 +3095,26 @@ const SEC = String.fromCharCode(0xa7);
     r = splice ? cp.spawnSync('/bin/sh', ['-c', splice[1]], { cwd: FIX, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PLUGIN_ROOT: pr }) }) : null;
     ok('the skills quote every splice of the plugin root, as the hooks do: the rule intake prints from a plugin under "my plugin"', !/node \$\{CLAUDE_PLUGIN_ROOT\}/.test(skills) && !!r && r.status === 0 && r.stdout.includes(read(path.join(ROOT, 'intake', 'RULE.md')).split('\n')[0]), r ? r.status + ' ' + r.stderr : 'no quoted splice');
     fs.rmSync(path.dirname(pr), { recursive: true, force: true });
+  }
+
+  // ── the preamble's directives are held as the entries are (D41)
+  {
+    const LD = 'test/fixture/DECISIONS.md';
+    let d = tempRepo(); edit(d, LD, '<!-- docket: contract from R8 -->', '<!-- docket: contract from R9 -->');
+    let c = docket(['check'], { cwd: d });
+    ok('check 7: a committed contract line moved by hand fails, naming where it was and where it went (D41)', c.code === 1 && /check 7: the contract line for R moved from R8 to R9/.test(c.out), c.out);
+    edit(d, LD, '<!-- docket: contract from R9 -->\n', '');
+    c = docket(['check'], { cwd: d });
+    ok('…and one removed fails too', c.code === 1 && /check 7: the contract line for R, from R8, is gone/.test(c.out), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    d = tempRepo(); edit(d, LD, '<!-- docket: bare-cites app.js=3 -->\n', '');
+    c = docket(['check'], { cwd: d });
+    ok('check 7: a committed bare-cites comment removed fails: every allowance went with it (D41)', c.code === 1 && /check 7: the bare-cites comment is gone/.test(c.out), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
+    d = tempRepo(); edit(d, LD, '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=2 -->');
+    c = docket(['check'], { cwd: d });
+    ok('…while an allowance lowered by hand is no fault of check 7: a fall tightens, and check 4 alone says the file is over it', !/check 7/.test(c.out) && /check 4: bare-§ cites: 3 > allowance 2 for app\.js/.test(c.out), c.out);
+    fs.rmSync(d, { recursive: true, force: true });
   }
 
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
