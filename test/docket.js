@@ -2518,6 +2518,8 @@ const SEC = String.fromCharCode(0xa7);
     ok('skills/constitute names itself, cannot be invoked by the model, limits its tools, and follows intake/CONSTITUTE.md', /^name:\s*constitute$/m.test(con) && /^disable-model-invocation:\s*true$/m.test(con) && /^allowed-tools:\s*Bash\(node \*docket\.js\*\)$/m.test(con) && /intake\/CONSTITUTE\.md/.test(con) && /constitute --answers <file>/.test(con), con);
     ok('…and it is the binding that names CLAUDE.md, not the core', /CLAUDE\.md/.test(con) && !/CLAUDE\.md/.test(read(CORE).replace(/CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT/g, '')), 'the host file is named in the wrong layer');
     ok('skills/docket now advertises /docket diff, which the core has', /\/docket diff <a> <b>/.test(dk) && /docket\.js" diff <a> <b>/.test(dk), 'diff not advertised');
+    const splices = [].concat(...[rule, con, dk].map(s => s.match(/^!`[^`\n]*`$/gm) || []));
+    ok('no splice in a skill carries the argument text: each of the four is a fixed command, no $ in it but the plugin root, and /docket splices status alone (D48)', splices.length === 4 && splices.every(c => !/\$/.test(c.split('${CLAUDE_PLUGIN_ROOT}').join(''))) && splices.filter(c => /docket\.js" status`$/.test(c)).length === 1 && (dk.match(/^!`/gm) || []).length === 1, splices.join(' | '));
     ok('the intake and template directories are named in D13’s list of host-agnostic files', /`packs\/`, `intake\/`, `templates\/`/.test(read(path.join(ROOT, 'docs', 'DECISIONS.md'))), 'D13 does not name them');
   }
 

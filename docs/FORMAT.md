@@ -446,7 +446,8 @@ ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
 `<dir>/test/docket.js`, so a repository runs that witness without the plugin.
 `docket intake rule|constitute` prints an intake file for a skill to splice at
 load — a host runs a splice under the skill's own allow-list, which names the
-core and nothing else — and the vendored copy, with no `intake/` beside it,
+core and nothing else, and a splice is a fixed command with no argument text in
+it, since a host may paste that text into the command as written (D48) — and the vendored copy, with no `intake/` beside it,
 says so rather than printing nothing.
 `--json` is on every subcommand. A subcommand that prints a file — `intake`,
 `protocol`, `pack <name>…` — prints, with it, the file's name and its whole text
