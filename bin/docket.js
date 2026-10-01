@@ -473,20 +473,20 @@ function fencedLines(lines) {
 }
 function citesIn(text, ledger) {
   const all = [], lines = splitLines(text), fenced = fencedLines(lines);
-  lines.forEach((l, i) => { if (fenced[i]) return; for (const c of citesInLine(l, ledger)) all.push(Object.assign({ line: i + 1, text: l }, c)); });
+  lines.forEach((l, i) => { if ((i & 4095) === 4095) inTime(); if (fenced[i]) return; for (const c of citesInLine(l, ledger)) all.push(Object.assign({ line: i + 1, text: l }, c)); });   // the bound within one file (D14's addendum)
   return all;
 }
 const SPEC_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD) §(\d+(?:\.\d+){0,2})/gu;   // the heading's depth (FORMAT.md 8): `UIUX §4.5.1.1` cites `UIUX §4.5.1`
 function specCitesIn(text) {
   const all = [], lines = splitLines(text), fenced = fencedLines(lines);
-  lines.forEach((l, i) => { if (fenced[i]) return; SPEC_CITE_RE.lastIndex = 0; let m; while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) all.push({ doc: m[1], num: m[2], line: i + 1 }); });
+  lines.forEach((l, i) => { if ((i & 4095) === 4095) inTime(); if (fenced[i]) return; SPEC_CITE_RE.lastIndex = 0; let m; while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) all.push({ doc: m[1], num: m[2], line: i + 1 }); });
   return all;
 }
 const BARE_CITE_RE = /(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD) )(?<!(?<![\p{L}\p{N}_])(?:UIUX|PRD))§\d/gu;
 const GLUED_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD)§(\d+(?:\.\d+){0,2})/gu;   // the document's name against the mark, with the space missing
 function bareCitesIn(text) {
   const lines = splitLines(text), fenced = fencedLines(lines); let n = 0;
-  lines.forEach((l, i) => { if (fenced[i]) return; const m = maskCode(l).match(BARE_CITE_RE); if (m) n += m.length; });
+  lines.forEach((l, i) => { if ((i & 4095) === 4095) inTime(); if (fenced[i]) return; const m = maskCode(l).match(BARE_CITE_RE); if (m) n += m.length; });
   return n;
 }
 
@@ -553,7 +553,8 @@ function isSelfCopy(filePath) {
   if (selfText === null) selfText = normEol(readText(__filename));
   try { return normEol(readText(filePath)) === selfText; } catch (e) { return false; }
 }
-function fileText(entry) { if (entry.text === undefined) { inTime(); entry.text = readText(entry.path); } return entry.text; }
+// the session start's bound is read at every pass over a file, not at its first read alone (D14's addendum)
+function fileText(entry) { inTime(); if (entry.text === undefined) entry.text = readText(entry.path); return entry.text; }
 // A ledger is read once, as the ledger. Where it is also one of the files a check walks, it carries that same text, so
 // a run never holds a parse from one version of a ledger and a text from another (a write can land between two reads).
 function seedLedgerText(entries, ledgers) {

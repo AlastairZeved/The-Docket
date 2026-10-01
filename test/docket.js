@@ -4938,6 +4938,16 @@ const SEC = String.fromCharCode(0xa7);
   const L = cut.out.trimEnd().split('\n');
   ok('at a session’s start the docket reads the tree within its bound: past it the docket still prints the ledger, its last rulings, its pending addenda and the last verdict, and says the cites and the witness were not read and docket status reads them whole (D14’s addendum)', cut.code === 0 && /^Docket — test\/fixture\/DECISIONS\.md \(/.test(L[0]) && L.includes('Last rulings:') && L.includes('Addenda pending:') && L.some(l => /^Last verdict: /.test(l)) && L.includes('Cited nowhere: not read at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole') && L[L.length - 1] === 'Witness: not run at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole', cut.out + cut.err);
   ok('…and within it, the whole docket: the cites read and the witness run, as a call by hand prints it', whole.code === 0 && /^Cited nowhere: (?!not read)/m.test(whole.out) && /^Witness: (?:ok|FAIL) \(/m.test(whole.out) && whole.out === docket(['status'], { cwd: fx }).out, whole.out);
+  {
+    // a few large files: each read before the bound and scanned past it — the clock is read through the reading, not before
+    // each file's first read alone (D14's addendum)
+    const d = tempRepo(); const big = path.join(d, 'test', 'fixture', 'big.js');
+    fs.writeFileSync(big, 'const a = 1; // R2\n'.repeat(600000));
+    sh('git', ['add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'big'], d);
+    const t0 = Date.now(), bc = docket(['status', '--session-start'], { cwd: path.join(d, 'test', 'fixture'), input: '{}', env: { DOCKET_START_MS: '400' } }), ms = Date.now() - t0;
+    ok('…and the bound holds through the reading: a governed file of 600,000 citing lines, read in time and scanned past a bound of 400 ms, prints the docket cut, the cites not read, well inside the hook’s five seconds (D14’s addendum)', bc.code === 0 && /^Cited nowhere: not read at the session's start/m.test(bc.out) && /^Witness: not run at the session's start/m.test(bc.out) && ms < 4000, ms + ' ms\n' + bc.out + bc.err);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   const bad = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: 'soon' } });
   ok('…and a bound that is no whole number of milliseconds is refused', bad.code === 2 && /^DOCKET_START_MS is "soon", which is no whole number/.test(bad.err), bad.err);
 }
