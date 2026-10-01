@@ -505,7 +505,9 @@ option it does not read; `diff` exits 2 when a revision or file cannot be read,
 and 1 when an existing entry's heading or body differs between the two readings
 — the comparison is check 7's own, so the two cannot disagree — and lists that
 first, before what was added; each addendum is counted, so one that repeats an
-earlier one, date and words, is listed as added.
+earlier one, date and words, is listed as added. A reader that stops reading
+early — `docket check | head -1` — takes no more lines, and the exit is the
+command's own: a failing check exits 1 whoever stopped reading it (D6's addendum).
 
 ## 14. A worked example
 

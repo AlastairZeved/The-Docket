@@ -78,6 +78,7 @@ A file is governed if it cites a ruling that exists; the ledger is the nearest `
 ### D6. The repo governs itself (a law that does not bind its author)
 Principle: One home per value.
 `bin/docket.js` cites D-numbers where it implements them; all three hooks run on this repo through `claude --plugin-dir .`, which `CLAUDE.md` names as the only way to work here; its own CI runs its own witness. There is no `.claude/settings.json`: it would duplicate the plugin's own hooks and fire `near` twice per edit. Reason: a law that does not bind its author is a suggestion, and a hook with two homes fires twice (D5).
+> Addendum 2026-10-01: A command's exit is its own whoever reads its output: a reader that stops reading early, a pipe into head, takes no more lines, and a failing check still exits 1. Measured on a copy, the core had ended at once with exit 0 when its reader went, so a CI step that piped the check with pipefail read a failing ledger as passing.
 
 ### D7. The four located rules (cases cheap to decide now, expensive to discover in use)
 Principle: A rule carries its reason.

@@ -713,10 +713,13 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 6: a Principle: line inside a fenced block is not the principle line', r.code === 1 && /check 6: R8: no "Principle:" line/.test(r.out), r.out);
   r = docket(['append', '--title', 'Quoted reason', '--issue', '63', '--principle', 'Zero cognitive tax', '--body', 'Text with `Reason: quoted` only.'], { cwd: abc });
   ok('append: a Reason: only inside a code span is refused', r.code === 2 && /must state the reason/.test(r.err), r.err);
-  // a reader that closes stdout early: no stack trace, exit 0 (D1)
+  // a reader that closes stdout early: no stack trace, and the exit is the command's own (D6's addendum)
   const many = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'noisy.js'), Array.from({ length: 3000 }, (_, i) => `// R${90 + i} cited nowhere`).join('\n') + '\n')); // above the pipe's buffer: the reader's exit meets a blocked write
   const ep = cp.spawnSync('bash', ['-c', 'node "$1" check | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: many, encoding: 'utf8' });
-  ok('check with its reader gone after one line ends quietly: no stderr, exit 0', ep.status === 0 && ep.stderr === '' && /status=0$/m.test(ep.stdout) && /check 1: cite R90/.test(ep.stdout), ep.stdout + ep.stderr);
+  ok('check with its reader gone after one line ends quietly, no stderr, and its exit is the check’s own: 1, for a ledger that fails (FORMAT.md 13, D6’s addendum)', ep.status === 0 && ep.stderr === '' && /status=1$/m.test(ep.stdout) && /check 1: cite R90/.test(ep.stdout), ep.stdout + ep.stderr);
+  const wide = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'wide.js'), Array.from({ length: 3000 }, (_, i) => `const w${i} = ${i}; // R2`).join('\n') + '\n'));
+  const ep0 = cp.spawnSync('bash', ['-c', 'node "$1" governs R2 | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: path.join(wide, 'test', 'fixture'), encoding: 'utf8' });
+  ok('…and a command that succeeds, its reader gone after one line of an output past the pipe’s buffer, exits 0, quietly', ep0.status === 0 && ep0.stderr === '' && /status=0$/m.test(ep0.stdout) && /^R2 /.test(ep0.stdout), ep0.stdout + ep0.stderr);
   // a baseline pair that is not <file>=<count> is a check 4 failure at the comment's line, and gives no allowance (FORMAT.md 9)
   const nanb = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=abc -->'));
   r = docket(['check'], { cwd: nanb });

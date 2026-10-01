@@ -57,9 +57,11 @@ const INVALID_ROLES = ['general audience', 'everyone', 'anyone', 'non-technical'
 // Every reader-facing byte leaves through here and through die(), and neither carries a character
 // that reorders what a terminal shows. A ledger may hold one — check 2 names it — but the text a
 // maker is shown still reads straight, which is the whole of that guarantee (FORMAT.md 13).
-function out(s) { const t = plain(s); process.stdout.write(t.endsWith('\n') ? t : t + '\n'); }
-// A reader that stops reading (`docket check | head -1`) is not a failure of the ledger: end quietly, exit 0.
-process.stdout.on('error', e => { if (e && e.code === 'EPIPE') process.exit(0); throw e; });
+function out(s) { if (stdoutGone) return; const t = plain(s); process.stdout.write(t.endsWith('\n') ? t : t + '\n'); }
+// A reader that stops reading (`docket check | head -1`) takes no more lines, quietly, and the exit is the command's own: a
+// failing check exits 1 whoever stopped reading it (FORMAT.md 13, D6's addendum)
+let stdoutGone = false;
+process.stdout.on('error', e => { if (e && e.code === 'EPIPE') { stdoutGone = true; return; } throw e; });
 let TRAIL = null;                                                      // the trail this run wrote to, when DOCKET_TRAIL is set (D25)
 function die(msg, code) {
   if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + trailCut(plain(msg).replace(/\s+/g, ' '), 400 /* a refusal's first sentence: the line and the rule (D14's addendum) */) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
