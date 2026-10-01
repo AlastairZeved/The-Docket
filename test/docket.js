@@ -4725,5 +4725,15 @@ const SEC = String.fromCharCode(0xa7);
   }
 }
 
+// ── the hook protocol's own field names are the core's I/O with its host, those D13's addendum names and no other ──
+{
+  const src = read(CORE);
+  const reads = Array.from(new Set(src.match(/\b(?:input|ti)\.[a-z_]+\b/g) || [])).sort();
+  ok('the core reads of the hook’s input the fields D13’s addendum names and no other — tool_name, tool_input’s file_path, old_string and replace_all, session_id, cwd, hook_event_name, source, stop_hook_active, and transcript_path handed to the judge (D13’s addendum)', reads.join() === 'input.cwd,input.hook_event_name,input.session_id,input.source,input.stop_hook_active,input.tool_input,input.tool_name,ti.file_path,ti.old_string,ti.replace_all' && /for \(const k of \['session_id', 'transcript_path', 'cwd'\]\)/.test(src), reads.join(' '));
+  ok('…and writes of the hook’s output hookSpecificOutput, with hookEventName and additionalContext, and decision with its reason', /hookSpecificOutput: \{ hookEventName: input\.hook_event_name, additionalContext: text \}/.test(src) && /JSON\.stringify\(\{ decision: 'block', reason \}\)/.test(src), 'the output fields moved');
+  const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
+  ok('the agent file sends a judge run by hand to .docket/core at the project’s root — the repository’s top, where the core writes it (D28’s addendum, D44)', /`\.docket\/core` at the project's root —\s+the top of the git repository the project directory lies in/.test(A), A);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
