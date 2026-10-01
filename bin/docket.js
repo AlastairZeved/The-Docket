@@ -1839,10 +1839,10 @@ function vendor(argv) {
 // witness, prints the CI step and the agent-instructions section, and runs check. Nothing here names a
 // host: the section is "for the repository's agent-instructions file", and the host's skill says which.
 const ABBREVIATIONS = ['dr', 'mr', 'mrs', 'ms', 'prof', 'st', 'e.g', 'i.e', 'etc', 'vs', 'cf', 'no', 'jr', 'sr'];   // a stop after one of these ends no sentence — a list, stated
+function unAbbreviated(s) { let t = s.trim(); for (const a of ABBREVIATIONS) t = t.replace(new RegExp('\\b' + a.replace('.', '\\.') + '\\.', 'gi'), a.replace('.', '')); return t; }
 function sentenceCount(s) {
-  let t = s.trim();
+  let t = unAbbreviated(s);
   if (!t) return 0;
-  for (const a of ABBREVIATIONS) t = t.replace(new RegExp('\\b' + a.replace('.', '\\.') + '\\.', 'gi'), a.replace('.', ''));
   let n = 0;
   const re = /[.!?]+(?=\s+[A-Z"'(À-Þ]|\s*$)/g;               // a stop that ends a sentence: followed by a capital, or last
   while (re.exec(t)) n++;
@@ -1851,10 +1851,10 @@ function sentenceCount(s) {
 }
 // A crowd is refused when the role IS one, article or not, or one followed by a relative clause ("everyone who
 // cooks"); when it opens with a word that can only open a crowd, whatever follows ("everyone at the company"); and when
-// its last word is a crowd's plural, whatever qualifies it ("non-technical users", "busy people"). A role that holds a
+// its last word names a crowd, whatever qualifies it ("non-technical users", "busy people", "the general public"). A role that holds a
 // crowd's word in front of a person's noun — "a people manager", "users researcher", "the public defender", "a
 // non-technical founder" — names a person and is not this shape check's to refuse; the semantic line is the intake's (D13).
-const CROWD_OPENERS = ['everyone', 'anyone', 'all users', 'someone curious', 'general audience'], CROWD_PLURALS = ['users', 'people'];
+const CROWD_OPENERS = ['everyone', 'anyone', 'all users', 'someone curious', 'general audience'], CROWD_NOUNS = ['users', 'people', 'public'];
 function invalidRole(role) {
   const strip = t => t.replace(/^(a|an|the)\s+/, '');
   const raw = role.toLowerCase().replace(/[.]+$/, '').trim(), forms = [raw, strip(raw)];
@@ -1865,7 +1865,7 @@ function invalidRole(role) {
       if (f.startsWith(b + ' ') && /^(who|that|which|whom|whose)\b/.test(f.slice(b.length + 1))) return bad;
       if (CROWD_OPENERS.includes(bad) && f.startsWith(b + ' ')) return bad;
     }
-    if (CROWD_PLURALS.includes(bad) && last === bad) return bad;
+    if (CROWD_NOUNS.includes(strip(bad)) && last === strip(bad)) return bad;
   }
   return null;
 }
@@ -1893,7 +1893,7 @@ function readAnswers(argv) {
   const feeling = str(o.feeling);
   if (!feeling) bad('feeling', 'is required: one phrase, the feeling every iteration keeps — no default is offered');
   oneLine('feeling', feeling);
-  if (/[.!?]$/.test(feeling) || sentenceCount(feeling) > 1) bad('feeling', 'is a phrase, not a sentence');
+  if (/[.!?]$/.test(feeling) || sentenceCount(feeling) > 1 || /[.!?]+\s+\S/.test(unAbbreviated(feeling))) bad('feeling', 'is a phrase, not a sentence');   // a stop before more words is two fragments, whatever case the second opens in
   if (!Array.isArray(o.refuses)) bad('refuses', 'is required: at least ' + REFUSALS_MIN + ' verb phrases, as a JSON array');
   const refuses = o.refuses.map(str);
   refuses.forEach((r, i) => { if (!r) bad('refuses[' + i + ']', 'is empty'); oneLine('refuses[' + i + ']', r); });

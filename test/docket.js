@@ -2133,6 +2133,12 @@ const SEC = String.fromCharCode(0xa7);
       ok('constitute refuses the role "' + role + '" by name, exit 2, writing nothing', r.code === 2 && new RegExp('^constitute: who\\.role "' + role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" is refused — a role names a person, not a crowd').test(r.err) && !fs.existsSync(path.join(r.dir, 'docs')), r.code + ' ' + r.err + ' ' + fs.readdirSync(r.dir).join(','));
       fs.rmSync(r.dir, { recursive: true, force: true });
     }
+    { const r = constitute(Object.assign({}, ANSWERS, { who: { role: 'the general public', knows: 'k', doesntKnow: 'd' } }));
+      ok('constitute refuses "the general public" as it refuses "the public": a role whose last word is a crowd’s noun is a crowd, whatever qualifies it', r.code === 2 && /^constitute: who\.role "the general public" is refused — a role names a person, not a crowd; "the public" is one of/m.test(r.err), r.code + ' ' + r.err);
+      fs.rmSync(r.dir, { recursive: true, force: true }); }
+    { const r = constitute(Object.assign({}, ANSWERS, { feeling: 'calm, e.g. unhurried' }));
+      ok('…and a feeling’s abbreviation is no stop: "calm, e.g. unhurried" is one phrase, and the constitution is written', r.code === 0, r.code + ' ' + r.err);
+      fs.rmSync(r.dir, { recursive: true, force: true }); }
     for (const role of ['a people manager', 'users researcher', 'the public defender', 'a non-technical founder']) {
       const r = constitute(Object.assign({}, ANSWERS, { who: { role, knows: 'k', doesntKnow: 'd' } }));
       ok('…while "' + role + '" — a crowd’s word before a person’s noun — is a role, and the constitution is written', r.code === 0 && fs.existsSync(path.join(r.dir, 'docs', 'DECISIONS.md')), r.code + ' ' + r.err);
@@ -2146,6 +2152,7 @@ const SEC = String.fromCharCode(0xa7);
       ['what is two sentences', Object.assign({}, ANSWERS, { what: 'It does X. It does Y.' }), /^constitute: what is one sentence; this reads as 2$/m],
       ['what is two sentences, the second unfinished', Object.assign({}, ANSWERS, { what: 'It does X. It does Y' }), /^constitute: what is one sentence; this reads as 2$/m],
       ['feeling is two fragments with a stop between', Object.assign({}, ANSWERS, { feeling: 'Calm. Always' }), /^constitute: feeling is a phrase, not a sentence$/m],
+      ['feeling is two fragments, the second in lower case', Object.assign({}, ANSWERS, { feeling: 'calm. certain' }), /^constitute: feeling is a phrase, not a sentence$/m],
       ['what is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.what; return a; })(), /^constitute: what is required: one sentence/m],
       ['who is missing', (() => { const a = Object.assign({}, ANSWERS); delete a.who; return a; })(), /^constitute: who is required: \{"role"/m],
       ['role is empty', Object.assign({}, ANSWERS, { who: { role: '  ', knows: 'k', doesntKnow: 'd' } }), /^constitute: who\.role is required: the person this is for, as a role$/m],
