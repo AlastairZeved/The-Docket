@@ -360,7 +360,7 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['append', '--baseline'], { cwd });
   ok('…and with the fourth cite gone the rewrite falls back to three, and check passes: a fall needs no record', r.code === 0 && /<!-- docket: bare-cites app\.js=3 -->/.test(r.out) && /check: ok/.test(r.out), r.out + r.err);
   const status = docket(['status'], { cwd });
-  ok('status lists the pending addenda (R2 then R5) and the new last rulings', /Addenda pending: \n  R2 \(2026-09-11\)[^\n]*\n  R5 \(2026-09-12\): the lot now has four sections/.test(status.out) && /Last rulings:\n  R10  Read fn \(x\) before the call  · issue #23\n  R9  Pinned notes keep their size  · issue #21/.test(status.out) && /Cited nowhere: R9, R10 \(2 of 11\)/.test(status.out), status.out);
+  ok('status lists the pending addenda (R2 then R5) and the new last rulings', /Addenda pending:\n  R2 \(2026-09-11\)[^\n]*\n  R5 \(2026-09-12\): the lot now has four sections/.test(status.out) && /Last rulings:\n  R10  Read fn \(x\) before the call  · issue #23\n  R9  Pinned notes keep their size  · issue #21/.test(status.out) && /Cited nowhere: R9, R10 \(2 of 11\)/.test(status.out), status.out);
   const nop = tempRepo(d2 => edit(d2, 'test/fixture/PRD.md', '## ' + SEC + '1 Principles', '## ' + SEC + '3 Principles'));
   r = docket(['principles'], { cwd: path.join(nop, 'test', 'fixture') });
   ok('principles: a ledger with no list prints that it found none and exits 1', r.code === 1 && /no principles list found/.test(r.out), r.out);
@@ -410,7 +410,7 @@ const SEC = String.fromCharCode(0xa7);
   const sRepo = tempRepo();                                            // hermetic: the checkout's own state directory is not read
   const s = docket(['status'], { cwd: path.join(sRepo, 'test', 'fixture') });
   ok('status: each pending addendum on one line, its text cut at one hundred characters with …, as governs cuts a cited line (D14) — the fixture’s R2 addendum is longer', /^  R2 \(2026-09-11\): .{1,99}\u2026$/m.test(s.out) && !/and the rule stands as written/.test(s.out), s.out);
-  ok('status: the docket names the ledger, the last three rulings, uncited rulings, pending addenda, the last verdict and the witness', /^Docket — test\/fixture\/DECISIONS\.md \(9 rulings; prefixes A, R\)\nLast rulings:\n  R8  /.test(s.out) && /Cited nowhere: none/.test(s.out) && /Addenda pending: \n  R2 \(2026-09-11\)/.test(s.out) && /Last verdict: none/.test(s.out) && /Witness: FAIL \(1\)/.test(s.out), s.out);
+  ok('status: the docket names the ledger, the last three rulings, uncited rulings, pending addenda, the last verdict and the witness', /^Docket — test\/fixture\/DECISIONS\.md \(9 rulings; prefixes A, R\)\nLast rulings:\n  R8  /.test(s.out) && /Cited nowhere: none/.test(s.out) && /Addenda pending:\n  R2 \(2026-09-11\)/.test(s.out) && /Last verdict: none/.test(s.out) && /Witness: FAIL \(1\)/.test(s.out), s.out);
   const sj = docket(['status', '--json'], { cwd: path.join(sRepo, 'test', 'fixture') });
   const sjo = sj.code === 0 ? JSON.parse(sj.out) : {};
   ok('status --json lists the last three rulings in the text\'s order, newest first', (sjo.last || []).map(x => x.id).join(',') === 'R8,R7,R6' && /^Last rulings:\n  R8  [^\n]*\n  R7  [^\n]*\n  R6  /m.test(s.out), JSON.stringify(sjo.last));
@@ -4655,6 +4655,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('…says which terms matched nothing when none did, exit 0, and refuses a blank term, which would match every ruling', none.code === 0 && none.out.trim() === 'no ruling matches "xyzzy", "plugh" in DECISIONS.md' && blank.code === 2 && /^query: a term is empty or blank/.test(blank.err), none.out + ' | ' + blank.err);
   const ex = [['check', 'extra'], ['gate', '--session', 'x', 'extra'], ['diff', 'HEAD', 'HEAD', 'extra'], ['status', 'x'], ['verdict', 'PASS', 'x'], ['pack', '--list', 'code']].map(a => docket(a, { cwd: fx }));
   ok('every subcommand refuses, exit 2, an argument it does not take, as it refuses an option it does not read — check, gate, diff, status, verdict, and pack --list given a name', ex.every(r => r.code === 2 && /(is an argument \w+ does not take|--list prints every pack and takes no name)/.test(r.err)), ex.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+}
+
+// ── the docket at a session's start reads the tree within the hook's time (D14's addendum) ──
+{
+  const fx = path.join(tempRepo(), 'test', 'fixture');
+  const whole = docket(['status', '--session-start'], { cwd: fx, input: '{}' });
+  const cut = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: '0' } });
+  const L = cut.out.trimEnd().split('\n');
+  ok('at a session’s start the docket reads the tree within its bound: past it the docket still prints the ledger, its last rulings, its pending addenda and the last verdict, and says the cites and the witness were not read and docket status reads them whole (D14’s addendum)', cut.code === 0 && /^Docket — test\/fixture\/DECISIONS\.md \(/.test(L[0]) && L.includes('Last rulings:') && L.includes('Addenda pending:') && L.some(l => /^Last verdict: /.test(l)) && L.includes('Cited nowhere: not read at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole') && L[L.length - 1] === 'Witness: not run at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole', cut.out + cut.err);
+  ok('…and within it, the whole docket: the cites read and the witness run, as a call by hand prints it', whole.code === 0 && /^Cited nowhere: (?!not read)/m.test(whole.out) && /^Witness: (?:ok|FAIL) \(/m.test(whole.out) && whole.out === docket(['status'], { cwd: fx }).out, whole.out);
+  const bad = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: 'soon' } });
+  ok('…and a bound that is no whole number of milliseconds is refused', bad.code === 2 && /^DOCKET_START_MS is "soon", which is no whole number/.test(bad.err), bad.err);
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

@@ -722,6 +722,15 @@ core's refusals from the core's own record, beside the host's wording of them.
 Every cut keeps that many characters in all, its mark `…` among them, counted as
 code points (D14's addendum, D42). It is off by default.
 
+`status --session-start`, the binding's call at a session's start, reads the
+tree within three and a half seconds of the core's start — the hook's five, less
+the time to start, the base's lock wait and the time to print (D14's addendum);
+past that it prints the last rulings, the pending addenda and the last verdict,
+and its lines for the uncited rulings and the witness say they were not read at
+the session's start and that `docket status` reads them whole. `DOCKET_START_MS`,
+when the environment names a whole number of milliseconds, replaces the bound: a
+hook for a test that must be repeatable.
+
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
 `status` only when the binding passes a plugin root (`DOCKET_PLUGIN_ROOT`) that

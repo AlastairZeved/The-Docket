@@ -518,6 +518,7 @@ function loadContext(root, opts) {
   const entries = [];
   const vendored = [];
   for (const f of uniq(files)) {
+    inTime();                                                         // a session's start reads within its bound (D14's addendum)
     if (!isFile(f) || !isTextFile(f)) continue;
     if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
     const lp = findLedger(f, root);
@@ -542,7 +543,7 @@ function isSelfCopy(filePath) {
   if (selfText === null) selfText = normEol(readText(__filename));
   try { return normEol(readText(filePath)) === selfText; } catch (e) { return false; }
 }
-function fileText(entry) { if (entry.text === undefined) entry.text = readText(entry.path); return entry.text; }
+function fileText(entry) { if (entry.text === undefined) { inTime(); entry.text = readText(entry.path); } return entry.text; }
 // A ledger is read once, as the ledger. Where it is also one of the files a check walks, it carries that same text, so
 // a run never holds a parse from one version of a ledger and a text from another (a write can land between two reads).
 function seedLedgerText(entries, ledgers) {
@@ -1297,6 +1298,18 @@ function writeLedger(ledger, text) {
 // entry was written. So a write command takes an exclusive lock beside the ledger and re-reads it inside the lock: the
 // id it computes is the id it writes (D4 — append, never amend; a record that can be rewritten proves nothing).
 const LOCK_WAIT_MS = 5000;
+// D14's addendum: at a session's start the tree is read within three and a half seconds of the core's start — the hook's five,
+// less the time to start, the base's lock wait (which comes first) and the time to print; DOCKET_START_MS, a test's hook,
+// replaces it. Past it the docket prints the ledger's own parts and names what it left unread.
+const START_READ_MS = 3500;
+let readBy = Infinity;                                                 // the moment, in ms since the core started, past which the tree is not read
+function inTime() { if (performance.now() > readBy) throw Object.assign(new Error('the session start\'s bound'), { startBound: true }); }
+function startReadMs() {
+  const v = process.env.DOCKET_START_MS;
+  if (v === undefined || v === '') return START_READ_MS;
+  if (!/^\d{1,7}$/.test(v)) die('DOCKET_START_MS is ' + JSON.stringify(v) + ', which is no whole number of milliseconds (FORMAT.md 16)', 2);
+  return Number(v);
+}
 const SESSION_START_WAIT_MS = 1000;   // D14's addendum: a fifth of the session-start hook's five seconds; the rest are the docket's to print in
 // One lock rule for the ledger and the state: an exclusive file beside the one it guards, naming its holder, so a release
 // frees its own lock and no other, and a lock whose holder is gone — a run that was killed — is taken over. It waits up to
@@ -1612,6 +1625,7 @@ function recordSessionBase() {
   try { withState(root, st => { const x = Object.assign(freshSession(), st.sessions[sid] || {}); if (afresh || !x.base) x.base = head; st.sessions[sid] = x; }, { wait: SESSION_START_WAIT_MS, orSkip: true }); } catch (e) { /* the docket prints without it */ }
 }
 function status(argv) {
+  if (has(argv, '--session-start')) readBy = startReadMs();          // the hook's time is the docket's to print in (D14's addendum)
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
   const below = lp ? [] : ledgersBelow(cwd, root);                    // a walk goes up: a ledger below is named, not found
   if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
@@ -1631,18 +1645,24 @@ function status(argv) {
     return 0;
   }
   const ledger = loadLedger(lp);
-  const ctx = loadContext(root);
-  const cited = new Set(codeCites(ctx, ledger).map(c => c.id));
-  const uncited = ledger.rulings.filter(r => !cited.has(r.id)).map(r => r.id);
+  // the tree, read within the session start's bound: past it, the ledger's own parts are printed and the rest named (D14's addendum)
+  let ctx = null, uncited = null, check_ = null, spec_ = null;
+  try {
+    ctx = loadContext(root);
+    const cited = new Set(codeCites(ctx, ledger).map(c => c.id));
+    uncited = ledger.rulings.filter(r => !cited.has(r.id)).map(r => r.id);
+    check_ = runCheck(root, { ctx });
+    spec_ = runSpecCheck(root, ctx, lp);
+  } catch (e) { if (!e.startBound) throw e; }
+  readBy = Infinity;
   const pend = pendingAddenda(ledger);
   const st = loadState(stopRoot(cwd));                                 // the verdict the stop's commands keep (D28)
   const surfaced = !!(st.last && st.sessions[st.last.session] && st.sessions[st.last.session].surfaced);   // D11: the surfaced state is the one the docket exists to show; a verdict naming a session the file never recorded is not surfaced
   // `last` names one session; every surfaced session waits for the human, and the protocol's release says status names it (D11)
   const surfacedAll = Object.keys(st.sessions).filter(k => st.sessions[k] && st.sessions[k].surfaced).sort();
   const surfacedOthers = surfacedAll.filter(k => !(st.last && k === st.last.session));
-  const check_ = runCheck(root, { ctx });
-  const spec_ = runSpecCheck(root, ctx, lp);
-  const witness = { ok: check_.failures.length === 0 && spec_.failures.length === 0, ledgers: check_.ctx.ledgers.size, failures: check_.failures.concat(spec_.failures) };
+  const witness = check_ && spec_ ? { ok: check_.failures.length === 0 && spec_.failures.length === 0, ledgers: check_.ctx.ledgers.size, failures: check_.failures.concat(spec_.failures) } : null;
+  const UNREAD = 'not read at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole';
   if (argv.json) {
     out(JSON.stringify({ ledger: rel(root, lp), rulings: ledger.rulings.length, prefixes: ledger.prefixes, last: ledger.rulings.slice(-3).reverse().map(r => ({ id: r.id, title: r.title })), uncited, pendingAddenda: pend, lastVerdict: st.last, surfaced, surfacedSessions: surfacedAll, witness }, null, 2));
     return 0;
@@ -1651,8 +1671,8 @@ function status(argv) {
   L.push('Docket — ' + rel(root, lp) + ' (' + ledger.rulings.length + ' ruling' + (ledger.rulings.length === 1 ? '' : 's') + (ledger.prefixes.length ? '; prefix' + (ledger.prefixes.length === 1 ? ' ' : 'es ') + ledger.prefixes.join(', ') : '; no prefix') + ')');
   L.push('Last rulings:');
   for (const r of ledger.rulings.slice(-3).reverse()) L.push('  ' + named(r) + (r.issue !== null ? '  · issue #' + r.issue : ''));
-  L.push('Cited nowhere: ' + (uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
-  L.push('Addenda pending: ' + (pend.length ? '' : 'none'));
+  L.push('Cited nowhere: ' + (uncited === null ? UNREAD : uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
+  L.push('Addenda pending:' + (pend.length ? '' : ' none'));
   for (const a of pend) {                                              // D14: one line each, cut at a glance; governs <id> prints the whole, and --json carries it
     L.push('  ' + a.id + ' (' + a.date + '): ' + glance(a.text));
   }
@@ -1662,6 +1682,7 @@ function status(argv) {
   if (isFile(jlog)) L.push('Judge\'s report: ' + rel(root, jlog) + ' — the last judge\'s own words, a check it could not run named there');
   if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since its last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
   // a check 7 the run skipped is said beside an ok, as check's info line says it, so a skip is never read as a pass (FORMAT.md 13)
+  if (!witness) { L.push('Witness: ' + UNREAD.replace('not read', 'not run')); out(L.join('\n')); return 0; }
   const skipped7 = check_.info.filter(i => /: check 7 skipped/.test(i)).length;
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + (skipped7 ? '; check 7 skipped for ' + skipped7 + ' — docket check says why' : '') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
