@@ -2270,6 +2270,9 @@ const SEC = String.fromCharCode(0xa7);
       fs.writeFileSync(path.join(dir, 'test', 'docket.js'), read(CORE).slice(0, 3000));   // an older, shorter core: opens as this one does
       r = docket(['vendor', '.'], { cwd: dir });
       ok('…and replaces a copy of an older core, which opens as this file opens', r.code === 0 && /^replaced test\/docket\.js/m.test(r.out) && read(path.join(dir, 'test', 'docket.js')) === read(CORE), r.out + r.err);
+      fs.writeFileSync(path.join(dir, 'test', 'docket.js'), read(CORE).split('\n').slice(0, 3).join('\n') + '\nconsole.log("an older core, cut short");\n');
+      r = docket(['vendor', '.'], { cwd: dir });
+      ok('…the three lines are the copy’s signature, and nothing else is asked of it: a file that opens with the core’s three lines and holds one more is replaced (D14’s addendum)', r.code === 0 && /^replaced test\/docket\.js/m.test(r.out) && read(path.join(dir, 'test', 'docket.js')) === read(CORE), r.out + r.err);
       r = docket(['vendor', '.'], { cwd: ROOT });
       ok('vendor into this repository refuses: its test/docket.js is the suite, not the core', r.code === 2 && /is not a copy of the docket/.test(r.err), r.code + ' ' + r.err);
       fs.rmSync(dir, { recursive: true, force: true });

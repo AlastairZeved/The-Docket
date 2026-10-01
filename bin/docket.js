@@ -1794,12 +1794,12 @@ const CI_STEP = [
 function vendorInto(dir) {
   const dest = path.join(dir, 'test', 'docket.js');
   const replaced = isFile(dest);
-  // What sits there is replaced only when it is a docket core of some version — it opens as this file opens and names
-  // the docket in its head — so a project's own test file, or this repository's suite, is never written over.
+  // What sits there is replaced only when it is a docket core of some version — it opens as this file opens, the third
+  // line naming the program — so a project's own test file, or this repository's suite, is never written over.
   if (replaced) {
     const theirs = normEol(readText(dest)), mine = normEol(readText(__filename));
     const opens = t => t.split('\n', 3).join('\n');
-    if (opens(theirs) !== opens(mine) || !/docket/.test(theirs.slice(0, 4000))) die('vendor: ' + rel(process.cwd(), dest) + ' exists and is not a copy of the docket\'s core — move it aside first; the witness goes to test/docket.js', 2);
+    if (opens(theirs) !== opens(mine)) die('vendor: ' + rel(process.cwd(), dest) + ' exists and is not a copy of the docket\'s core — move it aside first; the witness goes to test/docket.js', 2);
   }
   if (exists(path.dirname(dest)) && !isDir(path.dirname(dest))) die('vendor: ' + rel(process.cwd(), path.dirname(dest)) + ' exists and is not a directory; the witness goes to test/docket.js', 2);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
