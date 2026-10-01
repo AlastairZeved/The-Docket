@@ -541,14 +541,23 @@ function seedLedgerText(entries, ledgers) {
   for (const e of entries) if (e.text === undefined && ledgers.has(e.path)) e.text = ledgers.get(e.path).text;
 }
 function isSpecDoc(entry, ledger) { return entry.path === path.join(ledger.dir, 'UIUX.md') || entry.path === path.join(ledger.dir, 'PRD.md'); }
-// A ledger document — any DECISIONS*.md — is checked for its cites but is never governed code:
-// its cites are references between rulings, not implementation.
-function isLedgerDoc(p) { return /^DECISIONS.*\.md$/i.test(path.basename(p)); }
+// A ledger document is checked for its cites but is never governed code: its cites are references between rulings, not
+// implementation. It is a ledger or a copy of one (FORMAT.md 8, D5's addendum): named DECISIONS.md, as discovery names a
+// ledger, or named DECISIONS*.md in any case and holding an entry heading. `text` is the file's text, or a function that
+// reads it, asked only when the name leaves the question open.
+function isLedgerDoc(p, text) {
+  const b = path.basename(p);
+  if (b === 'DECISIONS.md') return true;
+  if (!/^DECISIONS.*\.md$/i.test(b)) return false;
+  let t = text;
+  try { if (typeof t === 'function') t = t(); } catch (e) { t = null; }
+  return typeof t === 'string' && splitLines(t).some(l => HEADING_RE.test(l));
+}
 // Code cites: resolving cites in every governed file of a ledger except the ledger itself.
 function codeCites(ctx, ledger) {
   const cites = [];
   for (const e of ctx.files) {
-    if (e.ledger !== ledger.path || isLedgerDoc(e.path)) continue;
+    if (e.ledger !== ledger.path || isLedgerDoc(e.path, () => fileText(e))) continue;
     // One line, one cite, HERE: the same id twice on a line is one reliance for the code-cite
     // lists — what governs prints and what "cited nowhere" counts. near does not share this
     // rule: its count is per occurrence and is the first key of two of its three orders
@@ -628,7 +637,7 @@ function near(argv) {
   const lp = findLedger(file, pr || path.parse(path.resolve(startDir)).root);
   if (!lp) return 0;                                                   // ungoverned tree: silent
   recordCore(pr || ledgerHome(lp));                                    // the judge finds the core through this file (16)
-  if (isLedgerDoc(file)) return 0;                                     // FORMAT.md 8: the ledger is amended through append; a direct edit is check 7's business
+  if (isLedgerDoc(file, () => readText(file))) return 0;               // FORMAT.md 8: the ledger, or a copy of one, is amended through append; a direct edit is check 7's business
   if (isSelfCopy(file)) return 0;                                      // D9: the vendored witness cites another ledger; a list from it would be wrong, so there is none
   if (rel(pr || ledgerHome(lp), file).split('/').includes('.docket')) return 0;   // D26: the judge's state is outside the governed set, the window's as the walk's
   if (!isFile(file)) return 0;                                         // D7: a Write of a new file is silent
@@ -2016,8 +2025,8 @@ function governedAt(root, have, base) {
     const name = path.posix.basename(p), dir = path.posix.dirname(p);
     if (name === 'DECISIONS.md') { out.push(p); continue; }           // a ledger the base held
     if ((name === 'UIUX.md' || name === 'PRD.md') && atBase.has(dir === '.' ? 'DECISIONS.md' : dir + '/DECISIONS.md')) { out.push(p); continue; }   // a spec document beside it (D40)
-    if (isLedgerDoc(p)) continue;                                      // a ledger document is never governed code, its name read in any case (FORMAT.md 8)
     const b = showBytes(p);
+    if (isLedgerDoc(p, () => b === null ? null : b.toString('utf8'))) continue;   // a ledger document is never governed code: a ledger, or a copy of one, at the base (FORMAT.md 8)
     if (b === null || b.subarray(0, SNIFF_BYTES).includes(0)) continue;   // binary at the base, as isTextFile reads the working tree
     const t = b.toString('utf8');
     const L = ledgerAt(p);

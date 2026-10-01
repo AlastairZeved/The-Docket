@@ -71,6 +71,7 @@ Existing entries parse loosely; entries written through `docket append` satisfy 
 ### D5. Zero config (where the ledger is, and what governs a file)
 Principle: One home per value.
 A file is governed if it cites a ruling that exists; the ledger is the nearest `DECISIONS.md` or `docs/DECISIONS.md` walking up from the edited file; prefixes are read from headings; spec documents sit beside the ledger. Nothing is configured anywhere else. Reason: a value with two homes has no home.
+> Addendum 2026-10-01: A ledger document, checked for its cites and never governed code, is a ledger or a copy of one: a file named DECISIONS.md, as discovery names a ledger, or one whose name begins DECISIONS in any case and holds an entry heading, as a copy of a ledger does. Read by its name alone, the exemption had ungoverned notes/Decisions.md and notes/decisions-overview.md, prose that cites a ruling: near was silent at an edit inside them, the gate skipped them, and governs left them out.
 
 ### D6. The repo governs itself (a law that does not bind its author)
 Principle: One home per value.

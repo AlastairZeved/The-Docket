@@ -313,11 +313,15 @@ than the number of files that carry a cite, and why a ledger with no entries
 still has a governed tree to name while governing nothing in it.
 
 A **governed file** is a text file with at least one cite that resolves. A
-**ledger document** — any file named `DECISIONS*.md`, the name read in any case, the ledger itself or a
-frozen copy of it — has its cites checked (check 1) but is never governed code:
+**ledger document** — the ledger itself or a copy of one: a file named
+`DECISIONS.md`, as discovery names a ledger, or one whose name begins `DECISIONS`
+and ends `.md`, the name read in any case, that holds an entry heading (2) — has
+its cites checked (check 1) but is never governed code:
 `governs`, `status` and `gate` leave it out of code cites and governed files,
 and `near` is silent for an edit inside one: the ledger is amended through
-`append` (11), and a direct edit is check 7's business.
+`append` (11), and a direct edit is check 7's business. A file so named that holds
+no entry heading — notes about decisions, say — is read as any other file is, and
+governed when it cites a ruling (D5's addendum).
 
 A **spec cite** is `UIUX §<x>[.<y>[.<z>]]` or `PRD §<x>[.<y>[.<z>]]`, the same
 depth the heading grammar allows (7) — a deeper number is read to its third level,

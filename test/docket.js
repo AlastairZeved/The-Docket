@@ -4271,7 +4271,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('check 2 fails a ledger saved as UTF-16: it is not UTF-8 text, and read as such it holds no entries (FORMAT.md 1, D45)', r.code === 1 && /^DECISIONS\.md:1  check 2: the ledger is not UTF-8 text — a UTF-16 byte order mark opens it; save it as UTF-8 \(FORMAT\.md 1, D45\)$/m.test(r.out), r.out + r.err);
   }
   {
-    const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), 'Notes on R6.\n'));
+    const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), '### R6. The toolbar replaces the long-press menu\nNotes on R6.\n'));   // a copy of a ledger's entry (D5's addendum)
     fs.appendFileSync(path.join(fx(d), 'decisions-notes.md'), 'More on R6.\n');
     const g = docket(['gate', '--session', 'ld'], { cwd: d });
     ok('a ledger document named in lower case is a ledger document to the gate as to near and governs: its edit is no governed change, the gate answers SKIP (FORMAT.md 8)', /^SKIP/.test(g.out), g.out + g.err);
@@ -4593,6 +4593,24 @@ const SEC = String.fromCharCode(0xa7);
   sh('git', ['rm', '-q', '--cached', 'test/fixture/DECISIONS.md'], d);
   const c = docket(['check'], { cwd: d });
   ok('a ledger struck from the index and left on disk fails check 7: git no longer tracks it, and HEAD has it (D4’s addendum)', c.code === 1 && c.out.split('\n').includes('test/fixture/DECISIONS.md:1  check 7: the ledger is struck from the index (append only): git no longer tracks it, and HEAD has it'), c.out);
+}
+
+// ── a ledger document is a ledger or a copy of one, not any file whose name begins DECISIONS (D5's addendum) ──
+{
+  const d = tempRepo(dir => {
+    fs.mkdirSync(path.join(dir, 'test', 'fixture', 'notes'));
+    fs.writeFileSync(path.join(dir, 'test', 'fixture', 'notes', 'Decisions.md'), '# Decisions\n\nThe toolbar must stay (R6).\n');
+    fs.writeFileSync(path.join(dir, 'test', 'fixture', 'notes', 'decisions-overview.md'), '# Overview\n\nThe toolbar must stay (R6).\n');
+    fs.writeFileSync(path.join(dir, 'test', 'fixture', 'notes', 'DECISIONS-v1.md'), '# Rulings, as they stood\n\n### R6. The toolbar stays\nIt stays (R6).\n');
+  });
+  const fx = path.join(d, 'test', 'fixture');
+  const near_ = (f, needle) => docket(['near'], { input: nearInput(path.join(fx, 'notes', f), needle || 'The toolbar must stay'), cwd: fx }).out;
+  const gv = docket(['governs', 'R6'], { cwd: fx }).out;
+  ok('a file named Decisions.md or decisions-overview.md that holds no entry heading is governed by the ruling it cites: near names R6 at an edit inside it, and governs lists it (D5’s addendum, FORMAT.md 8)', /R6/.test(near_('Decisions.md')) && /R6/.test(near_('decisions-overview.md')) && gv.includes('notes/Decisions.md') && gv.includes('notes/decisions-overview.md'), near_('Decisions.md') + ' | ' + gv);
+  ok('…while a copy of a ledger, a DECISIONS-v1.md holding an entry heading, is a ledger document still: near is silent in it and governs leaves it out', near_('DECISIONS-v1.md', 'It stays') === '' && !gv.includes('DECISIONS-v1.md'), near_('DECISIONS-v1.md', 'It stays') + ' | ' + gv);
+  fs.appendFileSync(path.join(fx, 'notes', 'Decisions.md'), 'And the lot keeps four sections.\n');
+  const g = docket(['gate', '--session', 'n'], { cwd: d });
+  ok('…and the gate judges an edit to such a file, as it judges any governed file', /^JUDGE [0-9a-f]{64} test\/fixture\/notes\/Decisions\.md\n$/.test(g.out), g.out + g.err);
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
