@@ -15,13 +15,14 @@ implementations parse one ledger identically. **Source.** D1–D7 and D9 in
 The **ledger** of a file is the nearest `DECISIONS.md` or `docs/DECISIONS.md`
 found by walking up from the file's own directory to the project root. At each
 directory `dir`, `dir/DECISIONS.md` is tried first, then `dir/docs/DECISIONS.md`.
-The project root is the environment variable `CLAUDE_PROJECT_DIR` when set and
-the file lies under it (the host's project directory; a second host sets the
-same variable to its own before it calls the core), else the git root of the
-file's directory, else the filesystem root. The root bounds the walk and never
-redirects it: the variable bounds only the tree it holds, so when it names a
-directory the file does not lie under, the file's git root is the bound, and the
-filesystem root when there is none. A ledger file with no entries governs nothing, and still ends
+The project root is the git root of the file's directory, whatever directory the
+host names, so that every command reads the tree the stop judges (D44); outside a
+repository it is the environment variable `CLAUDE_PROJECT_DIR` when set and the
+file lies under it (the host's project directory; a second host sets the same
+variable to its own before it calls the core); else the filesystem root. The root
+bounds the walk and never redirects it: the variable bounds only the tree it
+holds, so when it names a directory the file does not lie under, the filesystem
+root is the bound. A ledger file with no entries governs nothing, and still ends
 the walk: nothing above it is consulted, so an empty ledger placed in a subtree
 declares that subtree ungoverned — none of the seven checks runs on its files —
 and `check` says so with an info line. Such a ledger holds no line that begins
@@ -32,14 +33,14 @@ fails at the first such line, its lines read for this one question as its author
 ended them, a bare CR ending one (13, D39). A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
-The stop's commands take one root whatever the variable says: `gate`, `verdict`
-and `stop`, and the state, verdict log and trail they keep under `.docket/`,
-root at the git root of the working directory, else, outside a repository, as
-above without the variable. The host names a project directory to its command
-hooks and none to the judge's shell, so a root read from the variable would give
-the stop's two halves two states in a session started below the repository's
-root (D28). The core's breadcrumb, `.docket/core`, stays in the project
-directory, where the judge is told to look.
+The stop's commands take the same root: `gate`, `verdict` and `stop`, and the
+state, verdict log and trail they keep under `.docket/`, root at the git root of
+the working directory, as every command does; outside a repository, at the root
+the stop passed to the judge it started, `DOCKET_ROOT`, when the working
+directory lies under it, else as above. The host names a project directory to its
+command hooks and none to the judge's shell, so the stop hands its root down and
+its two halves keep one state (D28, D44). The core's breadcrumb, `.docket/core`,
+is written under the same root, the project's.
 
 The **spec documents** `UIUX.md` and `PRD.md` are looked for in the ledger's own
 directory and nowhere else. The first section of `PRD.md` (the spec heading
@@ -63,7 +64,12 @@ Where the root is not a git repository there is no tracked set, so the walk of
 the tree stands in for one: it reads at most twenty thousand entries, refuses
 past that rather than reading a whole disk, and follows a symlink to a file
 inside the root (a link out of it, or one leading nowhere, is not the tree's
-file), so that the walk, `git ls-files` and `near` agree on what is there.
+file), so that the walk, `git ls-files` and `near` agree on what is there. Past
+the bound, a tree with no ledger between the working directory and the root is
+read as the ungoverned tree it would be — the gate answers `SKIP`, `stop` allows,
+and `status` names no ledger below it — since the hooks do not tax a project the
+docket does not govern; a ledger deeper in such a tree is not looked for, and with
+one between the working directory and the root the refusal stands.
 `near` reads the edited file from disk whether or not it is tracked, and reads
 it only if it is a text file — a binary one is no more governed for `near` than
 for the walk, and an edit of it is silent; `gate` adds
@@ -88,7 +94,7 @@ walk's bound stays the filesystem root. A walk goes up, so a ledger below the
 working directory is never found by one: when no ledger governs the working
 directory, `status` names the ledgers below it and the error of a command that
 needs one names them too (a tree the host names or git tracks is searched for
-them; a bare directory is not). `--ledger <path>` names the ledger outright for
+them; a bare directory is not, nor a tree past the walk's bound). `--ledger <path>` names the ledger outright for
 `index`, `query`, `governs`, `principles`, `status`, `spec-check` and `append`,
 and the root becomes that ledger's own, so the check that follows an `append`
 covers the ledger's tree; `check` and the bare witness cover every ledger under
@@ -408,7 +414,7 @@ prints straight.
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
 | 6 | Header contract | an entry bound by the contract line breaks any of the five clauses in 11 |
-| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is the one at the revision `DOCKET_BASE` names when the environment names one (CI names the commit before the push — this repository's does, and so does the CI step `vendor` and `constitute` print — so an amendment inside a range of commits is compared, not only the tip's parent), else `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), all read from the repository root whatever directory the host names and with the normalisation of 1; a ledger the compared revision has and the working tree lacks fails as removed; skipped when no such version exists — a ledger not yet committed, or one the revision compared with has no file of: a first commit, the commit that added it, or a `DOCKET_BASE` whose tree has none, which the tip's rule never stands in for — and an info line names the ledger whose check 7 was skipped, and the base when the base had none, so a skip is never mistaken for a pass; a `DOCKET_BASE` that names `HEAD` itself would compare a clean commit with itself and is read as unset, and one the repository does not hold — a force-push leaves the commit before it behind — is read as unset too, with an info line naming the ledger, the revision and what the ledger was compared with instead; and against the same committed ledger the preamble's directives are held too (D41): a contract line does not move or go, the bare-cites comment does not go, and an allowance may fall but rises only when an entry written since carries its new pair (`app.js=4`) |
+| 7 | Append only | an entry of the committed ledger is missing from the working tree's ledger, or its heading or body differs there, line for line, other than by appended addendum lines — the committed entries are the ones enumerated, so a removed entry fails as a changed one does; the committed ledger is the one at the revision `DOCKET_BASE` names when the environment names one (CI names the commit before the push — this repository's does, and so does the CI step `vendor` and `constitute` print — so an amendment inside a range of commits is compared, not only the tip's parent), else `HEAD`'s, or its first parent's when the ledger in the working tree already equals `HEAD`'s (so a check run on a fresh commit, as in CI, judges the commit it was given, never a commit against itself), all read from the repository root whatever directory the host names and with the normalisation of 1; a ledger the compared revision has and the working tree lacks fails as removed; skipped when no such version exists — a ledger not yet committed, or one the revision compared with has no file of: a first commit, the commit that added it, or a `DOCKET_BASE` whose tree has none, which the tip's rule never stands in for — and an info line names the ledger whose check 7 was skipped, and the base when the base had none, so a skip is never mistaken for a pass; a `DOCKET_BASE` that names `HEAD` itself would compare a clean commit with itself, one the repository does not hold — a force-push leaves the commit before it behind — names nothing to compare, one of all zeros is a CI's word for no commit before a branch's first push, and one that is no revision — a space, a control character or a colon in it, or a leading `-` — names none; each is read as unset, with an info line naming the ledger, the value and what the ledger was compared with instead (for `HEAD` itself, when that is not `HEAD`), while any other value is git's to resolve, a long branch name and a reflog's `main@{1}` among them; and against the same committed ledger the preamble's directives are held too (D41): a contract line does not move or go, the bare-cites comment does not go, and an allowance may fall but rises only when an entry written since carries its new pair (`app.js=4`) |
 
 Check 7's reference point — the first parent when the ledger is unchanged since
 `HEAD` — is a rule of this repository's ledger, stated with its reason in the preamble of
@@ -490,8 +496,8 @@ region, or nothing. It never exits non-zero on an input it cannot use (D1).
 
 | `old_string` matches | `replace_all` | `near` does |
 |---|---|---|
-| one | any | the window: the 20 lines before and the 20 after the matched line — the line where the match begins — both inclusive (41 lines), clamped to the file; at most eight rulings, nearest first, a ruling cited more than once ranked by its nearest cite and never by how many times it is cited, then the earlier line, then the earlier on that line |
-| many | `true` | the union of the windows — a line inside two overlapping windows is read once, at its distance to the nearest match, and two matches on one line are one anchor; the eight most cited within it, nearest to the first match among equals, then the earlier line, then the earlier on that line, listed in that order |
+| one | any | the window: the 20 lines before and the 20 after the matched line — the line where the match begins — both inclusive (41 lines), clamped to the file; at most eight rulings, nearest first, a ruling cited more than once ranked by its nearest cite and never by how many times it is cited, then by that cite's line, the earlier first, then by its place on that line |
+| many | `true` | the union of the windows — a line inside two overlapping windows is read once, at its distance to the nearest match, and two matches on one line are one anchor; the eight most cited within it, nearest to the first match among equals, then by the line of that nearest cite, the earlier first, then by its place on that line, listed in that order |
 | many | `false` or absent | silent: the edit tool will reject the edit, and the retry fires `near` again |
 | zero, or `old_string` empty | any | silent |
 | an edit of a file that does not exist | any | silent: there is no region to govern, and the edit tool refuses the edit |
@@ -504,9 +510,8 @@ standard error, exit 0.
 
 The text opens with one line naming the ledger and the region —
 `Governed here (<ledger>, ±20 lines of <file>:<line>):` — the ledger's path
-relative to the project root (when the directory the host names is not an
-ancestor of the ledger, relative to the ledger's git root, and absolute when
-there is none), the file's relative to the ledger's home. A union
+relative to the project root, which holds every ledger the walk finds (1), and
+absolute when there is none, the file's relative to the ledger's home. A union
 names each matched line once, `<file>:70, 140, 210`, the first eight and then
 `+<n> more`: the count tells the maker how much denser the region is than the
 list shows, and the list stops where the ruling list does so that the hook's
@@ -517,7 +522,7 @@ count, line), `more`, `edges`, `addenda`, `specCites`, `notice` — and is silen
 exactly where the text is.
 
 Under it the window lists at most eight rulings (D2) in the order its row gives
-— a single window nearest first, ties by line order, the earlier line first, and among two on one line the earlier on that line —
+— a single window nearest first, ties by the line of each ruling's nearest cite, the earlier first, and among two on one line the earlier on that line —
 each as
 `<id>  <title>` plus `  · issue #<n>` when the entry has one, and when more
 than eight are cited a last line `  +<n> more` (a cap that hid its own overflow
@@ -605,9 +610,13 @@ nothing more: a session's count that is not a whole number, a history that is no
 a list of them, a mark that is not `true`, holds nothing. Each change is made under
 a lock beside the file, `verdict.json.lock`, the state re-read inside it and written
 whole to a new file renamed over the old, so judges recording at once lose nothing.
+A lock names its holder, and one whose holder is gone is taken over, the ledger's
+lock and the state's alike; the state's held past five seconds is written through,
+with a note, except by the call at a session's start, which waits one second and
+then records no base, so that the session reads from `HEAD` as one with none does.
 `verdict` records the diff in front of the judge: a `--hash` the working tree does
-not hash to is refused, exit 2. `.docket/` is ignored by git, and a constituted project is told to
-ignore it too.
+not hash to is refused, exit 2. `.docket/` is ignored by git: the core makes it with a `.gitignore`
+of `*` inside, whatever the project's own says, and a constituted project is told to ignore it too.
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,
 with its hook input on stdin — of which it reads the session's identifier, whether
@@ -615,7 +624,14 @@ this stop follows a block in the same turn and the project directory, and the ju
 the transcript's path — and gives it, with `--judge`, the command that
 starts the host's agent as the judge — headless, a session of its own that reads
 its prompt on stdin — and, with `--permission`, the spelling of the one rule that
-command grants it. It allows at once when the host's re-entry flag is set, when
+command grants it. The command is one command, which the stop runs as
+`exec <command>` so that the judge is the process it waits on and stops at the
+bound, its exit status the judge's: a stop it would judge with an operator
+outside quotes in the command (`;`, `&`, `|`, `<`, a parenthesis, a line break)
+or an assignment before it is a usage error, exit 2, as one with no `--judge`
+is, and a variable is set as `env NAME=value <command>`. A session's identifier
+is text, and a control character in it is kept as its escape, `\u0000`, in the
+state, the judge's environment and its prompt. It allows at once when the host's re-entry flag is set, when
 nothing governed changed or the last PASS judged this diff, or when the session
 is surfaced; it blocks, with the residue and no judge, a stop at which the gate
 surfaces the session. For any other stop it starts the judge with a prompt that
@@ -625,10 +641,12 @@ waits for it to end, up to `--wait` seconds (700 by default), then stops
 it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
 for this diff and this session since the judge started is relayed as a block
 carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`
-set to the stop's session, so a verdict that names none is this session's; a session surfaced while the judge ran is relayed
+set to the stop's session, so a verdict that names none is this session's, and with `DOCKET_ROOT`
+set to the stop's root (1); a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
 error, or was stopped at the bound — is blocked once, with a reason that names
-the files, how the judge ended and where its output is, and the block counts in
+the files, how the judge ended (one that ended before it read its prompt ended,
+and is named so, never as one that could not be started) and where its output is, and the block counts in
 the session's `blocks` as a recorded FAIL does, with nothing added to its
 `history` (D38). A stop it would judge with no `--judge` given is a usage error,
 exit 2. Beside that count it writes one file, `.docket/judge.log` — the command,

@@ -116,15 +116,18 @@ function glance(s) { const t = Array.from(s); return t.length > GLANCE ? t.slice
 
 // ─── 1. discovery (D5) ──────────────────────────────────────────────────────
 
-// The project root of `dir`: CLAUDE_PROJECT_DIR when set and `dir` lies under it, else the git root of
-// `dir`, else null. Zero config: nothing else is consulted. The host's variable bounds only the tree it
-// holds — a value naming some other directory neither redirects a walk nor empties an enumeration (a
-// check run under it would pass with nothing to check). Discovery walks up to the root, or to the
-// filesystem root when there is none; file enumeration never does — see enumerationRoot.
+// The project root of `dir` (D44): the git root of `dir`, whatever project directory the host names, so every command
+// reads the tree the stop judges, and the maker is shown at the edit the law it is judged by (D1, D28); outside a
+// repository, CLAUDE_PROJECT_DIR when set and `dir` lies under it; else null. Zero config: nothing else is consulted.
+// The host's variable bounds only the tree it holds — a value naming some other directory neither redirects a walk nor
+// empties an enumeration (a check run under it would pass with nothing to check). Discovery walks up to the root, or
+// to the filesystem root when there is none; file enumeration never does — see enumerationRoot.
 function projectRoot(dir) {
-  const v = process.env.CLAUDE_PROJECT_DIR;                            // the host's project directory, when it names one
+  const g = gitRoot(dir);
+  if (g) return g;
+  const v = process.env.CLAUDE_PROJECT_DIR;                            // outside a repository, the host's project directory, when it names one
   if (v && isDir(v) && isWithin(path.resolve(dir), path.resolve(v))) return path.resolve(v);   // a value that is not a directory names no tree
-  return gitRoot(dir);
+  return null;
 }
 // True when `p` is `ancestor` or lies below it — path arithmetic; no symlink is followed.
 function isWithin(p, ancestor) { const r = path.relative(ancestor, p); return r === '' || (r !== '..' && !r.startsWith('..' + path.sep) && !path.isAbsolute(r)); }
@@ -136,15 +139,16 @@ function enumerationRoot(cwd) {
   const lp = findLedger(path.join(cwd, 'x'), path.parse(path.resolve(cwd)).root);
   return lp ? ledgerHome(lp) : path.resolve(cwd);
 }
-// The root the stop's commands share — gate, verdict and stop, and the state, log and trail under its .docket/ (D28):
-// the git root of `cwd` whatever project directory the host names, since the host names one to its command hooks and
-// none to the judge's shell, and the stop's two halves must read one state. Outside a repository, the enumeration root
-// without the host's variable.
+// The root the stop's commands share — gate, verdict and stop, and the state, log and trail under its .docket/ (D28,
+// D44): the git root of `cwd`, as every command's; outside a repository, the root the stop passed to the judge it
+// started, DOCKET_ROOT, when `cwd` lies under it, else the enumeration root. The host names its project directory to its
+// command hooks and none to the judge's shell, so the stop hands its root down, and its two halves read one state.
 function stopRoot(cwd) {
   const g = gitRoot(cwd);
   if (g) return g;
-  const lp = findLedger(path.join(cwd, 'x'), path.parse(path.resolve(cwd)).root);
-  return lp ? ledgerHome(lp) : path.resolve(cwd);
+  const v = process.env.DOCKET_ROOT;
+  if (v && isDir(v) && isWithin(path.resolve(cwd), path.resolve(v))) return path.resolve(v);
+  return enumerationRoot(cwd);
 }
 
 // The nearest DECISIONS.md or docs/DECISIONS.md walking up from `filePath`'s
@@ -460,7 +464,8 @@ function walkFiles(dir, acc, root, seen) {
   let ents;
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
   for (const ent of ents) {
-    if (++seen.n > WALK_MAX) die('the tree under ' + (root || dir) + ' holds more than ' + WALK_MAX + ' entries and is not a git repository, so there is no tracked set to enumerate; run the docket inside the repository, or set the project directory to it (FORMAT.md 1)', 2);
+    // thrown, not died on: the command refuses at its top, exit 2, unless it reads a tree past the bound as ungoverned (FORMAT.md 1)
+    if (++seen.n > WALK_MAX) throw Object.assign(new Error('the tree under ' + (root || dir) + ' holds more than ' + WALK_MAX + ' entries and is not a git repository, so there is no tracked set to enumerate; run the docket inside the repository, or set the project directory to it (FORMAT.md 1)'), { walkBound: true });
     if (ent.name === '.git' || ent.name === 'node_modules' || ent.name === '.docket') continue;
     const p = path.join(dir, ent.name);
     if (ent.isSymbolicLink()) {                                        // git lists a tracked symlink and near reads through one: the walk agrees with both
@@ -561,10 +566,12 @@ function ledgerFromCwd(argv) {
   return { root: s.root, ledger: loadLedger(s.ledger) };
 }
 // The ledgers under `dir` (paths relative to it): what a walk up from `dir` cannot see (FORMAT.md 1). Only a tree
-// the host names or git tracks is enumerated for them; a bare directory is not searched.
+// the host names or git tracks is enumerated for them; a bare directory is not searched, nor a tree past the walk's bound.
 function ledgersBelow(dir, root) {
   if (!projectRoot(dir)) return [];
-  return Array.from(loadContext(root).ledgers.keys()).filter(lp => isWithin(path.dirname(lp), dir)).map(lp => rel(dir, lp)).sort();
+  let ctx;
+  try { ctx = loadContext(root); } catch (e) { if (e && e.walkBound) return []; throw e; }
+  return Array.from(ctx.ledgers.keys()).filter(lp => isWithin(path.dirname(lp), dir)).map(lp => rel(dir, lp)).sort();
 }
 function noLedgerMessage(cwd, root) {
   const below = ledgersBelow(cwd, root);
@@ -592,8 +599,10 @@ function near(argv) {
   try { input = JSON.parse(raw); } catch (e) { return 0; }            // D1: never a blocking exit
   if (!input || typeof input !== 'object') return 0;
   const tool = input.tool_name, ti = input.tool_input || {};
-  if (typeof ti.file_path !== 'string' || !ti.file_path) return 0;
-  const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd();
+  // a NUL names no file and no directory: a path that holds one is an input near cannot use, silence (D1), and a directory that
+  // holds one is no directory, read as a missing one is
+  if (typeof ti.file_path !== 'string' || !ti.file_path || ti.file_path.includes('\0')) return 0;
+  const cwd = typeof input.cwd === 'string' && input.cwd && !input.cwd.includes('\0') ? input.cwd : process.cwd();
   const file = path.resolve(cwd, ti.file_path);
   const startDir = exists(path.dirname(file)) ? path.dirname(file) : cwd;
   const pr = projectRoot(startDir);
@@ -642,9 +651,17 @@ function near(argv) {
       if (!c.exists) continue;
       const d0 = anchors.length ? (ln < anchors[0] ? anchors[0] - ln : ln > anchors[0] + span ? ln - (anchors[0] + span) : 0) : ln;
       const cur = byId.get(c.id);
-      if (!cur) byId.set(c.id, { id: c.id, count: 1, dist: d, dist0: d0, first: ln, col: c.col });
-      // first is the earliest cite by line and then by column: FORMAT.md 15's last level is a key here, not an order of visits.
-      else { cur.count++; cur.dist = Math.min(cur.dist, d); cur.dist0 = Math.min(cur.dist0, d0); if (ln < cur.first || (ln === cur.first && c.col < cur.col)) { cur.first = ln; cur.col = c.col; } }
+      // Each ruling keeps its ranked cites — the nearest to any match (nl, nc) and the nearest to the first (nl0, nc0), the
+      // earlier line and then the earlier column among equals, since FORMAT.md 15 breaks a tie by that cite's line and not by
+      // the ruling's earliest cite in the window — and first, its earliest cite, for the whole file's order.
+      const closer = (dd, l0, c0, bd, bl, bc) => dd < bd || (dd === bd && (l0 < bl || (l0 === bl && c0 < bc)));
+      if (!cur) byId.set(c.id, { id: c.id, count: 1, dist: d, nl: ln, nc: c.col, dist0: d0, nl0: ln, nc0: c.col, first: ln, col: c.col });
+      else {
+        cur.count++;
+        if (closer(d, ln, c.col, cur.dist, cur.nl, cur.nc)) { cur.dist = d; cur.nl = ln; cur.nc = c.col; }
+        if (closer(d0, ln, c.col, cur.dist0, cur.nl0, cur.nc0)) { cur.dist0 = d0; cur.nl0 = ln; cur.nc0 = c.col; }
+        if (ln < cur.first || (ln === cur.first && c.col < cur.col)) { cur.first = ln; cur.col = c.col; }
+      }
     }
     SPEC_CITE_RE.lastIndex = 0; let m;
     while ((m = SPEC_CITE_RE.exec(maskCode(l))) !== null) specs.push({ doc: m[1], num: m[2], line: ln });
@@ -663,8 +680,8 @@ function near(argv) {
   let list = Array.from(byId.values());
   // Every level FORMAT.md 15 names is a key. Count is NOT a key of the single-match order: a ruling
   // cited many times but never near the edit does not outrank one cited once beside it (D2, nearest first).
-  if (mode === 'one') list.sort((a, b) => a.dist - b.dist || a.first - b.first || a.col - b.col);
-  else if (mode === 'many') list.sort((a, b) => b.count - a.count || a.dist0 - b.dist0 || a.first - b.first || a.col - b.col); // D7
+  if (mode === 'one') list.sort((a, b) => a.dist - b.dist || a.nl - b.nl || a.nc - b.nc);
+  else if (mode === 'many') list.sort((a, b) => b.count - a.count || a.dist0 - b.dist0 || a.nl0 - b.nl0 || a.nc0 - b.nc0); // D7
   else list.sort((a, b) => b.count - a.count || a.first - b.first || a.col - b.col);           // whole file: by count
   const total = list.length;
   list = list.slice(0, CAP);
@@ -708,8 +725,8 @@ function near(argv) {
   void listed;
   return emitNear(input, argv, outLines.join('\n'), obj);
 }
-// The header names the ledger relative to the project root. When the directory the host names is not an
-// ancestor of the ledger, the path is relative to the ledger's git root, and absolute when there is none.
+// The header names the ledger relative to the project root, which holds every ledger the walk finds (D44); with no
+// project root, relative to the ledger's git root, and absolute when there is none.
 function ledgerLabel(pr, lp) {
   if (pr && !rel(pr, lp).startsWith('..')) return rel(pr, lp);
   const g = gitRoot(path.dirname(lp));
@@ -991,7 +1008,7 @@ function runCheck(root, opts) {
   // A ledger the compared revision has and the working tree lacks is the most complete amendment there is (D4).
   const groot = gitRoot(root);
   if (groot) {
-    const base = baseRevision();
+    const base = baseRevision().base;
     const rev = base && sh('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], groot).status === 0 ? base : 'HEAD';
     const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', rev], groot);   // -z: a name as it is, not quoted
     if (ls.status === 0) for (const p of ls.stdout.split('\0')) {
@@ -1020,9 +1037,17 @@ function normEol(s) { return s.replace(/\r\n/g, '\n'); }
 // not hold — a force-push leaves the commit before it behind — is said in an info line, since the comparison it asked for
 // was not made. A revision it holds whose tree has no file of the ledger skips the check, and says so: nothing from
 // before the push is there to compare, and the tip's parent, inside the push, is not the comparison asked for.
+// Read as { base, refused }: the revision to compare with, or null; and, for a value that is set and names none, why —
+// which check 7's info line says, since the comparison it asked for was not made (FORMAT.md 13). All zeros is a CI's word
+// for no commit before a branch's first push; a revision holds no space, no control character and no colon — the core
+// reads <base>:<path> — and opens with no "-"; anything else is git's to resolve, a long branch name and a reflog's @{…}
+// among it, and one git does not hold is said as such.
 function baseRevision() {
   const b = process.env.DOCKET_BASE;
-  return b && /^[A-Za-z0-9_./~^-]{1,64}$/.test(b) && !/^0+$/.test(b) ? b : null;
+  if (b === undefined || b === '') return { base: null, refused: null };
+  if (/^0+$/.test(b)) return { base: null, refused: 'DOCKET_BASE is all zeros, a CI\'s word for no commit before a branch\'s first push' };
+  if (/[\s:\u0000-\u001f\u007f]/.test(b) || b.startsWith('-')) return { base: null, refused: 'DOCKET_BASE is ' + JSON.stringify(b) + ', which is no revision: a revision holds no space, no control character and no colon, and opens with no "-"' };
+  return { base: b, refused: null };
 }
 function namesHead(rev, groot) {
   const a = sh('git', ['rev-parse', '--verify', '--quiet', rev + '^{commit}'], groot), h = sh('git', ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], groot);
@@ -1031,15 +1056,18 @@ function namesHead(rev, groot) {
 function committedText(root, filePath, workingText, note) {
   const groot = gitRoot(path.dirname(filePath)) || root;               // git resolves <rev>:<path> from the repository root, whatever the enumeration root is
   const p = rel(groot, filePath);
-  const base = baseRevision();
-  let lost = null;
-  if (base && !namesHead(base, groot)) {                               // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule below applies
+  const { base, refused } = baseRevision();
+  let why = refused, self = false;                                     // why a named base was not the one compared with: said beside what was
+  // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule
+  // below applies, and said when that rule compares with the parent
+  if (base && namesHead(base, groot)) { self = true; why = 'DOCKET_BASE names HEAD itself, and a clean commit compared with itself witnesses nothing'; }
+  else if (base) {
     const b = sh('git', ['show', base + ':' + p], groot); if (b.status === 0) return b.stdout;
-    if (sh('git', ['rev-parse', '--verify', '--quiet', base + '^{commit}'], groot).status !== 0) lost = base;
+    if (sh('git', ['rev-parse', '--verify', '--quiet', base + '^{commit}'], groot).status !== 0) why = 'DOCKET_BASE names ' + base + ', which this repository does not hold';
     else { if (note) note('skipped — DOCKET_BASE names ' + base + ', which has no such file, so no version from before the push is there to compare', true); return null; }   // FORMAT.md 13
   }
-  const said = what => { if (lost && note) note('compared with ' + what + ': DOCKET_BASE names ' + lost + ', which this repository does not hold'); };
-  const none = what => { if (lost && note) note('skipped — DOCKET_BASE names ' + lost + ', which this repository does not hold, and ' + what + ' has no such file, so no earlier version is there to compare', true); return null; };
+  const said = what => { if (why && note && !(self && what === 'HEAD')) note('compared with ' + what + ': ' + why); };
+  const none = what => { if (why && note && !self) note('skipped — ' + why + ', and ' + what + ' has no such file, so no earlier version is there to compare', true); return null; };
   const head = sh('git', ['show', 'HEAD:' + p], groot);
   if (head.status !== 0) return none('HEAD');
   let working = workingText;                                           // the caller's own reading: one run holds one version of a ledger, the comparison included
@@ -1192,28 +1220,39 @@ function writeLedger(ledger, text) {
 // entry was written. So a write command takes an exclusive lock beside the ledger and re-reads it inside the lock: the
 // id it computes is the id it writes (D4 — append, never amend; a record that can be rewritten proves nothing).
 const LOCK_WAIT_MS = 5000;
-function lockedLedger(argv) {
-  const scoped = ledgerFromCwd(argv);
-  const lockPath = scoped.ledger.path + '.lock';
+const SESSION_START_WAIT_MS = 1000;   // D14's addendum: a fifth of the session-start hook's five seconds; the rest are the docket's to print in
+// One lock rule for the ledger and the state: an exclusive file beside the one it guards, naming its holder, so a release
+// frees its own lock and no other, and a lock whose holder is gone — a run that was killed — is taken over. It waits up to
+// `ms`, and answers null when the lock is still held then.
+function takeLock(lockPath, ms) {
   const mine = 'docket ' + process.pid + '\n';
-  let fd = null, waited = 0;
-  while (fd === null) {
-    try { fd = fs.openSync(lockPath, 'wx'); fs.writeSync(fd, mine); }   // the holder names itself, so a release frees its own lock and no other
+  let waited = 0;
+  for (;;) {
+    try { const fd = fs.openSync(lockPath, 'wx'); fs.writeSync(fd, mine); return { fd, mine }; }
     catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      if (waited >= LOCK_WAIT_MS) die('append: ' + rel(scoped.root, scoped.ledger.path) + ' is held by another append that has not finished; if none is running, remove ' + rel(scoped.root, lockPath), 2);
+      let holder = 0; try { holder = Number((/^docket (\d+)$/m.exec(fs.readFileSync(lockPath, 'utf8')) || [])[1]); } catch (e2) { /* released between the two calls: try again */ }
+      let alive = true; if (holder) { try { process.kill(holder, 0); } catch (e2) { alive = e2.code === 'EPERM'; } }
+      if (holder && !alive) { try { fs.unlinkSync(lockPath); } catch (e2) { /* another took it over first */ } continue; }
+      if (waited >= ms) return null;
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); waited += 25;   // a plain sleep, no dependency
     }
   }
+}
+function releaseLock(lockPath, lock) {
+  if (!lock) return;
+  try { fs.closeSync(lock.fd); } catch (e) { /* closed already */ }
+  try { if (fs.readFileSync(lockPath, 'utf8') === lock.mine) fs.unlinkSync(lockPath); } catch (e) { /* gone already */ }
+}
+function lockedLedger(argv) {
+  const scoped = ledgerFromCwd(argv);
+  const lockPath = scoped.ledger.path + '.lock';
+  const lock = takeLock(lockPath, LOCK_WAIT_MS);
+  if (!lock) die('append: ' + rel(scoped.root, scoped.ledger.path) + ' is held by another append that has not finished; if none is running, remove ' + rel(scoped.root, lockPath), 2);
   // Released once, and only while it is still ours: a second release at exit, after another append has
   // taken the lock, would unlink that one's and let two writers read the same last id.
   let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    try { fs.closeSync(fd); } catch (e) {}
-    try { if (fs.readFileSync(lockPath, 'utf8') === mine) fs.unlinkSync(lockPath); } catch (e) {}
-  };
+  const release = () => { if (released) return; released = true; releaseLock(lockPath, lock); };
   process.on('exit', release);                                        // die() exits, so the lock never outlives the command
   return { root: scoped.root, ledger: loadLedger(scoped.ledger.path), release };
 }
@@ -1358,6 +1397,15 @@ function append(argv) {
 // ─── 10. status: the docket ─────────────────────────────────────────────────
 
 function statePath(root) { return path.join(root, '.docket', 'verdict.json'); }
+// .docket/ is the docket's own and never the project's: it is made with a .gitignore of "*" inside it, so git ignores it
+// whatever the project's own .gitignore says, and an `add -A` never tracks a verdict or the core's path (FORMAT.md 16)
+function docketDir(root) {
+  const d = path.join(root, '.docket');
+  fs.mkdirSync(d, { recursive: true });
+  const gi = path.join(d, '.gitignore');
+  if (!exists(gi)) { try { fs.writeFileSync(gi, '*\n'); } catch (e) { /* the state is written without it */ } }
+  return d;
+}
 function loadState(root) {
   let st = null;
   try { st = JSON.parse(readText(statePath(root))); } catch (e) { st = null; }
@@ -1377,31 +1425,24 @@ function loadState(root) {
   const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
 }
-function saveState(root, st) { const p = statePath(root); fs.mkdirSync(path.dirname(p), { recursive: true }); const tmp = p + '.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n'); fs.renameSync(tmp, p); }
+function saveState(root, st) { const p = statePath(root); docketDir(root); const tmp = p + '.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n'); fs.renameSync(tmp, p); }
 // The state is one file the gate, the verdict and the stop each read, change and write: two judges recording at once would
 // each read the same state, and the later write would carry the earlier away — a session's count, a surfaced mark, the last
 // PASS (D11). So each change is made under a lock beside the file, the state re-read inside it and written whole, as the
-// ledger's append is (D4). A lock whose holder is gone is taken over; one held past the wait is written through, with a
-// note, because a stop that died on it would be allowed unjudged.
-function withState(root, change) {
-  const p = statePath(root), lockPath = p + '.lock', mine = 'docket ' + process.pid + '\n';
+// ledger's append is (D4), by the one lock rule both keep (takeLock). One held past the wait is written through, with a
+// note, because a stop that died on it would be allowed unjudged; the call at a session's start waits a second and records
+// nothing past it (`orSkip`), since its hook's five seconds are the docket's to print in (D14's addendum).
+function withState(root, change, opts) {
+  const p = statePath(root), lockPath = p + '.lock', wait = opts && opts.wait !== undefined ? opts.wait : LOCK_WAIT_MS;
   if (exists(path.dirname(p)) && !isDir(path.dirname(p))) throw Object.assign(new Error(rel(root, path.dirname(p)) + ' is a file, not a directory: the state has nowhere to go; move it aside'), { docket: true });
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  let fd = null, waited = 0;
-  while (fd === null) {
-    try { fd = fs.openSync(lockPath, 'wx'); fs.writeSync(fd, mine); }
-    catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      let holder = 0; try { holder = Number((/^docket (\d+)$/m.exec(fs.readFileSync(lockPath, 'utf8')) || [])[1]); } catch (e2) {}
-      let alive = true; if (holder) { try { process.kill(holder, 0); } catch (e2) { alive = e2.code === 'EPERM'; } }
-      if (holder && !alive) { try { fs.unlinkSync(lockPath); } catch (e2) {} continue; }
-      if (waited >= LOCK_WAIT_MS) break;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); waited += 25;
-    }
+  docketDir(root);
+  const lock = takeLock(lockPath, wait);
+  if (!lock) {
+    if (opts && opts.orSkip) return null;
+    process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + wait / 1000 + ' seconds; the state is changed without it\n');
   }
-  if (fd === null) process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + LOCK_WAIT_MS / 1000 + ' seconds; the state is changed without it\n');
   try { const st = loadState(root); change(st); saveState(root, st); return st; }
-  finally { if (fd !== null) { try { fs.closeSync(fd); } catch (e) {} try { if (fs.readFileSync(lockPath, 'utf8') === mine) fs.unlinkSync(lockPath); } catch (e) {} } }
+  finally { releaseLock(lockPath, lock); }
 }
 // An addendum is pending until a ruling written after it has an edge into its entry (FORMAT.md 6, D21). Which came
 // first is read from history: the edge's line was added in a commit that descends from the one that added the
@@ -1449,8 +1490,9 @@ function recordSessionBase() {
   const root = stopRoot(typeof input.cwd === 'string' && isDir(input.cwd) ? input.cwd : process.cwd());   // the stop's root (D28)
   const head = headCommit(root);
   if (!head) return;
-  const afresh = input.source === 'startup' || input.source === 'clear';
-  try { withState(root, st => { const x = Object.assign(freshSession(), st.sessions[input.session_id] || {}); if (afresh || !x.base) x.base = head; st.sessions[input.session_id] = x; }); } catch (e) { /* the docket prints without it */ }
+  const afresh = input.source === 'startup' || input.source === 'clear', sid = sessionKey(input.session_id);
+  // a lock held past a second is another session's write: this one records no base, and its diff reads from HEAD (D40)
+  try { withState(root, st => { const x = Object.assign(freshSession(), st.sessions[sid] || {}); if (afresh || !x.base) x.base = head; st.sessions[sid] = x; }, { wait: SESSION_START_WAIT_MS, orSkip: true }); } catch (e) { /* the docket prints without it */ }
 }
 function status(argv) {
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
@@ -1820,13 +1862,17 @@ function recordCore(root) {
   const p = path.join(root, '.docket', 'core');
   try {
     if (isFile(p) && readText(p) === me + '\n') return;
-    fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, me + '\n');
+    docketDir(root); fs.writeFileSync(p, me + '\n');
   } catch (e) { /* a tree that cannot be written to: the judge says the file is missing */ }
 }
+// A session's identifier is text: a control character in it — a NUL in a hook's input among them — is kept as its escape,
+// \u0000, so the state, the judge's environment, its prompt and the verdict name one session, and none of them throws
+// (FORMAT.md 16)
+function sessionKey(s) { return String(s).replace(/[\u0000-\u001f\u007f]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')); }
 function sessionId(argv) {
   const s = flag(argv, '--session');
-  if (s) return s;
-  if (process.env.DOCKET_SESSION) return process.env.DOCKET_SESSION;
+  if (s) return sessionKey(s);
+  if (process.env.DOCKET_SESSION) return sessionKey(process.env.DOCKET_SESSION);
   return 'default';
 }
 // The commit a session's diff runs from (D40): the base recorded at its start — moved to HEAD by a PASS recorded while
@@ -1991,8 +2037,17 @@ function residueLines(st, sess, id) {
 }
 // The gate's decision (D10, D11), `gate`'s and `stop`'s alike: SKIP; SURFACE, with the session marked surfaced here; or JUDGE.
 function gateDecide(root, id) {
-  const st = loadState(root), d = governedDiff(root, sessionBase(root, st, id));   // from the session's base (D40)
-  const sess = Object.assign(freshSession(), st.sessions[id] || {});
+  const st = loadState(root), sess = Object.assign(freshSession(), st.sessions[id] || {});
+  let d;
+  try { d = governedDiff(root, sessionBase(root, st, id)); }          // from the session's base (D40)
+  catch (e) {
+    // past the walk's bound, a tree with no ledger between the working directory and the root is read as the ungoverned tree
+    // it would be: the stop is a hook, and a hook does not tax a project the docket does not govern; with a ledger there the
+    // refusal stands (FORMAT.md 1)
+    if (!e || !e.walkBound || findLedger(path.join(process.cwd(), 'x'), root)) throw e;
+    d = { hash: sha256(''), touched: [], empty: true, text: '', base: 'HEAD', rels: [], untracked: [] };
+    return { decision: 'SKIP', reason: 'no ledger governs the working directory, and the tree past the walk\'s bound is not read', d, st, sess };
+  }
   if (d.empty || d.hash === st.lastPassHash) return { decision: 'SKIP', reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff', d, st, sess };   // D10
   if (sess.surfaced) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
   const h = sess.history;
@@ -2182,6 +2237,24 @@ function judgePrompt(core, perm, input) {
     'Hook input: ' + JSON.stringify(hookFields(input)),
   ].join('\n') + '\n';
 }
+// The judge is one command (D37). The stop runs it as `exec <command>`, so that the process it waits on, and stops at the
+// bound, is the judge and its exit status is the judge's: an operator outside quotes would leave the shell as a parent the
+// bound does not reach, or run a second command whose status hides the judge's, and an assignment before the command is no
+// command to exec. Read as the shell reads quotes and a backslash; null when the command is one.
+function judgeShapeFault(cmd) {
+  let q = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (q === "'") { if (c === "'") q = null; continue; }
+    if (c === '\\') { i++; continue; }
+    if (q === '"') { if (c === '"') q = null; continue; }
+    if (c === "'" || c === '"') { q = c; continue; }
+    if (c === '\n' || c === ';' || c === '|' || c === '<' || c === '(' || c === ')' || (c === '&' && cmd[i - 1] !== '>')) return 'the operator "' + (c === '\n' ? '\\n' : c) + '" outside quotes';
+  }
+  if (q) return 'a quote that is never closed';
+  if (/^\s*[A-Za-z_][A-Za-z0-9_]*=/.test(cmd)) return 'an assignment before the command';
+  return null;
+}
 function stop(argv) {
   let input = {};
   try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
@@ -2192,7 +2265,7 @@ function stop(argv) {
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
   const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
-  const id = flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default';
+  const id = sessionKey(flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.join(', ');
@@ -2200,16 +2273,20 @@ function stop(argv) {
   if (g.decision === 'SURFACE') { out(JSON.stringify({ decision: 'block', reason: surfacedReason(g.st, g.sess, tail, id) })); return 0; }   // D11: no judge; the residue goes to the maker
   const judge = flag(argv, '--judge');
   if (!judge) die('stop: this stop is judged, and --judge names no command to start the judge: the host\'s binding gives one, which reads its prompt on stdin (docs/FORMAT.md 16)', 2);
+  const fault = judgeShapeFault(judge);
+  if (fault) die('stop: --judge is one command, run as `exec <command>` so that the judge is the process the stop waits on and stops at the bound, and its exit status the judge\'s; this one holds ' + fault + ': set a variable as `env NAME=value <command>`, and put anything more in a script the command runs (docs/FORMAT.md 16)', 2);
   const perm = flag(argv, '--permission');
   const cwd = typeof input.cwd === 'string' && isDir(input.cwd) ? input.cwd : process.cwd();
   const start = Date.now();
   // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, input), env: Object.assign({}, process.env, { DOCKET_SESSION: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
+  // and the stop's root (D44); its prompt names the session as the stop keys it
+  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
   const secs = Math.round((Date.now() - start) / 1000);
+  const unread = !!(r.error && r.error.code === 'EPIPE');             // it ended before it read its whole prompt: started, ended, its status its own
   const ended = r.error && r.error.code === 'ETIMEDOUT' ? 'was stopped at the bound, ' + waitS + ' second' + (waitS === 1 ? '' : 's')
-    : r.error ? 'could not be started (' + (r.error.code || r.error.message) + ')'
-    : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status);
-  try { fs.mkdirSync(path.join(root, '.docket'), { recursive: true }); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
+    : r.error && !unread ? 'could not be started (' + (r.error.code || r.error.message) + ')'
+    : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status) + (unread ? ', before it read its prompt' : '');
+  try { docketDir(root); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
   const st = loadState(root), l = st.last;
   if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail, id) })); return 0; }   // surfaced while the judge ran (D11)
   if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS
@@ -2445,5 +2522,7 @@ function main() {
   }
   return table[sub](argv);
 }
-if (require.main === module) process.exitCode = main();   // exitCode, not exit(): a piped stdout must flush first
+// The walk's bound is thrown, so that a command that reads a tree past it as ungoverned can; any other refuses here, exit 2,
+// the bound named (FORMAT.md 1). exitCode, not exit(): a piped stdout must flush first.
+if (require.main === module) { try { process.exitCode = main(); } catch (e) { if (e && e.walkBound) die(e.message, 2); throw e; } }
 module.exports = { parseLedger, titleOf, findLedger, projectRoot, contrast, luminance, VERBS, ADVERBS };

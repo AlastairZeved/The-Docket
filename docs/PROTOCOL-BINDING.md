@@ -22,10 +22,11 @@ agent that is about to edit:
 
 `tool_name` is `Edit` or `Write`; for `Write`, `tool_input` carries `file_path`
 and `content`. `near` prints the governed list (D2, D7) or nothing; it never
-denies (D1). Set `CLAUDE_PROJECT_DIR` to the project root if the host knows it;
-else the core uses the git root. The stop's commands — `gate`, `verdict` and
-`stop` — use the git root either way, so the judge and the stop read one state
-whichever of them the host tells the project directory (D28).
+denies (D1). Inside a repository every command roots at the git root, whatever
+the host says; outside one, set `CLAUDE_PROJECT_DIR` to the project root if the
+host knows it, and `stop` hands its root to the judge it starts, so the judge and
+the stop read one state whichever of them the host tells the project directory
+(D28, D44).
 
 **2. At session start** — show `docket status` to the agent, with the hook's
 input on stdin:
@@ -47,6 +48,10 @@ judge: a session of its own that reads its prompt on stdin, with every write
 tool denied, one permission — to run the core — and a turn limit of its own:
 
     node bin/docket.js stop --permission "<the rule>" --judge "<the command>"
+
+The command is one command, run as `exec <the command>`, so the judge is the
+process `stop` waits on and stops at its bound: no `;`, `&&` or `|` outside quotes,
+and a variable set as `env NAME=value <the command>`.
 
 `stop` decides what needs no judge, starts the judge for the rest with a prompt
 that names the core and carries the hook input's session, transcript path and

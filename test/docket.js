@@ -1237,15 +1237,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('the witness prints its whole result as one object and nothing else, with the same exit code as its text', wj.code === 1 && Object.keys(wjo).join(',') === 'ok,ledgers,specRows,info,failures' && wjo.ok === false && wjo.failures.length === 1 && wjo.failures[0].check === 'spec-check' && wjo.failures[0].k === 'a', wj.out);
   const wjRoot = docket(['--json']), wjr = JSON.parse(wjRoot.out);
   ok('…and at the root it is ok, over every ledger the walk finds, with no failures', wjRoot.code === 0 && wjr.ok === true && wjr.ledgers === governedOf(ROOT).ledgers && wjr.failures.length === 0, wjRoot.out);
-  // a project directory genuinely narrower than the git root bounds the walk (FORMAT.md 1): the ledger above it is not reached
+  // a project directory the host names below the git root does not bound the walk inside a repository (D44): every command
+  // reads the tree the stop judges, so the ledger two directories above it is reached, as gate and stop reach it (D28)
   const pb = tempRepo(d => fs.mkdirSync(path.join(d, 'test', 'fixture', 'a', 'b'), { recursive: true }));
   const pbDeep = path.join(pb, 'test', 'fixture', 'a', 'b');
   fs.writeFileSync(path.join(pbDeep, 'deep.js'), 'const d = 1; // R6 governs this line\n');
   const pbPlain = docket(['near'], { cwd: pb, input: nearInput(path.join(pbDeep, 'deep.js'), 'const d = 1') });
   const pbBound = docket(['near'], { cwd: pb, input: nearInput(path.join(pbDeep, 'deep.js'), 'const d = 1'), env: { CLAUDE_PROJECT_DIR: pbDeep } });
-  ok('near: a project directory narrower than the git root bounds the walk — the ledger two directories above it is not reached, and without it the same edit finds R6', /^  R6  /m.test(pbPlain.out) && pbBound.code === 0 && pbBound.out === '' && pbBound.err === '', pbPlain.out + '|' + pbBound.out);
+  ok('near: a project directory the host names below the git root does not bound the walk inside a repository — the ledger two directories above it is reached, as without it (D44)', /^  R6  /m.test(pbPlain.out) && pbBound.out === pbPlain.out, pbPlain.out + '|' + pbBound.out);
   const pbCheck = docket(['check'], { cwd: pbDeep, env: { CLAUDE_PROJECT_DIR: pbDeep } });
-  ok('…and check under that bound enumerates the tree it was given, not the one above it', pbCheck.code === 0 && /check: ok \(0 ledgers, \d+ governed-tree files\)/.test(pbCheck.out), pbCheck.out);
+  const pbStatus = docket(['status'], { cwd: pbDeep, env: { CLAUDE_PROJECT_DIR: pbDeep } });
+  const pbGate = docket(['gate', '--session', 'pb'], { cwd: pbDeep, env: { CLAUDE_PROJECT_DIR: pbDeep } });
+  ok('…and check, status and the gate under it read the repository the stop judges: the ledger checked, the docket printed, the new file judged (D1, D28, D44)', pbCheck.code === 0 && /check: ok \(1 ledger, /.test(pbCheck.out) && /^Docket — test\/fixture\/DECISIONS\.md /m.test(pbStatus.out) && /^JUDGE [0-9a-f]{64} .*test\/fixture\/a\/b\/deep\.js/m.test(pbGate.out), pbCheck.out + '|' + pbStatus.out.slice(0, 120) + '|' + pbGate.out);
   // status surfaces a verdict that is on disk, not only the absence of one (D11)
   const sv = tempRepo(), svCwd = path.join(sv, 'test', 'fixture');
   fs.mkdirSync(path.join(sv, '.docket'), { recursive: true });
@@ -1517,13 +1520,17 @@ const SEC = String.fromCharCode(0xa7);
     r = docket(['spec-check'], { cwd: path.join(badR, 'test', 'fixture') });
     ok('spec-check (b): a row naming two tokens whose ratio reads "' + shape + '" is named, not passed over as prose', r.code === 1 && /the ratio is not written as <n>:1/.test(r.out), r.out);
   }
-  // the lock gives up and says so, which is the far side of its own wait
+  // the lock gives up and says so, which is the far side of its own wait: its holder, this witness, is alive
   const stale = tempRepo(), staleCwd = path.join(stale, 'test', 'fixture');
-  fs.writeFileSync(path.join(staleCwd, 'DECISIONS.md.lock'), 'docket 999999\n');
+  fs.writeFileSync(path.join(staleCwd, 'DECISIONS.md.lock'), 'docket ' + process.pid + '\n');
   const staleBefore = read(path.join(staleCwd, 'DECISIONS.md')), t0 = Date.now();
   r = docket(['append', '--title', 'Waits for a lock nobody holds', '--issue', '87', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: staleCwd });
   const waited = Date.now() - t0;
-  ok('append waits the five seconds it states and then says which lock is holding it, having written nothing', r.code === 2 && /is held by another append that has not finished; if none is running, remove/.test(r.err) && waited >= 5000 && waited < 60000 && read(path.join(staleCwd, 'DECISIONS.md')) === staleBefore && fs.existsSync(path.join(staleCwd, 'DECISIONS.md.lock')), r.code + '|' + waited + '|' + r.err);
+  ok('append waits the five seconds it states on a lock whose holder is alive, and then says which lock is holding it, having written nothing', r.code === 2 && /is held by another append that has not finished; if none is running, remove/.test(r.err) && waited >= 5000 && waited < 60000 && read(path.join(staleCwd, 'DECISIONS.md')) === staleBefore && fs.existsSync(path.join(staleCwd, 'DECISIONS.md.lock')), r.code + '|' + waited + '|' + r.err);
+  { const gone = cp.spawnSync('true').pid;                              // a holder that has ended: a run killed with the lock in hand
+    fs.writeFileSync(path.join(staleCwd, 'DECISIONS.md.lock'), 'docket ' + gone + '\n');
+    const t1 = Date.now(), rt = docket(['append', '--title', 'Takes over a lock whose holder is gone', '--issue', '88', '--principle', 'Capture precedes structure', '--body', 'Reason: r.'], { cwd: staleCwd }), took = Date.now() - t1;
+    ok('…while a lock whose holder is gone is taken over, as the state’s is: the entry is written well inside the wait, and no lock is left', took < 4000 && /^### R9\. Takes over a lock whose holder is gone \(issue #88\)$/m.test(read(path.join(staleCwd, 'DECISIONS.md'))) && !fs.existsSync(path.join(staleCwd, 'DECISIONS.md.lock')), rt.code + '|' + took + '|' + rt.err); }
   // the binary sniff reads eight thousand bytes, and the byte after them is not sniffed
   for (const [at, governed] of [[7999, false], [8000, true]]) {
     const nb = tempRepo(d => {
@@ -3937,6 +3944,134 @@ const SEC = String.fromCharCode(0xa7);
   fs.writeFileSync(path.join(td, 'said.jsonl'), JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'w'.repeat(450) }] } }) + '\n');
   const said = docket(['transcript', path.join(td, 'said.jsonl')]).out;
   ok('…while the maker’s own text prints whole, a line of four hundred and fifty characters among it: the cut is a call’s and a result’s (D14, FORMAT.md 13)', said.includes('w'.repeat(450)) && !said.includes('…'), said.length + ' characters');
+}
+
+// ── one root for every command, and the hooks keep their time and their silence (D44; FORMAT.md 1, 13, 15, 16) ──
+{
+  const LEDGER = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. One ruling\nPrinciple: One.\nReason: r.\n';
+  const Q = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
+  // a stand-in judge: it reads its prompt, runs the gate and records as its word says, from the shell the host gives a judge —
+  // with no project directory named — and keeps the root the stop handed it
+  const jd = tmpDir('root-judge-'), J = path.join(jd, 'judge.js');
+  fs.writeFileSync(J, [
+    "const fs = require('fs'), cp = require('child_process');",
+    "const p = fs.readFileSync(0, 'utf8');",
+    "let core = (p.match(/^Run `node (.*) protocol` with/m) || [])[1] || ''; if (core.startsWith('\"')) core = JSON.parse(core);",
+    "const sid = JSON.parse((p.match(/^Hook input: (.*)$/m) || [])[1] || '{}').session_id || 'default';",
+    "const env = Object.assign({}, process.env); delete env.CLAUDE_PROJECT_DIR;",
+    "if (process.argv[3]) fs.writeFileSync(process.argv[3], String(process.env.DOCKET_ROOT || ''));",
+    "const run = a => cp.spawnSync('node', [core].concat(a), { encoding: 'utf8', env });",
+    "const h = run(['gate', '--session', sid]).stdout.split('\\n')[0].split(' ')[1];",
+    "if (process.argv[2] === 'FAIL') run(['verdict', 'FAIL', '--hash', h, '--failures', '1', '--session', sid, '--reason', process.env.JUDGE_REASON]);",
+    "else run(['verdict', 'PASS', '--hash', h, '--failures', '0', '--session', sid]);",
+  ].join('\n') + '\n');
+  const held = 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (test/fixture/app.js:40) · change the code';
+  const blockOf = r => { try { const j = JSON.parse(r.out); return j.decision === 'block' ? j.reason.replace(/'/g, '’') : null; } catch (e) { return null; } };
+
+  // outside a repository: the host's directory is every command's root, below an unrelated ancestor's ledger (D44)
+  {
+    const anc = fs.realpathSync(tmpDir('ancestor-')), proj = path.join(anc, 'proj');
+    fs.mkdirSync(proj);
+    fs.writeFileSync(path.join(anc, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(anc, 'a.js'), 'x(); // R1\n'); fs.writeFileSync(path.join(proj, 'b.js'), 'y(); // R1\n');
+    const host = { CLAUDE_PROJECT_DIR: proj };
+    const g = docket(['gate', '--session', 'u'], { cwd: proj, env: host });
+    const s = docket(['stop', '--judge', 'touch started'], { cwd: proj, input: JSON.stringify({ session_id: 'u', cwd: proj }), env: host });
+    const n = docket(['near'], { cwd: proj, input: nearInput(path.join(proj, 'b.js'), 'y();'), env: host });
+    ok('outside a repository the host’s project directory is every command’s root: below an unrelated ancestor’s ledger the gate answers SKIP, the stop allows with no judge and writes nothing beside the ancestor, and near is silent, as status is (D44)', /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && !fs.existsSync(path.join(proj, 'started')) && !fs.existsSync(path.join(anc, '.docket')) && n.code === 0 && n.out === '', [g.out, s.code, s.out, s.err.slice(0, 120), n.out].join('|'));
+  }
+  // outside a repository the stop hands its root to the judge, whose shell names no project directory (D28, D44)
+  {
+    const anc = fs.realpathSync(tmpDir('handoff-')), P = path.join(anc, 'proj'), sub = path.join(P, 'sub'), rootFile = path.join(jd, 'root');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(anc, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(sub, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(sub, 'x.js'), 'x(); // R1\n');
+    const s = docket(['stop', '--judge', 'node ' + J + ' PASS ' + rootFile], { cwd: P, input: JSON.stringify({ session_id: 'ho', cwd: P }), env: { CLAUDE_PROJECT_DIR: P } });
+    const got = fs.existsSync(rootFile) ? read(rootFile) : '(no judge)';
+    ok('outside a repository the stop hands its root to the judge as DOCKET_ROOT: the judge’s gate and verdict, with no project directory named, keep the stop’s state, and its PASS allows the stop (D28, D44)', s.code === 0 && s.out === '' && got === P && fs.existsSync(path.join(P, '.docket', 'verdict.json')) && !fs.existsSync(path.join(anc, '.docket')), [s.code, s.out, s.err.slice(0, 160), got].join('|'));
+  }
+  // past the walk's bound, an ungoverned tree is ungoverned to the hooks; a governed one is refused (FORMAT.md 1)
+  {
+    const wide = fs.realpathSync(tmpDir('docket-wide2-')), fill = path.join(wide, 'fill');
+    fs.mkdirSync(fill);
+    for (let k = 0; k < 20050; k++) fs.writeFileSync(path.join(fill, 'f' + k + '.txt'), 'x\n');
+    const host = { CLAUDE_PROJECT_DIR: wide };
+    const g = docket(['gate', '--session', 'w'], { cwd: wide, env: host });
+    const s = docket(['stop', '--judge', 'touch started'], { cwd: wide, input: JSON.stringify({ session_id: 'w', cwd: wide }), env: host });
+    const ss = docket(['status', '--session-start'], { cwd: wide, input: JSON.stringify({ session_id: 'w', source: 'startup', cwd: wide }), env: host });
+    ok('a tree past the walk’s bound with no ledger between the working directory and the root is the ungoverned project it reads as: the gate answers SKIP, the stop allows and starts no judge, and the session-start call prints nothing, each exit 0 (FORMAT.md 1)', g.code === 0 && /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && !fs.existsSync(path.join(wide, 'started')) && ss.code === 0 && ss.out === '' && ss.err === '', [g.code, g.out, g.err.slice(0, 80), s.code, s.out, s.err.slice(0, 80), ss.code, ss.out, ss.err.slice(0, 80)].join('|'));
+    fs.writeFileSync(path.join(wide, 'DECISIONS.md'), LEDGER);
+    const g2 = docket(['gate', '--session', 'w'], { cwd: wide, env: host });
+    ok('…and with a ledger at its root the refusal stands: the gate says the tree is past the bound, exit 2', g2.code === 2 && /holds more than 20000 entries and is not a git repository/.test(g2.err), g2.code + ' ' + g2.err.slice(0, 160));
+    fs.rmSync(wide, { recursive: true, force: true });
+  }
+  // every DOCKET_BASE that names nothing to compare says so; a reflog's @{…} is a revision (FORMAT.md 13)
+  {
+    const d = tempRepo(), LD = 'test/fixture/DECISIONS.md';
+    edit(d, LD, '### R3. Fold similarity (issue #4)', '### R3. Fold similarity, rewritten (issue #4)'); sh('git', Q.concat(['commit', '-qam', 'amend']), d);
+    sh('git', Q.concat(['commit', '-q', '--allow-empty', '-m', 'after']), d);
+    for (const [v, said] of [['0000000000000000000000000000000000000000', 'DOCKET_BASE is all zeros, a CI’s word for no commit before a branch’s first push'], ['main ', 'DOCKET_BASE is "main ", which is no revision'], ['a b', 'DOCKET_BASE is "a b", which is no revision'], ['-p', 'DOCKET_BASE is "-p", which is no revision']]) {
+      const r = docket(['check'], { cwd: d, env: { DOCKET_BASE: v } });
+      ok('check 7 says so when DOCKET_BASE names nothing to compare — ' + JSON.stringify(v) + ' — naming the ledger, the value and what it compared with instead (FORMAT.md 13)', r.code === 0 && r.out.replace(/'/g, '’').includes('info  ' + LD + ': check 7 compared with HEAD’s parent: ' + said), r.out);
+    }
+    const self = docket(['check'], { cwd: d, env: { DOCKET_BASE: 'HEAD' } });
+    ok('…and a DOCKET_BASE naming HEAD itself, read as unset, says so when the parent rule compares with the parent', self.code === 0 && /check 7 compared with HEAD's parent: DOCKET_BASE names HEAD itself/.test(self.out), self.out);
+    const reflog = docket(['check'], { cwd: d, env: { DOCKET_BASE: 'main@{2}' } });
+    ok('…while a reflog’s main@{2} is the revision it names: the amendment two commits back is caught (FORMAT.md 13)', reflog.code === 1 && /check 7: R3: heading changed/.test(reflog.out) && !/no revision/.test(reflog.out), reflog.out);
+    const long = 'before-the-push-' + 'b'.repeat(60); sh('git', ['branch', long, 'HEAD~2'], d);
+    const lb = docket(['check'], { cwd: d, env: { DOCKET_BASE: long } });
+    ok('…and so is a branch whose name runs past sixty-four characters: git resolves it, and the amendment is caught', lb.code === 1 && /check 7: R3: heading changed/.test(lb.out) && !/no revision/.test(lb.out), lb.out);
+  }
+  // .docket/ carries its own .gitignore (FORMAT.md 16)
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 2; // R2\n');
+    let h = ''; try { h = JSON.parse(docket(['gate', '--session', 'gi', '--json'], { cwd: d }).out).hash; } catch (e) { h = ''; }
+    docket(['verdict', 'PASS', '--hash', h, '--failures', '0', '--session', 'gi'], { cwd: d });
+    const st = sh('git', ['status', '--porcelain', '--untracked-files=all'], d).stdout;
+    ok('.docket/ is made with a .gitignore of "*" inside it, so git ignores the state in a repository whose own .gitignore names none of it: status lists nothing of .docket (FORMAT.md 16)', fs.existsSync(path.join(d, '.docket', 'verdict.json')) && fs.existsSync(path.join(d, '.docket', '.gitignore')) && read(path.join(d, '.docket', '.gitignore')) === '*\n' && !/\.docket/.test(st), st);
+  }
+  // the session start waits a second on a held state lock, then prints and records nothing (D14's addendum)
+  {
+    const d = tempRepo(), lk = path.join(d, '.docket', 'verdict.json.lock');
+    fs.mkdirSync(path.dirname(lk), { recursive: true }); fs.writeFileSync(lk, 'docket ' + process.pid + '\n');   // held by a holder that is alive: this witness
+    const t0 = Date.now(), r = docket(['status', '--session-start'], { cwd: d, input: JSON.stringify({ session_id: 'lk', source: 'startup', cwd: d }) }), ms = Date.now() - t0;
+    let st = {}; try { st = JSON.parse(read(path.join(d, '.docket', 'verdict.json'))); } catch (e) { st = {}; }
+    ok('status --session-start waits a second on a state lock another holds, then prints the docket and records no base, well inside its hook’s five seconds (D14’s addendum, D40)', ms < 4000 && /^Docket — /m.test(r.out) && !(st.sessions && st.sessions.lk) && read(lk) === 'docket ' + process.pid + '\n', ms + ' ms|' + r.out.slice(0, 80) + '|' + JSON.stringify(st));
+  }
+  // a NUL in the hook's input (D1, FORMAT.md 16)
+  {
+    const d = tempRepo(), app = path.join(d, 'test', 'fixture', 'app.js');
+    const n1 = docket(['near'], { cwd: d, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(d, 'test\u0000', 'fixture', 'app.js'), old_string: 'makeToolbar(' } }) });
+    const n2 = docket(['near'], { cwd: d, input: JSON.stringify({ cwd: d + '\u0000', tool_name: 'Edit', tool_input: { file_path: 'test/fixture/app.js', old_string: 'makeToolbar(' } }) });
+    ok('near reads a NUL in the edit’s path as an input it cannot use — silent, exit 0, no stack — and a NUL in the hook’s directory as no directory, the edit read from where it runs (D1)', n1.code === 0 && n1.out === '' && n1.err === '' && n2.code === 0 && /^  R6  /m.test(n2.out) && n2.err === '', [n1.code, n1.err.slice(0, 160), n2.code, n2.out.slice(0, 80), n2.err.slice(0, 160)].join('|'));
+    fs.appendFileSync(app, 'const q = 5; // R2\n');
+    const s = docket(['stop', '--judge', 'node ' + J + ' FAIL'], { cwd: d, input: JSON.stringify({ session_id: 'a\u0000b' }), env: { JUDGE_REASON: held } });
+    let st = {}; try { st = JSON.parse(read(path.join(d, '.docket', 'verdict.json'))); } catch (e) { st = {}; }
+    ok('stop keys a session whose id holds a NUL by its escape: the judge starts, records under it, and its FAIL is the block (FORMAT.md 16)', s.code === 0 && /recorded FAIL for this stop’s diff/.test(blockOf(s) || '') && st.sessions && st.sessions['a\\u0000b'] && st.sessions['a\\u0000b'].blocks === 1, [s.code, s.out.slice(0, 160), s.err.slice(0, 200), JSON.stringify(st.sessions)].join('|'));
+  }
+  // the judge is one command; an ending before the prompt is read is an ending (D37)
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 4; // R2\n');
+    const mark = path.join(tmpDir('shape-'), 'ran');
+    for (const [why, cmd] of [['a second command after “;”', 'true; touch ' + mark], ['a pipe', 'true | touch ' + mark], ['“&&”', 'true && touch ' + mark], ['an assignment before the command', 'X=1 touch ' + mark]]) {
+      const r = docket(['stop', '--judge', cmd], { cwd: d, input: JSON.stringify({ session_id: 'sh' }) });
+      ok('stop refuses a --judge that is not one command — ' + why + ' — exit 2, naming the shape and the env form, and runs nothing (D37)', r.code === 2 && /--judge is one command/.test(r.err) && /env NAME=value <command>/.test(r.err) && !fs.existsSync(mark), r.code + ' ' + r.out + r.err);
+    }
+    const one = docket(['stop', '--judge', "env X=1 sh -c 'exit 0'"], { cwd: d, input: JSON.stringify({ session_id: 'sh' }) });
+    ok('…and runs one command whose variable is set through env, its quotes read as the shell reads them', one.code === 0 && /recorded no verdict for this stop’s diff/.test(blockOf(one) || ''), one.code + ' ' + one.out + one.err);
+    const ep = docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'ep', transcript_path: '/t/' + 'x'.repeat(300000) }) });
+    ok('stop: a judge that ends before it reads its prompt has ended, and the block says so with its time — never that it could not be started (D37)', /: it ended after \d+ seconds?, before it read its prompt, so this stop cannot stand/.test(blockOf(ep) || '') && !/could not be started/.test(ep.out), ep.out.slice(0, 300) + ep.err);
+  }
+  // near breaks a tie by the ranked cite's line (FORMAT.md 15)
+  {
+    const d = tempRepo(), f = path.join(d, 'test', 'fixture', 'rank.js');
+    const L = Array.from({ length: 160 }, (_, i) => 'const v' + (i + 1) + ' = ' + (i + 1) + ';');
+    L[29] = '// R7 keeps this'; L[47] = '// R2 keeps this'; L[49] = 'anchorOne();'; L[51] = '// R7 again'; L[147] = '// R2 here too'; L[149] = 'anchorTwo();';
+    fs.writeFileSync(f, L.join('\n') + '\n');
+    const one = docket(['near'], { cwd: d, input: nearInput(f, 'anchorOne();') }).out;
+    const many = docket(['near'], { cwd: d, input: nearInput(f, 'anchor', { replace_all: true }) }).out;
+    const before = (t, a, b) => t.indexOf('\n  ' + a + '  ') >= 0 && t.indexOf('\n  ' + b + '  ') >= 0 && t.indexOf('\n  ' + a + '  ') < t.indexOf('\n  ' + b + '  ');
+    ok('near breaks a tie at one distance by the line of each ruling’s nearest cite: R2 cited two lines above the edit ranks before R7 cited two below it and twenty above (FORMAT.md 15)', before(one, 'R2', 'R7'), one);
+    ok('…and the union the same, by the line of the cite nearest the first match among rulings cited as often', before(many, 'R2', 'R7'), many);
+  }
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
