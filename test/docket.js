@@ -2071,12 +2071,21 @@ const SEC = String.fromCharCode(0xa7);
   }
   // The refusals, each by the field's name (every crowd on the list, not only one).
   {
-    const roles = ['general audience', 'everyone', 'anyone', 'non-technical', 'users', 'people', 'the public', 'all users', 'someone curious', 'Everyone who cooks', 'a general audience', 'The Public.', 'public'];
+    const roles = ['general audience', 'everyone', 'anyone', 'non-technical', 'users', 'people', 'the public', 'all users', 'someone curious', 'Everyone who cooks', 'a general audience', 'The Public.', 'public', 'everyone at the company', 'non-technical users', 'busy people', 'anyone with a laptop'];
     for (const role of roles) {
       const r = constitute(Object.assign({}, ANSWERS, { who: { role, knows: 'k', doesntKnow: 'd' } }));
       ok('constitute refuses the role "' + role + '" by name, exit 2, writing nothing', r.code === 2 && new RegExp('^constitute: who\\.role "' + role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" is refused — a role names a person, not a crowd').test(r.err) && !fs.existsSync(path.join(r.dir, 'docs')), r.code + ' ' + r.err + ' ' + fs.readdirSync(r.dir).join(','));
       fs.rmSync(r.dir, { recursive: true, force: true });
     }
+    for (const role of ['a people manager', 'users researcher', 'the public defender', 'a non-technical founder']) {
+      const r = constitute(Object.assign({}, ANSWERS, { who: { role, knows: 'k', doesntKnow: 'd' } }));
+      ok('…while "' + role + '" — a crowd’s word before a person’s noun — is a role, and the constitution is written', r.code === 0 && fs.existsSync(path.join(r.dir, 'docs', 'DECISIONS.md')), r.code + ' ' + r.err);
+      fs.rmSync(r.dir, { recursive: true, force: true });
+    }
+    { const dir = freshDir(); fs.writeFileSync(path.join(dir, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. One ruling\nPrinciple: One.\nReason: r.\n');
+      const r = constitute(ANSWERS, { dir });
+      ok('constitute refuses a directory whose own DECISIONS.md discovery finds before docs/DECISIONS.md: exit 2, naming it, and writes nothing — a constitution there would govern nothing (FORMAT.md 1)', r.code === 2 && /^constitute: DECISIONS\.md already exists here, and it is the ledger discovery finds before docs\/DECISIONS\.md/m.test(r.err) && !fs.existsSync(path.join(dir, 'docs')) && !fs.existsSync(path.join(dir, 'test')), r.code + ' ' + r.err + ' ' + fs.readdirSync(dir).join(','));
+      fs.rmSync(dir, { recursive: true, force: true }); }
     const shapes = [
       ['what is two sentences', Object.assign({}, ANSWERS, { what: 'It does X. It does Y.' }), /^constitute: what is one sentence; this reads as 2$/m],
       ['what is two sentences, the second unfinished', Object.assign({}, ANSWERS, { what: 'It does X. It does Y' }), /^constitute: what is one sentence; this reads as 2$/m],
@@ -4170,6 +4179,13 @@ const SEC = String.fromCharCode(0xa7);
     const g = docket(['gate', '--session', 'ld'], { cwd: d });
     ok('a ledger document named in lower case is a ledger document to the gate as to near and governs: its edit is no governed change, the gate answers SKIP (FORMAT.md 8)', /^SKIP/.test(g.out), g.out + g.err);
   }
+}
+
+// ── both intakes hold the confirm to the word, as D18 says of both: silence, a model's own turn and a restatement are not it ──
+{
+  const RULE = read(path.join(ROOT, 'intake', 'RULE.md')), CONST = read(path.join(ROOT, 'intake', 'CONSTITUTE.md'));
+  const holds = t => /Silence\s+is\s+not\s+confirmation\./.test(t) && /A\s+model's\s+own\s+turn\s+is\s+not\s+confirmation\./.test(t) && /A\s+restatement\s+of\s+the\s+(?:ruling|answers)\s+is\s+not\s+confirmation\./.test(t);
+  ok('intake/RULE.md and intake/CONSTITUTE.md each say that silence, a model’s own turn and a restatement are not the person’s confirm (D18)', holds(RULE) && holds(CONST), 'RULE: ' + holds(RULE) + ', CONSTITUTE: ' + holds(CONST));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

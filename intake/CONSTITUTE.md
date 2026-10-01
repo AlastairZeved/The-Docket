@@ -60,8 +60,8 @@ Print the answers, the project's name and the prefix under
 
 and stop. Wait for the human. Only the human confirms (D8): the word
 `confirm`, from the person, in a turn of their own. Silence is not
-confirmation. A model's own turn is not confirmation. Any other reply reopens
-the line it bears on; a new name or prefix replaces the one shown and the
+confirmation. A model's own turn is not confirmation. A restatement of the
+answers is not confirmation. Any other reply reopens the line it bears on; a new name or prefix replaces the one shown and the
 block is printed again.
 
 ## On confirmation

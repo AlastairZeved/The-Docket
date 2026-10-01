@@ -1736,16 +1736,22 @@ function sentenceCount(s) {
   return Math.max(1, n);
 }
 // A crowd is refused when the role IS one, article or not, or one followed by a relative clause ("everyone who
-// cooks"). A role that merely opens with a crowd's word — "a people manager", "users researcher", "the public
-// defender" — names a person and is not this shape check's to refuse; the semantic line is the intake's (D13).
+// cooks"); when it opens with a word that can only open a crowd, whatever follows ("everyone at the company"); and when
+// its last word is a crowd's plural, whatever qualifies it ("non-technical users", "busy people"). A role that holds a
+// crowd's word in front of a person's noun — "a people manager", "users researcher", "the public defender", "a
+// non-technical founder" — names a person and is not this shape check's to refuse; the semantic line is the intake's (D13).
+const CROWD_OPENERS = ['everyone', 'anyone', 'all users', 'someone curious', 'general audience'], CROWD_PLURALS = ['users', 'people'];
 function invalidRole(role) {
   const strip = t => t.replace(/^(a|an|the)\s+/, '');
   const raw = role.toLowerCase().replace(/[.]+$/, '').trim(), forms = [raw, strip(raw)];
+  const words = raw.split(/[\s,]+/).filter(Boolean), last = words[words.length - 1];
   for (const bad of INVALID_ROLES) {
     for (const b of [bad, strip(bad)]) for (const f of forms) {
       if (f === b || f.startsWith(b + ',')) return bad;
       if (f.startsWith(b + ' ') && /^(who|that|which|whom|whose)\b/.test(f.slice(b.length + 1))) return bad;
+      if (CROWD_OPENERS.includes(bad) && f.startsWith(b + ' ')) return bad;
     }
+    if (CROWD_PLURALS.includes(bad) && last === bad) return bad;
   }
   return null;
 }
@@ -1806,6 +1812,9 @@ function constitute(argv) {
   for (const f of ['DECISIONS.md', 'PRD.md', 'UIUX.md']) {
     if (isFile(path.join(docs, f))) die('constitute: docs/' + f + ' already exists — a constitution is written once; the ledger is append only (D4), so what comes after is docket append, not a second constitution', 2);
   }
+  // a ledger at the directory itself is the one discovery tries first there (FORMAT.md 1): docs/DECISIONS.md written beside
+  // it would govern nothing, and the check that follows would pass over a constitution no file reads
+  if (isFile(path.join(dir, 'DECISIONS.md'))) die('constitute: DECISIONS.md already exists here, and it is the ledger discovery finds before docs/DECISIONS.md (FORMAT.md 1): a constitution written under docs/ would govern nothing; the ledger is append only (D4), so what comes after is docket append, not a second constitution', 2);
   const name = a.name || path.basename(dir);
   const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
   const principles = ['- **' + cap(a.feeling) + '.** The feeling every iteration must keep; a change that loses it fails whatever else it does.']
