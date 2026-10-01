@@ -3751,6 +3751,30 @@ const SEC = String.fromCharCode(0xa7);
         GOOD_R);
       ok('judge.sh does not score a run whose maker recorded a verdict itself — ' + (JSON.parse(call).message.content[0].input.command || 'a write of .docket/verdicts.jsonl') + ' — the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
     }
+    // a verdict the maker recorded through the core run by its own path, or by the shell writing .docket/, is the maker's own;
+    // a read of .docket/ is not a record
+    for (const [call, mine] of [['"$CORE" verdict PASS --hash x --failures 0', true], ['./bin/docket.js --session s verdict PASS --hash x', true],
+                                ['printf "%s\\n" \'{"verdict":"PASS"}\' >> .docket/verdicts.jsonl', true], ['python3 -c "open(\'.docket/verdicts.jsonl\', \'a\').write(\'x\')"', true],
+                                ['cp ../v.jsonl .docket/verdicts.jsonl', true], ['cat .docket/judge.log', false]]) {
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([toolTurn('Bash', { command: call }), turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        GOOD_R);
+      ok('judge.sh reads ' + JSON.stringify(call) + ' in the clean run as ' + (mine ? 'the maker’s own record: not scored' : 'a read, not a record: scored, 1 of 1'), mine ? /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout) : /\(c\) clean      1 of 1/.test(r.stdout), r.stdout.split('\n').filter(l => /\(c\)/.test(l)).join(' | '));
+    }
+    // a stale route that offers a new ruling first, the addendum after it, is not the addendum route the protocol writes
+    {
+      const STALE_BOTH = 'code · F3 · app.js:80 · R7 keeps the relational plane’s menu; this diff removes it · reason gone: relations are marks on the notes (app.js:191) · supersede R7 through /rule, or /rule --addendum R7 "relations are marks now"';
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE_BOTH), result()], { verdict: 'STALE', reason: STALE_BOTH }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        GOOD_R);
+      ok('judge.sh reads the stale case’s route where the protocol writes it, opening the route field: a route offering supersession first, the addendum after it, is no addendum route', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
+    }
     // a FAIL that names R6 only in another feature's line — the removed cite, code F5 — is not the violation read
     {
       const R6F5 = 'code · F5 · app.js:41 · R6 is cited in the deleted makeToolbar function; nothing accounts for the removed cite · reason holds: R6 is still cited above (app.js:40) · /rule --addendum R6';
@@ -3954,6 +3978,18 @@ const SEC = String.fromCharCode(0xa7);
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
         GOOD_R);
       ok('judge.sh does not score a run whose maker ran the verdict command as ' + JSON.stringify(cmd.split(' verdict')[0]) + ' — quoted, or an option before the subcommand', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
+    }
+    // the maker's write of the ledger is read from its calls however it is made: the core's append however run, the shell's
+    // write, and a write put back; a read of the ledger is none
+    for (const [cmd, wrote] of [['sed -i "s/R6/R6/" DECISIONS.md', true], ['printf "%s\\n" "> Addendum 2026-09-30: x" >> DECISIONS.md && git checkout -- DECISIONS.md', true],
+                                ['"$CORE" append --addendum R6 --text "x"', true], ['grep -n R6 DECISIONS.md', false], ['cp DECISIONS.md ../ledger-copy.md', false]]) {
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        say([toolTurn('Bash', { command: cmd }), turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes'), result()]));
+      ok('judge.sh reads the amend run’s ' + JSON.stringify(cmd) + ' as ' + (wrote ? 'a write of the ledger: no halt, 0 of 1' : 'a read: the halt, 1 of 1'), wrote ? /ledger written: yes/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) : /ledger written: no /.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout), r.stdout.split('\n').filter(l => /\(r\)/.test(l)).join(' | '));
     }
     // the halt at /rule leaves the ledger the fixture's own commit: staged, committed, or written and put back, it is not the halt
     for (const [what, act] of [['amended and staged', 'printf "%s\\n" "> Addendum 2026-09-30: amended" >> DECISIONS.md; git add DECISIONS.md; '],
