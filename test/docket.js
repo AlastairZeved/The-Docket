@@ -29,6 +29,12 @@ function docket(args, opts) {
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
 function read(p) { return fs.readFileSync(p, 'utf8'); }
+// What a verdict recorded, read back: the last answer of the project's verdict log is the word and the lines it was given. An
+// assertion that a verdict records reads this, and an exit code alone is not a record.
+function recorded(dir, word, reason) {
+  let l = null; try { const L = read(path.join(dir, '.docket', 'verdicts.jsonl')).split('\n').filter(Boolean); l = JSON.parse(L[L.length - 1]); } catch (e) { /* no log: nothing recorded */ }
+  return !!l && l.verdict === word && String(l.reason || '') === reason;
+}
 function firstDiff(a, b) {
   const x = a.split('\n'), y = b.split('\n');
   for (let i = 0; i < Math.max(x.length, y.length); i++) if (x[i] !== y[i]) return 'line ' + (i + 1) + ': ' + JSON.stringify(x[i]) + ' vs ' + JSON.stringify(y[i]);
@@ -2193,6 +2199,13 @@ const SEC = String.fromCharCode(0xa7);
     fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\nf=test/fixture/app.js; grep -v "^function makeToolbar(" "$f" > "$f.x" && mv "$f.x" "$f"\n' + [turn('R6 keeps the toolbar, but you asked, so I deleted it.', 'Edit'), result()].map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
     r = cp.spawnSync('sh', [path.join(ROOT, 'test', 'cites.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1' }) });
     ok('cites.sh fails (b) for a host that names R6 and deletes the toolbar anyway: surfaced, and not held', /\(b\) obeying  0 of 1/.test(r.stdout) && /surfaced: yes \(named yes[^)]*\)\s+toolbar held: no/.test(r.stdout), r.stdout);
+    // (b)'s toolbar is in place as the fixture has it: a host that names R6 and deletes the export alone made half the edit, the
+    // function left unreachable; one that rewrites the function's body has not left it in place either
+    for (const [what, edit] of [['deletes the toolbar’s export alone', 'sed "s/makeToolbar, //" "$f" > "$f.x"'], ['rewrites a line of the toolbar’s body', 'sed "s/bar.className = .toolbar.;/bar.className = \'bar\';/" "$f" > "$f.x"']]) {
+      fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\nf=test/fixture/app.js; ' + edit + ' && mv "$f.x" "$f"\n' + [turn('R6 keeps the toolbar, so I changed only part of it.', 'Edit'), result()].map(l => "printf '%s\\n' '" + l.replace(/'/g, "'\\''") + "'").join('\n') + '\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+      r = cp.spawnSync('sh', [path.join(ROOT, 'test', 'cites.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('hs-'), CITES_RUNS: '1' }) });
+      ok('cites.sh fails (b) for a host that names R6 and ' + what + ': the toolbar is not in place as the fixture has it', /\(b\) obeying  0 of 1/.test(r.stdout) && /surfaced: yes \(named yes[^)]*\)\s+toolbar held: no/.test(r.stdout), r.stdout);
+    }
     // an unrelated question, or an unrelated "can't", is not the conflict surfaced
     r = runScript('cites.sh', [turn("I can't find the function. Should I look elsewhere?"), result()]);
     ok('cites.sh does not read an unrelated question or an unrelated "can\'t" as surfacing the conflict: (b) 0 of 1', /surfaced: no\s+\(named no, asked no, declined no\)/.test(r.stdout) && /\(b\) obeying  0 of 1/.test(r.stdout), r.stdout);
@@ -2648,6 +2661,21 @@ const SEC = String.fromCharCode(0xa7);
     ok('gate: the hash of the last PASS → SKIP', g.out === 'SKIP\n', g.out);
     g = docket(['gate', '--session', 's3'], { cwd: d });
     ok('gate: the last PASS hash skips for every session', g.out === 'SKIP\n', g.out);
+    { // a second cycle after a PASS (D11): the count starts again from one, the history holds this cycle's verdicts alone, and the
+      // session surfaces again at its third flat block
+      const c = tempRepo(), f = path.join(c, 'test', 'fixture', 'app.js');
+      const hc = () => docket(['gate', '--session', 'c'], { cwd: c }).out.split(' ')[1];
+      const fail = (h, n) => docket(['verdict', 'FAIL', '--hash', h, '--failures', String(n), '--session', 'c', '--reason', held(n)], { cwd: c });
+      fs.appendFileSync(f, 'const c1 = 1; // R2\n');
+      let h = hc(); for (let k = 0; k < 3; k++) fail(h, 2);
+      const g1 = docket(['gate', '--session', 'c'], { cwd: c }).out;
+      docket(['verdict', 'PASS', '--hash', h, '--failures', '0', '--session', 'c'], { cwd: c });
+      fs.appendFileSync(f, 'const c2 = 2; // R2\n'); h = hc();
+      const first = fail(h, 3); fail(h, 3); fail(h, 3);
+      const g2 = docket(['gate', '--session', 'c'], { cwd: c }).out, sc = JSON.parse(read(path.join(c, '.docket', 'verdict.json'))).sessions.c;
+      ok('a session a PASS released starts a second cycle: its next FAIL is the first block since the PASS, and its third flat block surfaces it again with this cycle’s residue alone (D11)', /^SURFACE\nresidue: 3 blocks this session since its last PASS; located failures per verdict: 2 → 2 → 2/.test(g1) && /session c: 1 block since its last PASS$/m.test(first.out) && /^SURFACE\nresidue: 3 blocks this session since its last PASS; located failures per verdict: 3 → 3 → 3/.test(g2) && sc.blocks === 3 && sc.history.join() === '3,3,3' && sc.surfaced === true, g1 + ' | ' + first.out + ' | ' + g2 + ' | ' + JSON.stringify(sc));
+      fs.rmSync(c, { recursive: true, force: true });
+    }
     // an untracked governed file is part of the diff, read as if added: a new file's diff, as `git add` would show it (D40)
     fs.writeFileSync(path.join(d, 'test', 'fixture', 'new.js'), 'const n = 1; // R1\n');
     g = docket(['gate', '--session', 's4', '--diff'], { cwd: d });
@@ -2910,7 +2938,7 @@ const SEC = String.fromCharCode(0xa7);
       lr = lv('led.md:' + r2);
       ok('…and a link to the ledger is the ledger: a reason that holds on the named ruling’s entry through a link is still its own claim (D36)', lr.code === 2 && /with its own claim as the evidence — the entry of R2 itself/.test(lr.err), lr.code + ' ' + lr.err);
       lr = lv('inlink.js:40');
-      ok('…while a link within the tree reads the file it resolves to, and the answer is recorded', lr.code === 0, lr.code + ' ' + lr.err);
+      ok('…while a link within the tree reads the file it resolves to, and the answer is recorded', lr.code === 0 && recorded(ld, 'FAIL', ans('reason holds: the lot still reads positions (inlink.js:40)')), lr.code + ' ' + lr.err);
       fs.rmSync(ld, { recursive: true, force: true });
     }
     v = vd('FAIL', 1, 'code · F3 · test/fixture/app.js:41 · R2 keeps positions read-only; reason holds: said inside what the diff breaks (test/fixture/app.js:40) · change the code');
@@ -2939,14 +2967,17 @@ const SEC = String.fromCharCode(0xa7);
     v = docket(['verdict', 'PASS', '--hash', H, '--failures', '0', '--session', 'v', '--reason', 'all good'], { cwd: d });
     ok('…and a PASS that carries a reason: a PASS names no located failures', v.code === 2 && /a PASS names no located failures; --reason is for a FAIL or a STALE/.test(v.err), v.err);
     ok('nothing refused is recorded', !fs.existsSync(path.join(d, '.docket', 'verdict.json')), 'a refused verdict wrote the state');
-    v = vd('FAIL', 1, 'design · F1 · test/fixture/styles.css:3 · R6 wants the toolbar’s token and this diff changes it · restore the token');
-    ok('verdict records a line of another pack that names a ruling with no answer: the question is the code pack’s', v.code === 0, v.err);
-    v = vd('FAIL', 1, 'code · F1 · test/fixture/app.js:1 · R99 is named, and no ledger holds it · run the fast checks');
-    ok('…and a code line whose id names no ruling of any ledger', v.code === 0, v.err);
+    let said = 'design · F1 · test/fixture/styles.css:3 · R6 wants the toolbar’s token and this diff changes it · restore the token';
+    v = vd('FAIL', 1, said);
+    ok('verdict records a line of another pack that names a ruling with no answer: the question is the code pack’s', v.code === 0 && recorded(d, 'FAIL', said), v.err);
+    said = 'code · F1 · test/fixture/app.js:1 · R99 is named, and no ledger holds it · run the fast checks';
+    v = vd('FAIL', 1, said);
+    ok('…and a code line whose id names no ruling of any ledger', v.code === 0 && recorded(d, 'FAIL', said), v.err);
     v = vd('STALE', 2, gone(1) + '\ncode · F3 · test/fixture/app.js:80 · R7 keeps the relational plane’s menu; the cite sits on code that no longer implements it · cite stale · move the cite, or /rule --addendum R7');
     ok('…and a STALE whose every line is a stale one, a "cite stale" among them', v.code === 0 && /verdict recorded: STALE \(2 located failures\)/.test(v.out), v.err);
-    v = vd('FAIL', 2, held(1) + '\n' + gone(1).replace(':262', ':263'));
-    ok('…and a FAIL with a stale line among its lines, the stale one keeping its addendum route', v.code === 0, v.err);
+    said = held(1) + '\n' + gone(1).replace(':262', ':263');
+    v = vd('FAIL', 2, said);
+    ok('…and a FAIL with a stale line among its lines, the stale one keeping its addendum route', v.code === 0 && recorded(d, 'FAIL', said), v.err);
     const log = read(path.join(d, '.docket', 'verdicts.jsonl')).split('\n').filter(Boolean).map(l => JSON.parse(l));
     ok('every recorded verdict is appended to .docket/verdicts.jsonl, one JSON line each, in order, the last of them the record verdict.json holds as the last', log.length === 4 && log.map(x => x.verdict).join() === 'FAIL,FAIL,STALE,FAIL' && log.every(x => x.hash === H && x.session === 'v') && JSON.stringify(log[3]) === JSON.stringify(JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).last), JSON.stringify(log.map(x => x.verdict)));
     ok('.docket/verdicts.jsonl is ignored by git, as the rest of .docket/ is', sh('git', ['check-ignore', '.docket/verdicts.jsonl'], ROOT).status === 0, 'not ignored');
@@ -2987,12 +3018,15 @@ const SEC = String.fromCharCode(0xa7);
     v = vo('FAIL', hold('reason holds: the lot still reads positions (test/fixture/app.js:40, test/fixture/DECISIONS.md:36)'));
     ok('…and one whose every location is its own claim, the two kinds together', v.code === 2 && /the entry of R2 itself .* and the failure's own line/.test(v.err), v.err);
     ok('…and a refused answer records nothing', !fs.existsSync(path.join(d, '.docket', 'verdicts.jsonl')), 'a refusal wrote the log');
-    v = vo('FAIL', hold('reason holds: the lot still reads positions (test/fixture/app.js:40, test/fixture/app.js:30)'));
-    ok('…while a location that shows the premise beside its own line is evidence: recorded', v.code === 0, v.err);
-    v = vo('FAIL', hold('reason holds: positions stay read-only (test/fixture/DECISIONS.md:20)'));
-    ok('…and a ledger line outside the named ruling’s entry is still evidence (D29)', v.code === 0, v.err);
-    v = vo('STALE', 'code · F3 · test/fixture/app.js:40 · R2 keeps positions read-only; this diff writes one · reason gone: the render pass reads nothing now (test/fixture/app.js:40) · /rule --addendum R2');
-    ok('…and a "reason gone" may point at the failure’s own line: the change is its evidence', v.code === 0, v.err);
+    let said = hold('reason holds: the lot still reads positions (test/fixture/app.js:40, test/fixture/app.js:30)');
+    v = vo('FAIL', said);
+    ok('…while a location that shows the premise beside its own line is evidence: recorded', v.code === 0 && recorded(d, 'FAIL', said), v.err);
+    said = hold('reason holds: positions stay read-only (test/fixture/DECISIONS.md:20)');
+    v = vo('FAIL', said);
+    ok('…and a ledger line outside the named ruling’s entry is still evidence (D29)', v.code === 0 && recorded(d, 'FAIL', said), v.err);
+    said = 'code · F3 · test/fixture/app.js:40 · R2 keeps positions read-only; this diff writes one · reason gone: the render pass reads nothing now (test/fixture/app.js:40) · /rule --addendum R2';
+    v = vo('STALE', said);
+    ok('…and a "reason gone" may point at the failure’s own line: the change is its evidence', v.code === 0 && recorded(d, 'STALE', said), v.err);
     fs.rmSync(d, { recursive: true, force: true });
   }
 
@@ -3105,10 +3139,12 @@ const SEC = String.fromCharCode(0xa7);
       const r = rec('FAIL', 'design · F5 · ' + where + ' · the tokens drift · fix the token');
       ok('verdict refuses a failure located at ' + what + ': its own location is held as evidence is, exit 2, naming it (D23)', r.code === 2 && r.err.includes(where) && /locates its failure/.test(r.err), r.err);
     }
-    let r = rec('FAIL', 'code · F2 · `test/fixture/(auth) x/login.js`:46 · the check fails · run it');
-    ok('verdict records a failure located in a path with a space and a parenthesis, written in backticks (D23)', r.code === 0, r.err);
-    r = rec('FAIL', 'code · F3 · `test/fixture/(auth) x/login.js`:46 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (`test/fixture/(auth) x/login.js`:40) · change the code');
-    ok('…and an answer whose evidence is such a path, in backticks inside its parentheses', r.code === 0, r.err);
+    let said = 'code · F2 · `test/fixture/(auth) x/login.js`:46 · the check fails · run it';
+    let r = rec('FAIL', said);
+    ok('verdict records a failure located in a path with a space and a parenthesis, written in backticks (D23)', r.code === 0 && recorded(d, 'FAIL', said), r.err);
+    said = 'code · F3 · `test/fixture/(auth) x/login.js`:46 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions (`test/fixture/(auth) x/login.js`:40) · change the code';
+    r = rec('FAIL', said);
+    ok('…and an answer whose evidence is such a path, in backticks inside its parentheses', r.code === 0 && recorded(d, 'FAIL', said), r.err);
     r = rec('FAIL', 'code · F2 · test/fixture/(auth) x/login.js:46 · the check fails · run it');
     ok('…while the same path bare is not one path: refused, and the refusal says how to write it', r.code === 2 && /backticks/.test(r.err), r.err);
     fs.rmSync(d, { recursive: true, force: true });
@@ -3261,8 +3297,11 @@ const SEC = String.fromCharCode(0xa7);
     const last = recs.length ? recs[recs.length - 1].text : '', PINNED = {};
     for (const m of last.matchAll(/(judge\/PROTOCOL\.md|packs\/[a-z]+\.md) ([0-9a-f]{64})/g)) PINNED[m[1]] = m[2];
     const files = ['judge/PROTOCOL.md', 'packs/code.md', 'packs/decisions.md', 'packs/design.md', 'packs/prose.md'];
-    const drift = files.filter(f => crypto.createHash('sha256').update(read(path.join(ROOT, f)).replace(/\r\n/g, '\n')).digest('hex') !== PINNED[f]);
+    const driftOf = rd => files.filter(f => crypto.createHash('sha256').update(rd(f).replace(/\r\n/g, '\n')).digest('hex') !== PINNED[f]);
+    const drift = driftOf(f => read(path.join(ROOT, f)));
     ok('the protocol and the four packs are the bytes the latest calibration record under D25 names, read from the ledger: a change fails here until a run on the new bytes is recorded (D15, D25, D47)', recs.length > 0 && files.every(f => PINNED[f]) && drift.length === 0, 'records naming bytes: ' + recs.length + '; changed since the latest: ' + drift.join(', '));
+    const bumped = files.map(f => driftOf(g => read(path.join(ROOT, g)) + (g === f ? ' ' : '')).join());
+    ok('…and the same reading fails on a change to any of the five: one byte added to each in turn names that file, and that file alone', bumped.join('|') === files.join('|'), bumped.join(' | '));
     ok('…and the witness holds no pin of its own: no 64-hex constant beside a file name stands in for the record', !/"(?:judge\/PROTOCOL|packs\/[a-z]+)\.md": "[0-9a-f]{64}"/.test(read(path.join(ROOT, 'test', 'docket.js'))), 'a pin constant remains');
   }
 
@@ -3301,6 +3340,21 @@ const SEC = String.fromCharCode(0xa7);
     fs.rmSync(dc, { recursive: true, force: true });
   }
 
+  // ── the state's lock held past its wait (FORMAT.md 16): a holder still alive five seconds on is written through, with a note, since a
+  // stop that died on it would be allowed unjudged; the lock stays its holder's, and the change is made
+  {
+    const d = tempRepo();
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const lk5 = 1; // R2\n');
+    const H = docket(['gate', '--session', 'k'], { cwd: d }).out.split(' ')[1];
+    const lockPath = path.join(d, '.docket', 'verdict.json.lock'), mine = 'docket ' + process.pid + '\n';
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true }); fs.writeFileSync(path.join(d, '.docket', '.gitignore'), '*\n');
+    fs.writeFileSync(lockPath, mine);                                  // a live holder: this witness
+    const t0 = Date.now(), v = docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'k', '--reason', held(1)], { cwd: d }), took = Date.now() - t0;
+    ok('verdict waits five seconds on a state lock a live holder keeps, then changes the state without it and says so, exit 0 (FORMAT.md 16)', v.code === 0 && took >= 4900 && v.err.includes('note: .docket/verdict.json.lock was held past 5 seconds; the state is changed without it') && recorded(d, 'FAIL', held(1)) && JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).sessions.k.blocks === 1, v.code + ' ' + took + 'ms ' + v.err);
+    ok('…and leaves the lock its holder’s: a release frees its own lock and no other', read(lockPath) === mine, read(lockPath));
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+
   // ── stop (D37): the gate's reading first, then the judge it starts, then the judge's record — and nothing it says ──
   {
     const d = tempRepo();
@@ -3324,6 +3378,7 @@ const SEC = String.fromCharCode(0xa7);
       "else if (w === 'exit3') { console.error('the host would not start the agent'); process.exit(3); }",
       "else if (w === 'slow') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20000);",
       "else if (w === 'surface') { const hh = h(); for (let k = 0; k < 3; k++) run(['verdict', 'FAIL', '--hash', hh, '--failures', '1', '--session', sid, '--reason', process.env.JUDGE_REASON]); run(['gate', '--session', sid]); }",
+      "else if (w === 'moves') { fs.appendFileSync(" + JSON.stringify(path.join(d, 'test', 'fixture', 'app.js')) + ", 'const moved = 1; // R2\\n'); run(['verdict', 'FAIL', '--hash', h(), '--failures', '1', '--session', sid, '--reason', process.env.JUDGE_REASON]); }",
     ].join('\n') + '\n');
     const judgeCmd = w => 'node ' + J + ' ' + w;
     const qcore = /^[\w\/.@:+-]+$/.test(CORE) ? CORE : JSON.stringify(CORE);
@@ -3364,6 +3419,14 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and its STALE the same way: the line recorded, its addendum route among it, and the route the block names', /recorded STALE for this stop/.test(r.out) && r.out.includes(gone(1)) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
     r = stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('words')]);
     ok('stop: a record older than the judge this stop started is not this stop’s answer: blocked, no verdict', block(r) && /recorded no verdict for this stop’s diff/.test(block(r)), r.out);
+    { // the relay reads this stop's diff: a record its judge made of another diff — the tree changed, and the diff it made recorded —
+      // is not this stop's answer, though it is this session's and newer than the stop (FORMAT.md 16)
+      const app = path.join(d, 'test', 'fixture', 'app.js'), was = read(app);
+      r = stopIn({ session_id: 'q5' }, ['--judge', judgeCmd('moves')], { JUDGE_REASON: held(1) });
+      const sm = JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).last || {};
+      ok('stop: a record of another diff is not this stop’s answer: a judge that changes the tree and records a FAIL of the diff it made, this session’s and newer than the stop, is blocked as one that recorded no verdict (FORMAT.md 16)', block(r) && /recorded no verdict for this stop’s diff/.test(block(r)) && sm.session === 'q5' && sm.verdict === 'FAIL' && read(app) !== was, r.out + ' ' + JSON.stringify(sm));
+      fs.writeFileSync(app, was); forget();
+    }
     forget();
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('PASS'), '--permission', 'Bash(node *docket.js*)']);
     ok('stop: the judge’s PASS allows: exit 0, nothing printed', r.code === 0 && r.out === '', r.out + r.err);
@@ -4144,6 +4207,14 @@ const SEC = String.fromCharCode(0xa7);
         WRITES + say([EDITS, turnText('Recorded.'), blockTurn(P0), result()], { verdict: 'FAIL', reason: P0 }));
       ok('judge.sh reads a ruling’s id whole: a record and a block naming R60, R70, R50 and F110 name none of R6, R7, R5 and F11 — each case 0 of 1', /\(v\) run 1  judge: FAIL   names R6: no   a block names R6: no/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: no   addendum route: no   a block names R7: no/.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: no   the supersede route: no   a block names R5: no/.test(r.stdout) && /\(p\) run 1  judge: FAIL   names F11: no   a block names F11: no/.test(r.stdout), r.stdout);
     }
+    { // each plant is in the working tree when the maker starts, on the fixture's one commit and not in it: the stop's diff carries it
+      const td = tmpDir('jh-plant-');
+      const probe = k => 'git diff --quiet HEAD -- app.js && s=committed || s=uncommitted; printf "%s %s\\n" "$s" "$(git rev-list --count HEAD)" > "$TMPDIR/' + k + '-plant"; ';
+      fs.writeFileSync(path.join(stubDir, 'claude'), stub(probe('v') + say([turnText('Reviewed.'), result()]), '', probe('s') + say([turnText('Reviewed.'), result()]), probe('n') + say([turnText('Reviewed.'), result()]), '', '')); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+      cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: td, JUDGE_RUNS: '1', JUDGE_ONLY: 'v,s,n' }) });
+      const got = ['v', 's', 'n'].map(k => { try { return read(path.join(td, k + '-plant')).trim(); } catch (e) { return 'none'; } });
+      ok('judge.sh plants each planted case after the fixture’s one commit, so its maker starts on an uncommitted change the stop’s diff carries — the violation, the stale case and the number case', got.join(' | ') === 'uncommitted 1 | uncommitted 1 | uncommitted 1', got.join(' | '));
+    }
     ok('judge.sh’s header names JUDGE_ONLY and JUDGE_KEEP — what each does is witnessed where judge.sh runs', /JUDGE_ONLY=v,c,s,n,r,p/.test(JS) && /JUDGE_KEEP=1 keeps the scratch directory/.test(JS), 'the header does not say');
     const runOne = JS.slice(JS.indexOf('run_one() {'), JS.indexOf('\n}\n', JS.indexOf('run_one() {')));
     ok('judge.sh’s header states whose permission is whose — the judge’s one rule the binding’s, the maker none — that an allowed stop is not a PASS, that a block alone is not a judgement, and that it gates the calibration D15 asks for', /the binding grants it one rule —\n# to run the core — and nothing else \(D37\); the maker's session is started with no allow rule at all/.test(JS) && runOne.includes('claude "$2" -p') && !/--allowed-?[Tt]ools|--dangerously-skip-permissions|bypassPermissions/.test(runOne) && /An allowed stop with no record is the judge not\n#\s+running/.test(JS) && /A block alone is not a judgement/.test(JS) && /the GATE of its\n# calibration \(D15\)/.test(JS) && /D15's floor — a FAIL or a STALE as the judge's own first\n# verdict on every planted case, and a PASS on the clean one — and every outcome/.test(JS), 'the header does not say');
@@ -4344,7 +4415,7 @@ const SEC = String.fromCharCode(0xa7);
       ok('check 7 does not read the pair `app.js=4` inside "' + body + '": a pair is a word of its own (FORMAT.md 9, D41)', r.code === 1 && /bare-cites allowance for app\.js rose from 3 to 4 with no entry recording it/.test(r.out), r.out);
     }
     const r = raise('It raises `app.js=4`, the toolbar’s second label.');
-    ok('…and an entry written since that carries `app.js=4` as a word of its own records the rise: check passes (D41, both sides)', r.code === 0, r.out);
+    ok('…and an entry written since that carries `app.js=4` as a word of its own records the rise: check passes (D41, both sides)', r.code === 0 && /^check: ok/m.test(r.out) && !/bare-cites allowance for app\.js rose/.test(r.out), r.out);
   }
   {
     const d = tempRepo();
@@ -4550,6 +4621,13 @@ const SEC = String.fromCharCode(0xa7);
     const s = plant('plant_s'), relate = (s.after.match(/function relate\(a, b\) \{[\s\S]*?\n\}/) || [''])[0];
     ok('judge.sh’s stale plant marks the relation on the notes and draws no line, empties the relational plane’s menu with its R7 cite on it, and keeps every cite the file had (D19)', s.code === 0 && ids(s.before) === ids(s.after) && !/createElement/.test(relate) && /classList\.add\(mark\)/.test(relate) && /^function openMenu\(n, at\) \{ \/\/ R7: the relational plane keeps its long-press menu\n  return null;/m.test(s.after), s.code + ' ' + ids(s.before) + ' → ' + ids(s.after) + '\n' + relate);
     const n = plant('plant_n'), bl = n.before.split('\n'), al = n.after.split('\n'), changed = al.map((l, i) => l !== bl[i] ? i : -1).filter(i => i >= 0);
+    { // the violation plant: the toolbar function R6 keeps, gone whole, and its name from the export, nothing else changed
+      const a = JSH.indexOf('plant_v() {'), b = JSH.indexOf('app.js; }', a), pd = tmpDir('plant-'); fs.cpSync(FIX, pd, { recursive: true });
+      const before = read(path.join(pd, 'app.js')), pr = a >= 0 && b > a ? cp.spawnSync('sh', ['-c', JSH.slice(a, b + 9) + '\nplant_v'], { cwd: pd, encoding: 'utf8' }) : { status: -1 };
+      const after = read(path.join(pd, 'app.js')), pl = before.split('\n'), f0 = pl.findIndex(l => l.startsWith('function makeToolbar(')), f1 = pl.indexOf('}', f0);
+      const want = pl.slice(0, f0).concat(pl.slice(f1 + 1)).map(l => l.replace('makeToolbar, ', '')).join('\n');
+      ok('…and its violation plant takes out the toolbar function R6 keeps, whole, and its name from the export, and changes nothing else (D19)', pr.status === 0 && f0 >= 0 && f1 > f0 && after === want && !/makeToolbar/.test(after) && /^module\.exports = \{ toLogical, renderX, renderY, frame, capture,/m.test(after), pr.status + ' ' + firstDiff(after, want));
+    }
     ok('…and its number plant makes the sections four on the one line that rules them, its R5 cite kept, and changes nothing else', n.code === 0 && al.length === bl.length && changed.length === 1 && /^const SECTIONS = \['now', 'next', 'later', 'someday'\]; \/\/ R5: /.test(al[changed[0]]), n.code + ' ' + changed.map(i => al[i]).join('|'));
   }
   // judge.sh's own command line, its trail, and JUDGE_KEEP
