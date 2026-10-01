@@ -1594,6 +1594,9 @@ function status(argv) {
     L.push('  ' + a.id + ' (' + a.date + '): ' + glance(a.text));
   }
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
+  // the last judge's own report — what it scored, and a check it could not run — kept for the person to read (D46)
+  const jlog = path.join(stopRoot(cwd), '.docket', 'judge.log');
+  if (isFile(jlog)) L.push('Judge\'s report: ' + rel(root, jlog) + ' — the last judge\'s own words, a check it could not run named there');
   if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since its last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
   // a check 7 the run skipped is said beside an ok, as check's info line says it, so a skip is never read as a pass (FORMAT.md 13)
   const skipped7 = check_.info.filter(i => /: check 7 skipped/.test(i)).length;

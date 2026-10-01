@@ -595,8 +595,9 @@ another session recorded is named on its line as that session's, not this one's;
 else `JUDGE <hash>
 <files…>`, and with `--diff` the diff beneath, each touched function whole
 (`git diff <base> --function-context` over the same files, read the same way), and beneath it each ruling cited within the window of a hunk
-(15) — a new file read whole — as `governs` prints it; the hash reads neither
-(D30, D33). `docket verdict` records
+(15) — its lines in the working tree and the lines it removed, read in the base, a
+new file read whole and a deleted one read whole in the base — every one, without
+`near`'s cap, as `governs` prints it; the hash reads neither (D30, D33, D46). `docket verdict` records
 the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
 session's history; a changed hash never resets anything. A FAIL

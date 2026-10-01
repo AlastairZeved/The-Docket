@@ -68,7 +68,8 @@ word `confirm` from the person, in a turn of their own, before the write.
 Silence, a model's own turn and a judge's route are not the word (D8). A ledger
 change no tool call of the maker's made — the person's own edit, or one from an
 earlier session — is not scored here. How scored: at the protocol's step 5,
-from the transcript, the one feature a pack cannot score from the diff. A
+from the transcript, which the diff cannot show — the code pack's F6 is the
+other feature scored there. A
 failure is located at the entry's heading or the addendum's line, and its route
 is to take the change out of the ledger and put it to the person through
 `/rule` (D32).

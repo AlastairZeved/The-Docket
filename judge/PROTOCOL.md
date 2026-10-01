@@ -10,7 +10,7 @@ the host gives it.
 binds one; it knows how to run a command and read a diff, and it does not know
 the maker's intentions or this repository's history. **Purpose.** Decide whether
 one stop stands, in seven steps, in this order. **Source.** D7, D8, D10, D11,
-D12, D15, D22, D23, D24 and D37 in `docs/DECISIONS.md`.
+D12, D15, D22, D23, D24, D37 and D46 in `docs/DECISIONS.md`.
 
 ## What the judge is given
 
@@ -23,7 +23,7 @@ D12, D15, D22, D23, D24 and D37 in `docs/DECISIONS.md`.
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
 | whether this stop was already blocked once in this turn | the host passes it in; if so, allow the stop at once |
-| a shell | confined to what the session allows, of which the protocol uses two things: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too; what else a host lets through unasked, such as a command that only reads, the protocol does not use. A check command the judge may not run leaves the code pack's first feature unscored, and the verdict says so and names the command |
+| a shell | confined to what the session allows, of which the protocol uses two things: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too; what else a host lets through unasked, such as a command that only reads, the protocol does not use. A check command the judge may not run leaves the code pack's first feature unscored, and the judge's report says so and names the command: the stop keeps the report in `.docket/judge.log`, which `docket status` names, since a PASS carries no line (D46) |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
 witness is vendored, or — where `docket stop` started the judge — the file its
@@ -101,13 +101,14 @@ Read a file only for what they leave out (D30).
    `Domain` line gives its globs). A change to the ledger always adds
    `packs/decisions.md`. A pack scores only the governed files in the diff.
 3. **Score every pack feature against the diff and the repository before
-   opening the transcript** — all but the decisions pack's F11, which reads the
-   transcript and is scored at step 5. For each feature: run its command, or make its
+   opening the transcript** — all but the two that read it, the code pack's F6
+   and the decisions pack's F11, scored at step 5 (D46). For each feature: run its command, or make its
    reading; record PASS or FAIL with `file:line`, the ruling id where one
    applies, and the feature id. Reason: reading the maker's account first is
    checking homework with the answer key.
-4. **The rulings cited in the touched regions** — the ids `near` would have
-   printed for each hunk — follow the diff `gate` printed, each as `docket
+4. **The rulings cited in the touched regions** — every ruling cited within
+   `near`'s window of each hunk, the lines it removed among them, without
+   `near`'s cap (D46) — follow the diff `gate` printed, each as `docket
    governs <id>` prints it; run `docket governs <id> <id> …`, once, only for any
    they leave out (D33). For each, the ruling's `Reason:` sentence is beneath its
    heading, then its edges. Check the diff against each
@@ -142,10 +143,10 @@ Read a file only for what they leave out (D30).
    whose every line is its own claim: the entry of the ruling it names, which
    restates the ruling, or the failure's own located line, which is the
    contradiction — neither shows the premise (D36).
-5. **Only now read the transcript** (`docket transcript <path>`; where the host
-   also passes the maker's last message, it is read the same way). List the
+5. **Only now read the transcript** (`docket transcript <path>`; the stop's
+   prompt gives its path and no word of the maker's). List the
    maker's claims — every "I ran", "this follows", "tests pass" — and check each
-   against the evidence from steps 3 and 4. A claim without evidence is a located
+   against the evidence from steps 3 and 4: the code pack's F6. A claim without evidence is a located
    failure. A command claimed but not run is a located failure. Then score the
    decisions pack's F11 for every entry or addendum the diff adds to a ledger: a
    write the maker's own tool call made — `docket append`, or an edit or a write
@@ -217,14 +218,13 @@ app.js:1112: R6 keeps the toolbar; this diff removes it — never
     <the residue: the block count and the located-failure count of each verdict since its last PASS; the last verdict, its time, and the failure lines it was recorded with>
     report this to the user verbatim, then stop again
     JUDGE <hash> <file> <file> …
-    <with --diff: the diff, as git prints it, then `+++ <path>` and the content of each untracked governed file>
+    <with --diff: the session's diff, each touched function whole, then each ruling its hunks cite>
 
-and decides mechanically (D10, D11): the hash is the SHA-256 of the diff since
-the committed head over every governed file and the ledger — the files the
-working tree governs, and those the committed head governed that it no longer
-does: deleted, stripped of their last cite, or under a ledger that is gone (D22)
-— followed by, for each untracked governed file in path order, a line `+++ <path>`
-and the file's content; `SKIP` when that diff is empty or its hash equals the
+and decides mechanically (D10, D11): the hash is the SHA-256 of the session's
+diff, which `docs/FORMAT.md` (16) states — from the session's base, over every
+governed file, every ledger and the spec documents beside it, those the base
+governed that the tree no longer does among them (D22), an untracked one read as
+added (D40); `SKIP` when that diff is empty or its hash equals the
 last PASS's, or when this session is already surfaced; `SURFACE` when this session has been blocked five times or more since the
 last PASS, or when located failures have not decreased across the last two
 verdicts after the third block; else `JUDGE`. So a session whose failures stop
@@ -244,8 +244,8 @@ fourth on, not once. `gate` itself records the session
 as surfaced when it answers `SURFACE`, in the same state file `verdict` writes,
 so its next answer for that session is `SKIP`. A surfaced session is released
 by a new session, or by a PASS the human records with `docket verdict PASS
---session <id> --hash <hash> --failures 0`, naming that session (`status` names
-it), after judging the residue themselves. The core cannot tell who records it:
+--session <id> --failures 0`, naming that session (`status` names it; the hash is
+the working tree's own), after judging the residue themselves. The core cannot tell who records it:
 the same command run by the maker releases the session too, and its next stop is
 judged afresh; the boundary is the permission to run the core, which the binding
 gives the judge's session and the maker's only inside the docket's own skills
@@ -278,7 +278,8 @@ first decides what needs no judge — the host's re-entry flag, a diff with noth
 governed in it or one the last PASS judged, and a surfaced session allow the stop
 at once, and a session its gate surfaces is blocked with the residue — and starts
 the judge for every other stop, with a prompt that names the core and carries the
-hook input. It waits for the judge to end, up to its bound, and reads the record:
+hook input's session, transcript path and directory, none of what the maker wrote
+(D46). It waits for the judge to end, up to its bound, and reads the record:
 a PASS allows the stop; a FAIL or STALE recorded for this diff since the judge
 started is the block, with the recorded lines and their route; anything else — a
 judge that recorded nothing, was refused, or was stopped at its bound — blocks
