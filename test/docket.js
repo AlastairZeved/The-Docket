@@ -4473,6 +4473,16 @@ const SEC = String.fromCharCode(0xa7);
     const r = docket(['check'], { cwd: d });
     ok('check 2 fails a ledger saved as UTF-16: it is not UTF-8 text, and read as such it holds no entries (FORMAT.md 1, D45)', r.code === 1 && /^DECISIONS\.md:1  check 2: the ledger is not UTF-8 text — a UTF-16 byte order mark opens it; save it as UTF-8 \(FORMAT\.md 1, D45\)$/m.test(r.out), r.out + r.err);
   }
+  // the same ledger alone in its tree, tracked and in a directory with no repository: no text file leads to it, and it is read
+  // where it stands (D45's addendum)
+  for (const tracked of [true, false]) {
+    const d = tmpDir('utf16-alone-');
+    fs.writeFileSync(path.join(d, 'DECISIONS.md'), Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from('Preamble.\n\n### R1. First (issue #1)\nReason: a.\n', 'utf16le')]));
+    if (tracked) { sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d); }
+    const r = docket(['check'], { cwd: d });
+    ok('check 2 fails a UTF-16 ledger alone in its tree, ' + (tracked ? 'tracked' : 'in a directory with no repository') + ': no text file leads to it, and it is read where it stands (D45’s addendum)', r.code === 1 && /^DECISIONS\.md:1  check 2: the ledger is not UTF-8 text — a UTF-16 byte order mark opens it; save it as UTF-8 \(FORMAT\.md 1, D45\)$/m.test(r.out), r.code + ' ' + r.out + r.err);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   {
     const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), '### R6. The toolbar replaces the long-press menu\nNotes on R6.\n'));   // a copy of a ledger's entry (D5's addendum)
     fs.appendFileSync(path.join(fx(d), 'decisions-notes.md'), 'More on R6.\n');

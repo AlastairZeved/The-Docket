@@ -521,7 +521,10 @@ function loadContext(root, opts) {
   const vendored = [];
   for (const f of uniq(files)) {
     inTime();                                                         // a session's start reads within its bound (D14's addendum)
-    if (!isFile(f) || !isTextFile(f)) continue;
+    if (!isFile(f)) continue;
+    // A ledger saved as UTF-16, or holding a NUL byte, is no text file, and alone in its tree no text file leads to it: it is
+    // read as a ledger where it stands, so that check 2 names it and the tree does not read as governed by none (D45's addendum)
+    if (!isTextFile(f)) { if (findLedger(f, root) === path.resolve(f) && !ledgers.has(path.resolve(f))) ledgers.set(path.resolve(f), loadLedger(path.resolve(f))); continue; }
     if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
     const lp = findLedger(f, root);
     if (!lp) continue;
