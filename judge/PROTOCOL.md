@@ -246,8 +246,9 @@ so its next answer for that session is `SKIP`. A surfaced session is released
 by a new session, or by a PASS the human records with `docket verdict PASS
 --session <id> --failures 0`, naming that session (`status` names it; the hash is
 the working tree's own), after judging the residue themselves. The core cannot tell who records it:
-the same command run by the maker releases the session too, and its next stop is
-judged afresh; the boundary is the permission to run the core, which the binding
+the same command run by the maker releases the session too, and passes the diff
+in front of it: a stop on that diff is allowed, and the first after a further
+change is judged afresh (D11); the boundary is the permission to run the core, which the binding
 gives the judge's session and the maker's only inside the docket's own skills
 (D37), and the call's place in the maker's transcript, as for a forged verdict
 below. The session identifier is

@@ -43,15 +43,15 @@ meta for a `keeps` clause, or of the body for the same statement in words.
 **F8 — scale.** The entry states the range it holds over — viewport, count,
 size — or says it is scale-free: yes or no. How scored: a reading of the body
 for a stated range (a viewport, a count, a size, a duration) or the words that
-say the ruling holds at every scale; neither is a failure, located at the
-heading.
+say the ruling holds at every scale; an entry with neither is a failure,
+located at the heading.
 
 **F9 — the number.** The entry names the measurement, ratio, pattern or
 invariance underneath it, or records its absence as a finding: yes or no. An
 absence is not a failure; an unrecorded absence is. How scored: a reading of
 the body for the measurement, ratio, pattern or invariance, named with its value
-or where it was taken, or a sentence that records none was found; neither is a
-failure, located at the heading.
+or where it was taken, or a sentence that records none was found; an entry with
+neither is a failure, located at the heading.
 
 **F10 — the number and its property.** If the entry changes a number an earlier
 ruling set, it names that ruling as superseded and gives the measurement that

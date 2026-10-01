@@ -56,7 +56,11 @@ run in the transcript.**
 How scored: from the maker's transcript (the last step of the protocol, never
 before the others): each "tests pass", "check is green", "I ran …" against the
 commands the transcript shows were run and their output. A claim without a run
-is a failure; a run whose output contradicts the claim is a failure.
+is a failure; a run whose output contradicts the claim is a failure. Each is
+located at the line of the diff the claim is about — the check it names, or the
+changed line it says the check covers — with the claim's own words, quoted from
+the transcript, as what was found: a located failure names a line of the
+repository, and the transcript is not one.
 
 ## Located failure
 
