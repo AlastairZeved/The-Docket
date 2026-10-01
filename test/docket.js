@@ -4552,5 +4552,29 @@ const SEC = String.fromCharCode(0xa7);
   ok('the pending addenda are read from the ledger’s own lines: an addendum written after the edge into its entry is pending under a text conversion of the ledger, as under none (D21, D40’s addendum)', a.code === 0 && before === 1 && conv === 1, [a.code, before, conv].join(' '));
 }
 
+// ── an edge names a ruling of its own ledger; what the grammar reads where a reader might not is said (D3's addendum) ──
+{
+  const mk = body => { const dir = tmpDir('docket-g-'); fs.writeFileSync(path.join(dir, 'DECISIONS.md'), body); fs.writeFileSync(path.join(dir, 'app.js'), '// R1\n'); sh('git', ['init', '-q', '-b', 'main'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'g'], dir); return dir; };
+  const HEAD = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n';
+  const d = mk(HEAD + '### R1. Headings stay semantic\nPrinciple: One.\nThis replaces H1 tags with styled spans, keeps UTF8 throughout, retires MD5 and extends HTTP2.\nReason: r.\n\n### R2. The second\nPrinciple: One.\nThis supersedes R1 in part.\nReason: r.\n');
+  const c = docket(['check'], { cwd: d });
+  const ix = JSON.parse(docket(['index', '--json'], { cwd: d }).out);
+  ok('an edge’s target shares the cite’s rule: in a ledger of R entries, "replaces H1", "keeps UTF8", "retires MD5" and "extends HTTP2" name nothing and fail nothing, and "supersedes R1" is an edge still (FORMAT.md 8, D3’s addendum)', c.code === 0 && ix.rulings[0].edges.length === 0 && ix.rulings[1].edges.length === 1 && ix.rulings[1].edges[0].to === 'R1', c.out + JSON.stringify(ix.rulings.map(r => r.edges.map(e => e.to))));
+  const a = docket(['append', '--title', 'A third', '--issue', '3', '--principle', 'One', '--body', 'It retires MD5 and keeps R2. Reason: r.'], { cwd: d });
+  const ix2 = JSON.parse(docket(['index', '--json'], { cwd: d }).out);
+  ok('…and append writes a body that sets a verb beside an id of no prefix of the ledger, as check reads it, its edge to R2 kept', a.code === 0 && docket(['check'], { cwd: d }).code === 0 && ix2.rulings[2].edges.map(e => e.to).join() === 'R2', a.out + a.err);
+}
+{
+  const mk = body => { const dir = tmpDir('docket-g-'); fs.writeFileSync(path.join(dir, 'DECISIONS.md'), body); fs.writeFileSync(path.join(dir, 'app.js'), '// R1\n'); sh('git', ['init', '-q', '-b', 'main'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'g'], dir); return dir; };
+  const d = mk('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\nAn entry is written so:\n\n```\n### X1. An example heading (issue #1)\n```\n\n## R. Rulings\n\n'
+    + '### R1. The first\nPrinciple: One.\nReason: r.\n\n## Phase two rulings\n\nThe rulings below came later.\n\n### Notes\n\n### R2. (issue #2)\nPrinciple: One.\nReason: r.\n');
+  const c = docket(['check'], { cwd: d });
+  const info = c.out.split('\n').filter(l => /^info  /.test(l));
+  ok('check reads a `## ` and a `### ` line that are no section and no entry heading as the body of the entry above, and names each, and whose body it is, in an info line — no failure (FORMAT.md 2, 7, D3’s addendum)', c.code === 0 && info.some(l => /^info  DECISIONS\.md:19: "## Phase two rulings" is no section and no entry heading, so it ends nothing: it and the lines below it, to the next entry heading or section, are R1's body \(FORMAT\.md 2, 7\)$/.test(l)) && info.some(l => /^info  DECISIONS\.md:23: "### Notes" is no section/.test(l)), c.out);
+  ok('…names an entry heading inside a fenced block, which opens an entry all the same', info.some(l => /^info  DECISIONS\.md:10: X1's heading lies inside a fenced block and opens an entry all the same — a fence quotes cites, not headings; a heading shown as an example is indented four spaces \(FORMAT\.md 8\)$/.test(l)), c.out);
+  const st = docket(['status'], { cwd: d });
+  ok('…and names a heading that is only its parenthetical, whose entry every listing names by its id alone', info.some(l => /^info  DECISIONS\.md:25: R2's heading has no title before its parenthetical, so it is named by its id alone \(FORMAT\.md 3\)$/.test(l)) && st.out.split('\n').includes('  R2  · issue #2'), c.out + '\n' + st.out);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

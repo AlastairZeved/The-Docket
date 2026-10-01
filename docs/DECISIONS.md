@@ -61,6 +61,7 @@ The pre-edit hook lists the rulings cited within 20 lines either side of the edi
 ### D3. The index is an edge list, never a status table (supersession is clause-level)
 Principle: Claim no more than you measured.
 `docket governs <id>` shows the chain in and out of a ruling with each edge's clause text; the reader judges. No command computes a "superseded" status. Reason: supersession in a real ledger is clause-level (a later ruling supersedes one clause of an earlier one, or waives it for one case); a computed "superseded" status would declare a ruling dead while most of it still binds.
+> Addendum 2026-10-01: An edge names a ruling of its own ledger: its target shares the cite's rule (FORMAT.md 8), so an id whose prefix is none of the ledger's prefixes is no edge. Measured on a copy, a ledger of R entries whose committed body said it replaces H1 tags and keeps UTF8 failed check 5 for ever, since the only mend, quoting the id, changes a committed body. And the lines the grammar reads where a reader might not are said, never failed, since each is the grammar's own reading and a committed ledger could not mend it: a line beginning ## or ### that is no section and no entry heading, read as the body of the entry above it; an entry heading inside a fenced block, which opens an entry, a fence quoting cites and not headings; and a heading that is only its parenthetical, whose entry is named by its id alone. check names each in an info line.
 
 ### D4. Two-tier format (a ledger that already exists cannot be migrated)
 Principle: Append, never amend.

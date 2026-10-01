@@ -409,6 +409,9 @@ function parseLedger(text, ledgerPath) {
     i++;
   }
   const prefixes = uniq(rulings.map(r => r.prefix));
+  // an edge's target is a cite and shares its rule (FORMAT.md 8, D3's addendum): an id whose prefix is none of this ledger's
+  // names no ruling here, and is no edge — "replaces H1 tags" in a ledger of R entries
+  for (const r of rulings) r.edges = r.edges.filter(e => prefixes.includes(e.toPrefix));
   const byId = new Map();
   for (const r of rulings) if (!byId.has(r.id)) byId.set(r.id, r);     // FORMAT.md 12: a repeated id resolves to its first entry, the one at its position; the later one is check 2's failure
   return { path: ledgerPath, dir: path.dirname(ledgerPath), home: ledgerHome(ledgerPath), text, lines, preambleLines, prefixes, rulings, sections, byId, contractFrom, contractFromLine, baseline, hasBaseline, baselineLine: firstBareCites, directiveFaults };
@@ -705,7 +708,7 @@ function near(argv) {
   outLines.push('Governed here (' + ledgerRel + ', ' + where + '):');
   for (const x of list) {
     const r = ledger.byId.get(x.id);
-    outLines.push('  ' + r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : ''));
+    outLines.push('  ' + named(r) + (r.issue !== null ? '  · issue #' + r.issue : ''));
     obj.rulings.push({ id: r.id, title: r.title, issue: r.issue, count: x.count, line: x.first });
   }
   obj.more = Math.max(0, total - CAP);
@@ -774,10 +777,12 @@ function indexOf_(argv) {
   out(JSON.stringify(obj, null, 2));
   return 0;
 }
+// A ruling as a line names it: its id and its title, or its id alone when its heading is only its parenthetical (FORMAT.md 3)
+function named(r) { return r.id + (r.title ? '  ' + r.title : ''); }
 function inEdges(ledger, id) { const r = []; for (const o of ledger.rulings) for (const e of o.edges) if (e.to === id) r.push(e); return r; }
 // D3: the edges with their clauses, in and out; no status is computed for any ruling.
 function printRuling(ledger, r, lines) {
-  lines.push(r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + path.basename(ledger.path) + ':' + r.line + ')');
+  lines.push(named(r) + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + path.basename(ledger.path) + ':' + r.line + ')');
   for (const e of r.edges) lines.push('  → ' + renderEdge(e) + '  — "' + e.clause + '"');
   for (const e of inEdges(ledger, r.id)) lines.push('  ← ' + renderEdge(e) + '  — "' + e.clause + '"');
   for (const a of r.addenda) lines.push('  > Addendum ' + a.date + ': ' + a.text);
@@ -841,7 +846,7 @@ function governs(argv) {
 function governsBlock(root, ledger, r, cites) {
   const ins = inEdges(ledger, r.id);
   const lines = [];                                                    // D3: an edge list, never a status
-  lines.push(r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + rel(root, ledger.path) + ':' + r.line + ')');
+  lines.push(named(r) + (r.issue !== null ? '  · issue #' + r.issue : '') + '  (' + rel(root, ledger.path) + ':' + r.line + ')');
   const why = reasonOf(r);
   if (why) lines.push(why);                                            // the premise the judge's step 4 asks after
   lines.push('Out-edges (what ' + r.id + ' does to earlier rulings):');
@@ -884,6 +889,14 @@ function runCheck(root, opts) {
     const empty = ledger.rulings.length === 0;
     const under = files.filter(e => e.path !== lp).length;             // the subtree's files, the ledger itself aside
     if (empty) info.push(rel(root, lp) + ': no entries; its subtree is ungoverned and no check runs on its ' + under + ' file' + (under === 1 ? '' : 's'));
+    // what the grammar reads where a reader might not, said and never failed: each is the grammar's own reading, and a committed
+    // ledger could not mend it (D3's addendum)
+    const fencedAll = fencedLines(ledger.lines);
+    for (const r of ledger.rulings) {
+      if (fencedAll[r.line - 1]) info.push(rel(root, lp) + ':' + r.line + ': ' + r.id + '\'s heading lies inside a fenced block and opens an entry all the same — a fence quotes cites, not headings; a heading shown as an example is indented four spaces (FORMAT.md 8)');
+      if (!r.title && !(ledger.contractFrom[r.prefix] !== undefined && r.n >= ledger.contractFrom[r.prefix])) info.push(rel(root, lp) + ':' + r.line + ': ' + r.id + '\'s heading has no title before its parenthetical, so it is named by its id alone (FORMAT.md 3)');
+      r.bodyLines.forEach((l, k) => { if (!fencedAll[r.line + k] && /^#{2,3} /.test(l)) info.push(rel(root, lp) + ':' + (r.line + 1 + k) + ': "' + glance(plain(l.trim())) + '" is no section and no entry heading, so it ends nothing: it and the lines below it, to the next entry heading or section, are ' + r.id + '\'s body (FORMAT.md 2, 7)'); });
+    }
     // 1. every cite names a ruling that exists
     for (const e of empty ? [] : files) {
       const t = fileText(e);
@@ -929,7 +942,7 @@ function runCheck(root, opts) {
         const other = seen.map((l, i) => (OTHER_HEADING_RE.test(l) ? i : -1)).filter(i => i >= 0);
         if (other.length) {
           const line = (ledger.text.slice(0, starts[other[0]]).match(/\n/g) || []).length + 1;
-          fail(lp, line, 2, 'no entries, yet ' + other.length + (other.length === 1 ? ' line reads' : ' lines read') + ' as an entry heading in another form, the first "' + Array.from(seen[other[0]].trim()).slice(0, 40).join('') + '"; an entry heading is "### <P><n>. <title>" (FORMAT.md 2): a ledger with no entries governs nothing, and one meant to govern nothing holds no such line (D39, D45)');
+          fail(lp, line, 2, 'no entries, yet ' + other.length + (other.length === 1 ? ' line reads' : ' lines read') + ' as an entry heading in another form, the first "' + glance(seen[other[0]].trim()) + '"; an entry heading is "### <P><n>. <title>" (FORMAT.md 2): a ledger with no entries governs nothing, and one meant to govern nothing holds no such line (D39, D45)');
         }
       }
     }
@@ -1367,7 +1380,7 @@ function buildEntry(argv, root, ledger) {
   // not failed by check 1 after (FORMAT.md 8). The entry's own id may appear in its body.
   const probe = parseLedger(ledger.text + '\n### ' + prefix + n + '. x\n', ledger.path);
   for (const c of citesIn(title + '\n' + body, probe)) if (!c.exists) die('append: the entry names ' + c.id + ', which is not in ' + rel(root, ledger.path), 2);
-  for (const li of splitLines(body)) for (const ed of edgesIn(li, selfId, 0, false)) {
+  for (const li of splitLines(body)) for (const ed of edgesIn(li, selfId, 0, false).filter(e => probe.prefixes.includes(e.toPrefix))) {   // an edge names a ruling of this ledger (FORMAT.md 8)
     if (ed.to === selfId) die('append: --body says "' + ed.clause.trim() + '", which is an edge from ' + selfId + ' to itself; a ruling may not name itself (FORMAT.md 5), and once written the ledger could never stop failing check 5', 2);
     if (!probe.byId.has(ed.to)) die('append: --body says "' + ed.clause.trim() + '", naming ' + ed.to + ', which is not in ' + rel(root, ledger.path), 2);
   }
@@ -1595,7 +1608,7 @@ function status(argv) {
   const L = [];
   L.push('Docket — ' + rel(root, lp) + ' (' + ledger.rulings.length + ' ruling' + (ledger.rulings.length === 1 ? '' : 's') + (ledger.prefixes.length ? '; prefix' + (ledger.prefixes.length === 1 ? ' ' : 'es ') + ledger.prefixes.join(', ') : '; no prefix') + ')');
   L.push('Last rulings:');
-  for (const r of ledger.rulings.slice(-3).reverse()) L.push('  ' + r.id + '  ' + r.title + (r.issue !== null ? '  · issue #' + r.issue : ''));
+  for (const r of ledger.rulings.slice(-3).reverse()) L.push('  ' + named(r) + (r.issue !== null ? '  · issue #' + r.issue : ''));
   L.push('Cited nowhere: ' + (uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
   L.push('Addenda pending: ' + (pend.length ? '' : 'none'));
   for (const a of pend) {                                              // D14: one line each, cut at a glance; governs <id> prints the whole, and --json carries it
@@ -1682,7 +1695,7 @@ function diff(argv) {
     }
   }
   L.push('Rulings added (' + d.added.length + '):');
-  for (const r of d.added) L.push('  ' + r.id + '. ' + r.title + (r.meta ? ' (' + r.meta + ')' : ''));
+  for (const r of d.added) L.push('  ' + r.id + '.' + (r.title ? ' ' + r.title : '') + (r.meta ? ' (' + r.meta + ')' : ''));
   L.push('Edges added (' + d.edges.length + '):');
   for (const e of d.edges) L.push('  ' + renderEdge(e));
   L.push('Addenda added (' + d.addenda.length + '):');

@@ -112,15 +112,17 @@ An entry begins at a heading line
 
     ### <P><n>. <heading>
 
-and ends at the line before the next entry heading or the next line that begins
-`## `, or at the end of the file. `<P>` is one or more ASCII letters, `A`–`Z` or `a`–`z` (the
+and ends at the line before the next entry heading or the next section line (7),
+or at the end of the file. `<P>` is one or more ASCII letters, `A`–`Z` or `a`–`z` (the
 **prefix**), `<n>` a positive integer of at most fifteen ASCII digits with no leading zero (`D01` is not an entry, nor is a sixteen-digit numeral: fifteen keeps the number exact), and the two together are
 the **id** (`D7`, `R12`, `A1`). A heading whose prefix uses any other letter is
 not an entry. A line that begins `### ` and is not an entry heading — a leading
 zero, a digit in the prefix, no `. ` after the id — ends nothing: it is body text
 of the entry above it, or preamble when no entry precedes it, and every check
-reads it there; in a ledger with no entry at all it fails check 2 (1). Text before the first entry heading or `## ` line is the
-**preamble**.
+reads it there; in a ledger with no entry at all it fails check 2 (1). A line
+that begins `## ` and is no section (7) ends nothing either; `check` names each
+such line inside an entry in an info line, and whose body it is. Text before the
+first entry heading or section line is the **preamble**.
 
 An entry parses to
 
@@ -162,7 +164,9 @@ The title is the heading text after the id, in three steps and in this order:
    whole), keep the first 72, cut back to the last space inside them (the ASCII
    space; the heading text is trimmed, so it never begins with one), trim, and
    append `…`. A heading with no space in
-   its first 72 characters is cut at 71 characters and `…` appended. Characters
+   its first 72 characters is cut at 71 characters and `…` appended. A heading that is only its
+parenthetical has an empty title: the entry is named by its id alone, `check`
+says so in an info line, and an entry the contract binds fails check 6 (11). Characters
    are Unicode code points: `±`, `…` and an emoji such as `🜲` each count as
    one, whatever their length in a host language's string units. The cut falls
    between code points: a combining sequence that straddles it is split, a price
@@ -295,6 +299,11 @@ every governed file except the ledger. A fenced code block — a line that
 begins with three backticks opens it, the next such line closes it — is quoted
 like a code span: no id, spec cite or bare cite inside it is counted, so a
 document may quote a ledger's output or another project's rulings. A fence
+quotes cites, not headings: an entry heading inside one still opens an entry, so
+that the entries are the lines that begin `### ` and nothing else decides it;
+`check` names such a heading in an info line, and a ledger that shows its heading
+form indents it four spaces. An edge's target is a cite: an id whose prefix is
+none of the ledger's prefixes is no edge (D3's addendum). A fence
 never closed quotes every line after it: in the ledger that is check 2's failure
 (below); in any other file `check` names the line that opened it in an info line.
 
