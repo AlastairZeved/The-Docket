@@ -3750,6 +3750,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('the protocol says the judge never records a verdict to release a stop, and that a surfaced session is released by a PASS naming it with --session', /It never records a verdict to release a stop/.test(PRT) && /`docket verdict PASS\s+--session <id> --failures 0`, naming that session/.test(PRT), 'the protocol does not say');
     ok('…and that the core cannot tell who records that PASS: the maker running the command releases the session too, and the boundary is the permission to run the core and the call\u2019s place in the transcript (D37)', /The core cannot tell who records it:\s+the same command run by the maker releases the session too/.test(PRT) && /the boundary is the permission to run the core, which the binding\s+gives the judge's session and the maker's only inside the docket's own skills/.test(PRT) && !/nothing the maker does alone/.test(PRT), 'the protocol does not say');
     ok('the protocol, the binding page and FORMAT.md 16 each say the stop starts the judge and reads its record, not its words (D37)', /^## The stop$/m.test(PRT) && /the stop reads the record, not the judge's words/.test(PRT.replace(/\s+/g, ' ')) && /give it, with `--judge`, the command that starts your agent headless as the judge/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md')).replace(/\s+/g, ' ')) && /`docket stop` is the stop: a host runs it/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'a document is silent');
+    { // every option a subcommand takes is named on its usage lines — --json and --ledger aside, stated once beneath them
+      const core = read(CORE), at = core.indexOf('const OPTIONS = {'), table = new Function('return ' + core.slice(core.indexOf('{', at), core.indexOf('};', at) + 1))();
+      const help = docket(['help']).out.split('\n'), unnamed = [];
+      for (const [sub, opts] of Object.entries(table)) {
+        const own = help.filter(l => l.startsWith('  docket ' + sub + ' ') || l === '  docket ' + sub || (sub === 'status' && /^\s+\(--session-start/.test(l))).join('\n');
+        for (const o of opts) if (o !== '--json' && o !== '--ledger' && !own.includes(o)) unnamed.push(sub + ' ' + o);
+      }
+      ok('every option a subcommand takes is named on its usage lines, read from the core’s own table — --json and --ledger aside, which the usage states once beneath', Object.keys(table).length >= 19 && unnamed.length === 0 && /^Options: --json on every subcommand; --ledger <path> where a ledger is read\.$/m.test(help.join('\n')), unnamed.join(', '));
+      const cols = help.filter(l => /^  docket \S/.test(l)).map(l => (/^(  docket .*?\S)( {2,})\S/.exec(l) || [])).filter(m => m[0] && m[1].length <= 36).map(m => m[1].length + m[2].length);
+      ok('…and every line whose command fits the column starts its description there', cols.length >= 15 && cols.every(c => c === cols[0]), cols.join(' '));
+    }
     ok('USAGE lists stop, and the section map names it', /docket stop --judge "<command>"/.test(docket(['help']).out) && /^\/\/ 16  gate\/verdict\/stop/m.test(read(CORE)), 'stop is not listed');
     const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
     ok('agents/docket-judge.md names and describes itself, denies every writing tool, caps its turns at forty, and names no model', /^name:\s*docket-judge$/m.test(A) && /^description: \S.{20,}$/m.test(A) && /^disallowedTools:\s*Write, Edit, NotebookEdit$/m.test(A) && /^maxTurns:\s*40$/m.test(A) && !/^model:/m.test(A), A.split('\n').slice(0, 7).join('\n'));

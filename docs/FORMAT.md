@@ -723,7 +723,8 @@ command grants it. The command is one command, which the stop runs as
 bound, its exit status the judge's: a stop it would judge with an operator
 outside quotes in the command (`;`, `&`, `|`, `<`, a parenthesis, a line break)
 or an assignment before it is a usage error, exit 2, as one with no `--judge`
-is, and a variable is set as `env NAME=value <command>`. A session's identifier
+is, and a variable is set as `env NAME=value <command>`. `--session <id>`, given,
+names the session in place of the hook input's identifier. A session's identifier
 is text, and a control character in it is kept as its escape, `\u0000`, in the
 state, the judge's environment and its prompt. It allows at once when the host's re-entry flag is set, when
 nothing governed changed or the last PASS judged this diff, or when the session
