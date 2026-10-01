@@ -139,7 +139,7 @@ plant_s() { node -e '
   '; }
 PROMPT_R="/rule
 
-My five answers, so you need not ask them one by one: 1) The toolbar goes: the long-press menu returns to the spatial plane. 2) issue #40 3) Zero cognitive tax 4) supersedes R6; keeps R7; keeps A1 5) The toolbar hid the menu's verbs behind a second surface, so one press had to be learned twice. Reason: one menu, on press, is one thing to learn."
+My five answers, so you need not ask them one by one: 1) The toolbar goes: the long-press menu returns to the spatial plane. 2) issue #40 3) Zero cognitive tax 4) supersedes R6; keeps R7; keeps A1 5) The toolbar hid the menu's verbs behind a second surface, so one press had to be learned twice. Reason: one menu, on press, is one thing to learn. It holds at every viewport and every count of notes. No measurement underlies it: none was taken."
 
 bytes_measured() {                # the protocol and the packs this run measures, by SHA-256, as a record of the run quotes them (D47)
   node -e '

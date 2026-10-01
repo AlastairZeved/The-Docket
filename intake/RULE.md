@@ -30,9 +30,14 @@ the person gives, and one `docket append`. **Source.** D8, D13 and D18 in
    refines, replaces, corrects, revises; an adverb (partially, partly, in part)
    may qualify one. Refused: a ruling the query surfaced that the answer neither
    names nor dismisses with a reason.
-5. **The ruling, in prose, with its reason** — what is now so, and why, the
-   why as a sentence beginning `Reason:`. Refused: a body without `Reason:`, or
-   a reason that restates the ruling in other words.
+5. **The ruling, in prose, with its reason, its scale and its number** — what
+   is now so, and why, the why as a sentence beginning `Reason:`; the range it
+   holds over — a viewport, a count, a size, a duration — or that it holds at
+   every scale; and the measurement, ratio, pattern or invariance underneath
+   it, with its value or where it was taken, or a sentence recording that none
+   was found. Refused: a body without `Reason:`, a reason that restates the
+   ruling in other words, or a body without its scale or its number — the
+   decisions pack's F8 and F9 fail an entry without them at the next stop.
 
 ## Escalation (D18)
 
