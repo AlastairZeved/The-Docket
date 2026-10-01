@@ -2563,8 +2563,8 @@ const SEC = String.fromCharCode(0xa7);
     {
       // A placeholder constitute does not fill is refused before anything ships — done, not read from the source: a copy
       // of the plugin whose PRD template carries {{bogus}} refuses by name and writes nothing.
-      { const f = inRepo('/w/node_modules/x/ci');
-        ok('the witness copies the plugin by the paths inside it: a checkout beneath node_modules keeps its templates, and leaves out its own .git and node_modules', f('/w/node_modules/x/ci/templates/PRD.md') && f('/w/node_modules/x/ci/bin/docket.js') && !f('/w/node_modules/x/ci/.git/HEAD') && !f('/w/node_modules/x/ci/node_modules/a/b.js') && !f('/w/node_modules/x/ci/test/node_modules'), 'the filter'); }
+      { const f = inRepo('/w/node_modules/x/plugin');
+        ok('the witness copies the plugin by the paths inside it: a checkout beneath node_modules keeps its templates, and leaves out its own .git and node_modules', f('/w/node_modules/x/plugin/templates/PRD.md') && f('/w/node_modules/x/plugin/bin/docket.js') && !f('/w/node_modules/x/plugin/.git/HEAD') && !f('/w/node_modules/x/plugin/node_modules/a/b.js') && !f('/w/node_modules/x/plugin/test/node_modules'), 'the filter'); }
       const plug = tmpDir('plug-');
       copyTree(ROOT, plug, ['.git', 'node_modules'], inRepo(ROOT));
       fs.appendFileSync(path.join(plug, 'templates', 'PRD.md'), '\n{{bogus}}\n');
