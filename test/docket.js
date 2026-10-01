@@ -2662,7 +2662,7 @@ const SEC = String.fromCharCode(0xa7);
     const gj = JSON.parse(docket(['gate', '--session', 's1', '--json'], { cwd: d }).out);
     ok('gate --json carries the decision, the session, the hash and the files', gj.decision === 'JUDGE' && gj.session === 's1' && gj.hash === hash && gj.files.join() === 'test/fixture/app.js', JSON.stringify(gj));
     let v = docket(['verdict', 'FAIL', '--hash', hash, '--failures', '3', '--session', 's1', '--reason', held(3)], { cwd: d });
-    ok('verdict FAIL records and bumps the session block count', v.code === 0 && /^verdict recorded: FAIL \(3 located failures\); session s1: 1 block since its last PASS$/m.test(v.out), v.out + v.err);
+    ok('verdict FAIL records and bumps the session block count: the record read back from the log, its lines as given', v.code === 0 && /^verdict recorded: FAIL \(3 located failures\); session s1: 1 block since its last PASS$/m.test(v.out) && recorded(d, 'FAIL', held(3)), v.out + v.err);
     const st = JSON.parse(read(path.join(d, '.docket', 'verdict.json')));
     ok('verdict writes .docket/verdict.json with the last verdict, its reason, and the session', st.last.verdict === 'FAIL' && st.last.hash === hash && /R2 keeps positions/.test(st.last.reason) && st.sessions.s1.blocks === 1 && st.sessions.s1.history[0] === 3, JSON.stringify(st));
     g = docket(['gate', '--session', 's1'], { cwd: d });
@@ -2917,7 +2917,7 @@ const SEC = String.fromCharCode(0xa7);
     g = docket(['gate', '--session', 'n'], { cwd: nl, env: { CLAUDE_PROJECT_DIR: '' } });
     ok('gate in a project with no ledger → SKIP, and no .docket/ is created', g.out === 'SKIP\n' && !fs.existsSync(path.join(nl, '.docket')), g.out);
     const sn = docket(['stop', '--judge', 'touch started'], { cwd: nl, input: JSON.stringify({ session_id: 'n' }), env: { CLAUDE_PROJECT_DIR: '' } });
-    ok('stop in a project with no ledger is allowed silently, exit 0: no judge starts and nothing is written — the protocol’s second case', sn.code === 0 && sn.out === '' && !fs.existsSync(path.join(nl, 'started')) && !fs.existsSync(path.join(nl, '.docket')), sn.code + ' ' + sn.out + sn.err);
+    ok('stop in a project with no ledger is allowed silently, exit 0: no judge starts and nothing is written — the protocol’s second case', sn.code === 0 && sn.out === '' && sn.err === '' && !fs.existsSync(path.join(nl, 'started')) && !fs.existsSync(path.join(nl, '.docket')), sn.code + ' ' + sn.out + sn.err);
     for (const x of [d, d2, d3, nl]) fs.rmSync(x, { recursive: true, force: true });
   }
 
@@ -3437,15 +3437,16 @@ const SEC = String.fromCharCode(0xa7);
     const forget = () => { for (const f of ['prompt', 'cwd']) fs.rmSync(path.join(jd, f), { force: true }); };
     const block = r => { try { const j = JSON.parse(r.out); return j.decision === 'block' ? j.reason.replace(/'/g, '’') : null; } catch (e) { return null; } };
     let r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('PASS')]);
-    ok('stop: a clean tree is allowed silently, exit 0, and no judge starts (D10)', r.code === 0 && r.out === '' && !started(), r.out + r.err);
+    ok('stop: a clean tree is allowed silently, exit 0, and no judge starts (D10)', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out + r.err);
     r = stopIn({ session_id: 'x' }, ['--json', '--judge', judgeCmd('PASS')]);
-    ok('stop --json: the allow is {} where it otherwise prints nothing, exit 0, and no judge starts', r.code === 0 && r.out === '{}\n' && !started(), r.out + r.err);
+    ok('stop --json: the allow is {} where it otherwise prints nothing, exit 0, and no judge starts', r.code === 0 && r.out === '{}\n' && r.err === '' && !started(), r.out + r.err);
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 1; // R2\n');
+    const dockOf = () => { const p = path.join(d, '.docket'); return fs.existsSync(p) ? fs.readdirSync(p).sort().join() : ''; }, dock0 = dockOf();
     r = stopIn({ stop_hook_active: true, session_id: 'x' }, ['--judge', judgeCmd('PASS')]);
-    ok('stop: the host’s re-entry flag allows at once, a governed diff unjudged, and no judge starts (D11: blocked at most once per turn)', r.code === 0 && r.out === '' && !started(), r.out);
-    ok('…and writes nothing: the core keeps no mark of its own (D37)', !fs.existsSync(path.join(d, '.docket', 'verdict.json')) && !fs.existsSync(path.join(d, '.docket', 'judge.log')), 'a file was written');
+    ok('stop: the host’s re-entry flag allows at once, a governed diff unjudged, and no judge starts (D11: blocked at most once per turn)', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
+    ok('…and writes nothing: the core keeps no mark of its own, and .docket/ holds what it held (D37)', !fs.existsSync(path.join(d, '.docket', 'verdict.json')) && !fs.existsSync(path.join(d, '.docket', 'judge.log')) && dockOf() === dock0, dock0 + ' → ' + dockOf());
     r = stopIn({ stop_hook_active: true, session_id: 'x' }, ['--json', '--judge', judgeCmd('PASS')]);
-    ok('…and with --json the re-entry allow is {}', r.code === 0 && r.out === '{}\n' && !started(), r.out);
+    ok('…and with --json the re-entry allow is {}', r.code === 0 && r.out === '{}\n' && r.err === '' && !started(), r.out);
     r = stopIn({ session_id: 'x' });
     ok('stop: a stop it would judge, with no --judge given, is a usage error, exit 2, naming what the binding gives', r.code === 2 && /--judge names no command to start the judge: the host’s binding gives one, which reads its prompt on stdin/.test(r.err.replace(/'/g, '’')), r.err);
     r = stopIn({ session_id: 'q1', cwd: path.join(d, 'test') }, ['--judge', judgeCmd('words'), '--permission', 'Bash(node *docket.js*)']);
@@ -3466,9 +3467,10 @@ const SEC = String.fromCharCode(0xa7);
     b = block(r);
     ok('stop: the judge’s FAIL is the block, with the recorded lines and the route through the law (D35)', r.code === 0 && b && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:41 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions \(test\/fixture\/app\.js:40\) · change the code\nChange the code, or supersede the ruling through \/rule\./.test(b), r.out);
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('STALE')], { JUDGE_REASON: gone(1) });
-    ok('…and its STALE the same way: the line recorded, its addendum route among it, and the route the block names', /recorded STALE for this stop/.test(r.out) && r.out.includes(gone(1)) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
+    ok('…and its STALE the same way: the line recorded, its addendum route among it, and the route the block names, offering no new ruling beside it', /recorded STALE for this stop/.test(r.out) && r.out.includes(gone(1)) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out) && !/supersede the ruling/.test(r.out), r.out);
+    stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });   // q4's own record of this diff, made by the stop before
     r = stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('words')]);
-    ok('stop: a record older than the judge this stop started is not this stop’s answer: blocked, no verdict', block(r) && /recorded no verdict for this stop’s diff/.test(block(r)), r.out);
+    ok('stop: a record older than the judge this stop started is not this stop’s answer — this session’s, of this diff, made by the stop before: blocked, no verdict', block(r) && /recorded no verdict for this stop’s diff/.test(block(r)), r.out);
     { // the relay reads this stop's diff: a record its judge made of another diff — the tree changed, and the diff it made recorded —
       // is not this stop's answer, though it is this session's and newer than the stop (FORMAT.md 16)
       const app = path.join(d, 'test', 'fixture', 'app.js'), was = read(app);
@@ -3479,12 +3481,12 @@ const SEC = String.fromCharCode(0xa7);
     }
     forget();
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('PASS'), '--permission', 'Bash(node *docket.js*)']);
-    ok('stop: the judge’s PASS allows: exit 0, nothing printed', r.code === 0 && r.out === '', r.out + r.err);
+    ok('stop: the judge’s PASS allows: exit 0, nothing printed on either stream', r.code === 0 && r.out === '' && r.err === '', r.out + r.err);
     const pr = read(path.join(jd, 'prompt'));
     ok('…the judge was given the core’s own path, the one command shape, the permission’s spelling and the hook input, and nothing of the protocol’s own rules (D20, D25)', pr.includes('Run `node ' + qcore + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix: your one permission, Bash(node *docket.js*), matches a command of that shape, and none with a prefix, a variable or a substitution in it.') && /\nHook input: \{"session_id":"x"\}\n$/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr);
     forget();
     r = stopIn({ session_id: 'y' }, ['--judge', judgeCmd('PASS')]);
-    ok('stop: the hash of the last PASS allows for every session, and no judge starts (D10)', r.code === 0 && r.out === '' && !started(), r.out);
+    ok('stop: the hash of the last PASS allows for every session, and no judge starts (D10)', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
     {
       const sd = tmpDir('core space-'), spaced = path.join(sd, 'docket.js');
       fs.copyFileSync(CORE, spaced);
@@ -3501,7 +3503,7 @@ const SEC = String.fromCharCode(0xa7);
     b = block(r);
     ok('stop: a session its gate surfaces is blocked with the residue and the relay sentence, and no judge starts (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since its last PASS; located failures per verdict: 1 → 1 → 1 → 1 → 1/.test(b) && /^report this to the user verbatim, then stop again$/m.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'z' }, ['--judge', judgeCmd('PASS')]);
-    ok('…and the stop after it is allowed, the session surfaced, and still no judge', r.code === 0 && r.out === '' && !started(), r.out);
+    ok('…and the stop after it is allowed, the session surfaced, and still no judge', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
     // two blocks before this stop, so the judge's three records — one stop, counted once — make the third, the plateau (D38's addendum)
     { const st3 = JSON.parse(read(sp)); st3.sessions.s = { blocks: 2, history: [1, 1], surfaced: false }; fs.writeFileSync(sp, JSON.stringify(st3)); }
     r = stopIn({ session_id: 's' }, ['--judge', judgeCmd('surface')], { JUDGE_REASON: held(1) });
@@ -3533,7 +3535,7 @@ const SEC = String.fromCharCode(0xa7);
     b = block(r);
     ok('…and the sixth is the surfacing block, with no judge started: the residue counts five blocks, five with no verdict recorded, and asks for the relay (D11, D38)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since its last PASS, 5 of them with no verdict recorded; located failures per verdict: none recorded/.test(b) && /^report this to the user verbatim, then stop again$/m.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'n' }, ['--judge', judgeCmd('words')]);
-    ok('…and the seventh is allowed, the session surfaced, and no judge starts', r.code === 0 && r.out === '' && !started(), r.out);
+    ok('…and the seventh is allowed, the session surfaced, and no judge starts', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
     r = stopIn({ session_id: 'm' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
     r = stopIn({ session_id: 'm' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
     r = stopIn({ session_id: 'm' }, ['--judge', judgeCmd('words')]);
@@ -3547,10 +3549,10 @@ const SEC = String.fromCharCode(0xa7);
     ok('…one or more: a judge given no time is no judge', r.code === 2 && /one or more/.test(r.err), r.err);
     r = docket(['stop', '--judge', judgeCmd('words')], { cwd: d, input: 'not json' });
     ok('stop with input that is not JSON reads no flag and no session, and still decides from the tree', block(r) && /recorded no verdict/.test(block(r)), r.out);
-    ok('stop writes one file of its own, the judge’s log, and a block with no record into the session’s count: the state holds what verdict, gate and that count wrote, and nothing else', Object.keys(JSON.parse(read(sp))).sort().join() === 'last,lastPassHash,sessions' && Object.values(JSON.parse(read(sp)).sessions).every(x => /^(base,)?blocks,(counted,history,stop|history),surfaced$/.test(Object.keys(x).sort().join())), read(sp));
+    ok('stop writes one file of its own, the judge’s log, and a block with no record into the session’s count: the state holds what verdict, gate and that count wrote, and nothing else, and .docket/ holds no other file', fs.readdirSync(path.join(d, '.docket')).every(f => ['.gitignore', 'core', 'judge.log', 'verdict.json', 'verdicts.jsonl', 'trail.log'].includes(f)) && Object.keys(JSON.parse(read(sp))).sort().join() === 'last,lastPassHash,sessions' && Object.values(JSON.parse(read(sp)).sessions).every(x => /^(base,)?blocks,(counted,history,stop|history),surfaced$/.test(Object.keys(x).sort().join())), read(sp));
     forget(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const jj = 1; // R2\n');
     r = stopIn({ session_id: 'j1' }, ['--json', '--judge', judgeCmd('PASS')]);
-    ok('stop --json: the judge’s PASS allows with {}, the judge having run', r.code === 0 && r.out === '{}\n' && started(), r.out + r.err);
+    ok('stop --json: the judge’s PASS allows with {}, the judge having run', r.code === 0 && r.out === '{}\n' && r.err === '' && started(), r.out + r.err);
     forget(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const jk = 1; // R2\n');
     r = stopIn({ session_id: 'j2' }, ['--json', '--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
     ok('…and a block is the object it always is: its decision and its reason, nothing added', r.code === 0 && (j => !!j && j.decision === 'block' && Object.keys(j).join() === 'decision,reason')((s => { try { return JSON.parse(s); } catch (e) { return null; } })(r.out)), r.out);
@@ -3675,7 +3677,7 @@ const SEC = String.fromCharCode(0xa7);
       const argv = fs.existsSync(path.join(seen, 'argv')) ? read(path.join(seen, 'argv')).split('\n').slice(0, -1) : [];
       ok('the hook’s command, run through a shell as the host runs it, starts the judge with each word intact: headless, keeping no session, running no hooks of its own, granted one permission, denied every write tool, limited in turns, and on no model the binding names', argv.join(' | ') === ['-p', '--no-session-persistence', '--settings', '{"disableAllHooks":true}', '--allowedTools', 'Bash(node *docket.js*)', '--disallowedTools', 'Write Edit NotebookEdit', '--max-turns', '60'].join(' | '), argv.join(' | ') + ' ' + rh.stderr);
       ok('…the permission it grants the judge is the one `--permission` spells for the prompt', argv[argv.indexOf('--allowedTools') + 1] === (stop.command.match(/--permission "([^"]*)"/) || [])[1], stop.command);
-      ok('…and the judge’s PASS allows the stop: exit 0, nothing printed', rh.status === 0 && rh.stdout === '', rh.status + ' ' + rh.stdout + rh.stderr);
+      ok('…and the judge’s PASS allows the stop: exit 0, nothing printed', rh.status === 0 && rh.stdout === '' && rh.stderr === '', rh.status + ' ' + rh.stdout + rh.stderr);
       const pr = fs.existsSync(path.join(seen, 'prompt')) ? read(path.join(seen, 'prompt')) : '';
       const head = pr.indexOf('Hook input: ') >= 0 ? pr.slice(0, pr.indexOf('Hook input: ')) : '';
       const words = head.split(JSON.stringify(CORE)).join('<core>').split(CORE).join('<core>');   // the prompt's own words: the core's path is the checkout's
@@ -4396,7 +4398,7 @@ const SEC = String.fromCharCode(0xa7);
     const g = docket(['gate', '--session', 'u'], { cwd: proj, env: host });
     const s = docket(['stop', '--judge', 'touch started'], { cwd: proj, input: JSON.stringify({ session_id: 'u', cwd: proj }), env: host });
     const n = docket(['near'], { cwd: proj, input: nearInput(path.join(proj, 'b.js'), 'y();'), env: host });
-    ok('outside a repository the host’s project directory is every command’s root: below an unrelated ancestor’s ledger the gate answers SKIP, the stop allows with no judge and writes nothing beside the ancestor, and near is silent, as status is (D44)', /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && !fs.existsSync(path.join(proj, 'started')) && !fs.existsSync(path.join(anc, '.docket')) && n.code === 0 && n.out === '', [g.out, s.code, s.out, s.err.slice(0, 120), n.out].join('|'));
+    ok('outside a repository the host’s project directory is every command’s root: below an unrelated ancestor’s ledger the gate answers SKIP, the stop allows with no judge and writes nothing beside the ancestor, and near is silent, as status is (D44)', /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && s.err === '' && !fs.existsSync(path.join(proj, 'started')) && !fs.existsSync(path.join(anc, '.docket')) && n.code === 0 && n.out === '', [g.out, s.code, s.out, s.err.slice(0, 120), n.out].join('|'));
   }
   // outside a repository the stop hands its root to the judge, whose shell names no project directory (D28, D44)
   {
@@ -4405,7 +4407,7 @@ const SEC = String.fromCharCode(0xa7);
     fs.writeFileSync(path.join(anc, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(sub, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(sub, 'x.js'), 'x(); // R1\n');
     const s = docket(['stop', '--judge', 'node ' + J + ' PASS ' + rootFile], { cwd: P, input: JSON.stringify({ session_id: 'ho', cwd: P }), env: { CLAUDE_PROJECT_DIR: P } });
     const got = fs.existsSync(rootFile) ? read(rootFile) : '(no judge)';
-    ok('outside a repository the stop hands its root to the judge as DOCKET_ROOT: the judge’s gate and verdict, with no project directory named, keep the stop’s state, and its PASS allows the stop (D28, D44)', s.code === 0 && s.out === '' && got === P && fs.existsSync(path.join(P, '.docket', 'verdict.json')) && !fs.existsSync(path.join(anc, '.docket')), [s.code, s.out, s.err.slice(0, 160), got].join('|'));
+    ok('outside a repository the stop hands its root to the judge as DOCKET_ROOT: the judge’s gate and verdict, with no project directory named, keep the stop’s state, and its PASS allows the stop (D28, D44)', s.code === 0 && s.out === '' && s.err === '' && got === P && fs.existsSync(path.join(P, '.docket', 'verdict.json')) && !fs.existsSync(path.join(anc, '.docket')), [s.code, s.out, s.err.slice(0, 160), got].join('|'));
   }
   // past the walk's bound, an ungoverned tree is ungoverned to the hooks; a governed one is refused (FORMAT.md 1)
   {
@@ -4416,7 +4418,7 @@ const SEC = String.fromCharCode(0xa7);
     const g = docket(['gate', '--session', 'w'], { cwd: wide, env: host });
     const s = docket(['stop', '--judge', 'touch started'], { cwd: wide, input: JSON.stringify({ session_id: 'w', cwd: wide }), env: host });
     const ss = docket(['status', '--session-start'], { cwd: wide, input: JSON.stringify({ session_id: 'w', source: 'startup', cwd: wide }), env: host });
-    ok('a tree past the walk’s bound with no ledger between the working directory and the root is the ungoverned project it reads as: the gate answers SKIP, the stop allows and starts no judge, and the session-start call prints nothing, each exit 0 (FORMAT.md 1)', g.code === 0 && /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && !fs.existsSync(path.join(wide, 'started')) && ss.code === 0 && ss.out === '' && ss.err === '', [g.code, g.out, g.err.slice(0, 80), s.code, s.out, s.err.slice(0, 80), ss.code, ss.out, ss.err.slice(0, 80)].join('|'));
+    ok('a tree past the walk’s bound with no ledger between the working directory and the root is the ungoverned project it reads as: the gate answers SKIP, the stop allows and starts no judge, and the session-start call prints nothing, each exit 0 (FORMAT.md 1)', g.code === 0 && /^SKIP$/m.test(g.out) && s.code === 0 && s.out === '' && s.err === '' && !fs.existsSync(path.join(wide, 'started')) && ss.code === 0 && ss.out === '' && ss.err === '', [g.code, g.out, g.err.slice(0, 80), s.code, s.out, s.err.slice(0, 80), ss.code, ss.out, ss.err.slice(0, 80)].join('|'));
     fs.writeFileSync(path.join(wide, 'DECISIONS.md'), LEDGER);
     const g2 = docket(['gate', '--session', 'w'], { cwd: wide, env: host });
     ok('…and with a ledger at its root the refusal stands: the gate says the tree is past the bound, exit 2', g2.code === 2 && /holds more than 20000 entries and is not a git repository/.test(g2.err), g2.code + ' ' + g2.err.slice(0, 160));
@@ -4659,7 +4661,7 @@ const SEC = String.fromCharCode(0xa7);
     state(d, { sessions: { sa: { blocks: 5, history: [2, 2, 2, 2, 2], surfaced: false } } });
     const flagged = docket(['stop', '--judge', 'touch started'], { cwd: d, input: JSON.stringify({ session_id: 'sa', stop_hook_active: true }) });
     const unflagged = docket(['stop', '--judge', 'touch started'], { cwd: d, input: JSON.stringify({ session_id: 'sa' }) });
-    ok('stop reads the host’s re-entry flag before the gate’s surfacing: a session the gate would surface, stopped with the flag set, is allowed at once; without the flag the same stop is the surfacing block (D11)', flagged.code === 0 && flagged.out === '' && unflagged.code === 0 && /The docket surfaced this session/.test(unflagged.out) && !fs.existsSync(path.join(d, 'started')), flagged.out + '|' + unflagged.out.slice(0, 160));
+    ok('stop reads the host’s re-entry flag before the gate’s surfacing: a session the gate would surface, stopped with the flag set, is allowed at once; without the flag the same stop is the surfacing block (D11)', flagged.code === 0 && flagged.out === '' && flagged.err === '' && unflagged.code === 0 && /The docket surfaced this session/.test(unflagged.out) && !fs.existsSync(path.join(d, 'started')), flagged.out + '|' + unflagged.out.slice(0, 160));
   }
   // B: a PASS releases the session it names and no other, and the released session's next diff is judged
   {
@@ -5056,7 +5058,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('the later word on a diff decides: a FAIL recorded after a PASS of the same diff takes the PASS back, so the stop relays the FAIL and the gate judges the diff again, never skips it (D38’s addendum)', /recorded FAIL for this stop/.test(block(s).replace(/’/g, "'")) && /^JUDGE /.test(g.out) && state(d).sessions.l.blocks === 1, block(s) + ' | ' + g.out);
     const d2 = changed();
     const s2 = docket(['stop', '--judge', 'node ' + J + ' FAIL PASS'], { cwd: d2, input: JSON.stringify({ session_id: 'k' }), env: { JUDGE_REASON: held } });
-    ok('…and a PASS recorded after a FAIL of the same diff allows the stop, the count back to nothing', s2.code === 0 && s2.out === '' && state(d2).sessions.k.blocks === 0, s2.out + JSON.stringify(state(d2).sessions.k));
+    ok('…and a PASS recorded after a FAIL of the same diff allows the stop, the count back to nothing', s2.code === 0 && s2.out === '' && s2.err === '' && state(d2).sessions.k.blocks === 0, s2.out + JSON.stringify(state(d2).sessions.k));
   }
   {
     // a PASS recorded with no --hash is the working tree's, and resets the count as one with it does
