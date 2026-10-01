@@ -699,12 +699,21 @@ waits for it to end, up to `--wait` seconds (700 by default), then stops
 it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
 for this diff and this session since the judge started is relayed as a block
 carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`
-set to the stop's session, so a verdict that names none is this session's, and with `DOCKET_ROOT`
-set to the stop's root (1); a session surfaced while the judge ran is relayed
+set to the stop's session, so a verdict that names none is this session's, with `DOCKET_ROOT`
+set to the stop's root (1), and with `DOCKET_STOP`, the stop's own mark: a second record its
+judge makes in that stop replaces the first in the count, so the session's blocks move once
+and its history ends with the later record, and one stop counts once (D38's addendum). A FAIL or
+STALE recorded for the diff the last PASS judged takes that PASS back: the later word on a
+diff decides; a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
 error, or was stopped at the bound — is blocked once, with a reason that names
 the files, how the judge ended (one that ended before it read its prompt ended,
-and is named so, never as one that could not be started) and where its output is, and the block counts in
+and is named so, never as one that could not be started; one whose output passed
+the 64 MiB the stop keeps of it was stopped for it, and is named so; one that ended
+while a process it left held its output open is named as ended, with that, though
+the stop waited the bound out on it — D37's addendum; a process the judge started
+is the judge's own: the stop stops the judge at the bound, not what it left behind)
+and where its output is, and the block counts in
 the session's `blocks` as a recorded FAIL does, with nothing added to its
 `history` (D38). A stop it would judge with no `--judge` given is a usage error,
 exit 2. Beside that count it writes one file, `.docket/judge.log` — the command,

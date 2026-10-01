@@ -1548,7 +1548,8 @@ function loadState(root) {
     const s = st.sessions[k];
     if (!s || typeof s !== 'object' || Array.isArray(s)) continue;
     sessions[k] = Object.assign({ blocks: Number.isInteger(s.blocks) && s.blocks >= 0 ? s.blocks : 0, history: Array.isArray(s.history) ? s.history.filter(n => Number.isInteger(n) && n >= 0) : [], surfaced: s.surfaced === true },
-      typeof s.base === 'string' && /^[0-9a-f]{40,64}$/.test(s.base) ? { base: s.base } : {});   // the commit its diff runs from (D40)
+      typeof s.base === 'string' && /^[0-9a-f]{40,64}$/.test(s.base) ? { base: s.base } : {},   // the commit its diff runs from (D40)
+      typeof s.stop === 'string' && /^[0-9a-f]{16}$/.test(s.stop) ? { stop: s.stop, counted: s.counted === true } : {});   // the stop its last record came from, and whether it counted (D38's addendum)
   }
   const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
@@ -2365,13 +2366,21 @@ function verdict(argv) {
   if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
   const hash = now;
   const moveTo = v === 'PASS' && governedDiff(root, 'HEAD').empty ? headCommit(root) : null;   // a PASS on a committed tree: the diff since it runs from HEAD (D40)
+  const stopTok = /^[0-9a-f]{16}$/.test(process.env.DOCKET_STOP || '') ? process.env.DOCKET_STOP : null;   // the stop that started this judge, when one did (D38's addendum)
   let sess, st;
   try { st = withState(root, s => {
     sess = Object.assign(freshSession(), s.sessions[id] || {});
     s.last = { verdict: v, hash, failures, at: new Date().toISOString(), session: id };
     if (reason) s.last.reason = reason;
-    if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; if (moveTo) sess.base = moveTo; }   // reset only on PASS (D11); a changed hash never resets
-    else { sess.blocks += 1; sess.history.push(failures); }
+    // one stop counts once (D38's addendum): a second record its judge makes in one stop replaces the first in the count
+    const again = stopTok !== null && sess.stop === stopTok && sess.counted === true && sess.history.length > 0;
+    if (v === 'PASS') { s.lastPassHash = hash; sess.blocks = 0; sess.history = []; sess.surfaced = false; if (moveTo) sess.base = moveTo; sess.counted = false; }   // reset only on PASS (D11); a changed hash never resets
+    else {
+      if (s.lastPassHash === hash) s.lastPassHash = null;              // a FAIL or STALE of the diff the last PASS judged takes it back: the later word decides
+      if (again) sess.history[sess.history.length - 1] = failures; else { sess.blocks += 1; sess.history.push(failures); }
+      sess.counted = true;
+    }
+    if (stopTok !== null) sess.stop = stopTok; else { delete sess.stop; delete sess.counted; }
     s.sessions[id] = sess;
   }); } catch (e) { if (e.docket) die('verdict: ' + e.message, 2); throw e; }
   // Every verdict, in order, one JSON line each: the judge's record for a person to read and for a measurement to score
@@ -2457,10 +2466,17 @@ function stop(argv) {
   const start = Date.now();
   // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
   // and the stop's root (D44); its prompt names the session as the stop keys it
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
+  const token = crypto.randomBytes(8).toString('hex');                // this stop's mark on the records its judge makes: one stop counts once (D38's addendum)
+  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root, DOCKET_STOP: token }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
   const secs = Math.round((Date.now() - start) / 1000);
   const unread = !!(r.error && r.error.code === 'EPIPE');             // it ended before it read its whole prompt: started, ended, its status its own
-  const ended = r.error && r.error.code === 'ETIMEDOUT' ? 'was stopped at the bound, ' + waitS + ' second' + (waitS === 1 ? '' : 's')
+  // how the judge ended, as it ended (D37's addendum): one still running at the bound is stopped there; one that had ended while a
+  // process it left held its output open is named as ended, the stop having waited the bound out on that process; one whose
+  // output passed what the stop keeps was stopped for it — each was started, and none is named as one that could not be
+  const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT'), bound = waitS + ' second' + (waitS === 1 ? '' : 's');
+  const ended = timedOut && r.status === null ? 'was stopped at the bound, ' + bound
+    : timedOut ? 'ended' + (r.status === 0 ? '' : ', exit ' + r.status) + ', and a process it left held its output open until the bound, ' + bound
+    : r.error && r.error.code === 'ENOBUFS' ? 'was stopped when its output passed the 64 MiB the stop keeps of it, after ' + secs + ' second' + (secs === 1 ? '' : 's')
     : r.error && !unread ? 'could not be started (' + (r.error.code || r.error.message) + ')'
     : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status) + (unread ? ', before it read its prompt' : '');
   try { docketDir(root); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + (r.error && r.error.code === 'ETIMEDOUT' ? '' : ' (its bound: ' + waitS + ' seconds)') + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
