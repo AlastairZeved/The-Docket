@@ -4630,5 +4630,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and with a ledger inside the project, the edit through the link is named as the edit by the real path is, its ledger by its place in the project', /^  R1  Inside the project$/m.test(r2) && l2 === r2 && /^Governed here \(DECISIONS\.md, /.test(l2), r2 + ' | ' + l2);
 }
 
+// ── an addendum is held to check before it is written, its date included (FORMAT.md 6, 11, D4's addendum) ──
+{
+  const d = tempRepo(), fx = path.join(d, 'test', 'fixture'), led = path.join(fx, 'DECISIONS.md');
+  const before = read(led);
+  const bad = ['garbage', '2026-02-30', '2026-9-30', '0999-01-01', '2026-09-30\n### R9. Injected (issue #1)'].map(v => docket(['append', '--addendum', 'R3', '--text', 'x'], { cwd: fx, env: { DOCKET_TODAY: v } }));
+  ok('an addendum is dated by a day of the calendar, YYYY-MM-DD: a DOCKET_TODAY of garbage, of 30 February, of an unpadded month, of a three-digit year, or carrying a line of its own is refused, exit 2, and nothing is written (FORMAT.md 6, D4’s addendum)', bad.every(r => r.code === 2 && /^DOCKET_TODAY is .*, which is no date: /.test(r.err)) && read(led) === before, bad.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  const spec = docket(['append', '--addendum', 'R3', '--text', 'see UIUX ' + SEC + '99 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2026-09-30' } });
+  const bare = docket(['append', '--addendum', 'R3', '--text', 'see ' + SEC + '4 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2026-09-30' } });
+  ok('an addendum that would add a failure to check — a spec cite to no heading, a bare § past the allowance — is refused before it is written, as an entry is, and the ledger is as it was (FORMAT.md 11, D4’s addendum)', spec.code === 2 && /^append: the addendum would fail as written/.test(spec.err) && /check 3, line \d+: /.test(spec.err) && bare.code === 2 && /check 4, line \d+: /.test(bare.err) && read(led) === before, spec.err + ' | ' + bare.err);
+  const good = docket(['append', '--addendum', 'R3', '--text', 'see UIUX ' + SEC + '2 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2030-02-28' } });
+  ok('…and one that adds none is written, dated the day DOCKET_TODAY names', good.code === 0 && read(led).includes('> Addendum 2030-02-28: see UIUX ' + SEC + '2 for the floor'), good.out + good.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

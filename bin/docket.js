@@ -70,7 +70,15 @@ function readText(p) { return fs.readFileSync(p, 'utf8'); }
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
 function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }
 function isDir(p) { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } }
-function today() { return process.env.DOCKET_TODAY || new Date().toISOString().slice(0, 10); }
+// The day an addendum is dated (FORMAT.md 6): the clock's, or DOCKET_TODAY's when the environment names one — a day the
+// calendar has, written YYYY-MM-DD, or refused before anything is written: another value is no addendum line (D4's addendum)
+function today() {
+  const v = process.env.DOCKET_TODAY;
+  if (v === undefined || v === '') return new Date().toISOString().slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), t = m && Number(m[1]) >= 1000 ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+  if (!t || t.toISOString().slice(0, 10) !== v) die('DOCKET_TODAY is ' + JSON.stringify(v) + ', which is no date: it names the day an addendum is dated, as YYYY-MM-DD, a day the calendar has; nothing is written (FORMAT.md 6)', 2);
+  return v;
+}
 // git as the repository holds its files, whatever the person's configuration says (D40's addendum): a diff with no external
 // program, no text conversion and no colour, and the a/ b/ prefixes; GIT_DIFF_OPTS, which overrides a diff's -U, and
 // GIT_EXTERNAL_DIFF set aside; every path a literal path, so a file named with a * names itself and no other
@@ -1454,7 +1462,16 @@ function appendAddendum(argv) {
   while (end > r.line && lines[end - 1].trim() === '') end--;
   const line = '> Addendum ' + today() + ': ' + text.trim().replace(/\s*\n\s*/g, ' ');
   lines.splice(end, 0, line);
-  writeLedger(ledger, ensureNl(lines.join('\n')));
+  // the ledger is append only: an addendum that would add a failure to check is refused before it is written, as an entry is
+  // (FORMAT.md 11, D4's addendum) — read as the ledger would stand, a failure's line number set aside, since the line moves
+  const after = ensureNl(lines.join('\n'));
+  const run = (t, led) => runCheck(root, { ctx: { root, ledgers: new Map([[ledger.path, led]]), files: [{ path: ledger.path, ledger: ledger.path, rel: rel(root, ledger.path), text: t }], vendored: [] } }).failures;
+  const key = f => f.k + '|' + f.message.replace(/\blines? \d+(?: and \d+)?\b/g, 'line'), had = new Map();
+  for (const f of run(ledger.text, ledger)) had.set(key(f), (had.get(key(f)) || 0) + 1);
+  const why = [];
+  for (const f of run(after, parseLedger(after, ledger.path))) { if (f.k === 7) continue; const n = had.get(key(f)) || 0; if (n > 0) had.set(key(f), n - 1); else why.push('check ' + f.k + ', line ' + f.line + ': ' + f.message); }
+  if (why.length) die('append: the addendum would fail as written, and the ledger is append only, so nothing is written (FORMAT.md 11):\n  ' + uniq(why).join('\n  '), 2);
+  writeLedger(ledger, after);
   return afterWrite(argv, root, ledger, line);
 }
 function rewriteBaseline(argv) {

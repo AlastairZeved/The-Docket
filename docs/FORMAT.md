@@ -263,7 +263,11 @@ ledger never committed — a later entry's edge into the entry resolves it.
 
 The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
-not a way to write a ruling into the past.
+not a way to write a ruling into the past. A value that is not a day of the
+calendar, written `YYYY-MM-DD`, is refused, exit 2, before anything is written:
+written, it would be a line the grammar does not read as an addendum. An addendum
+that would add a failure to `check` is refused before it is written, as an entry
+is (11).
 
 ## 7. Sections and spec headings
 
