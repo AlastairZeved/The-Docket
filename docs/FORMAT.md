@@ -277,7 +277,8 @@ read in that order.
 The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
 not a way to write a ruling into the past. A value that is not a day of the
-calendar, written `YYYY-MM-DD`, is refused, exit 2, before anything is written:
+calendar from the year 1000 on, written `YYYY-MM-DD`, is refused, exit 2, before
+anything is written:
 written, it would be a line the grammar does not read as an addendum. An addendum
 that would add a failure to `check` is refused before it is written, as an entry
 is (11).
@@ -772,8 +773,8 @@ the time to start, the base's lock wait and the time to print (D14's addendum);
 past that it prints the last rulings, the pending addenda and the last verdict,
 and its lines for the uncited rulings and the witness say they were not read at
 the session's start and that `docket status` reads them whole. `DOCKET_START_MS`,
-when the environment names a whole number of milliseconds, replaces the bound: a
-hook for a test that must be repeatable.
+when the environment names a whole number of milliseconds, seven digits at most,
+replaces the bound: a hook for a test that must be repeatable.
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and

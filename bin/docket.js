@@ -78,7 +78,7 @@ function today() {
   const v = process.env.DOCKET_TODAY;
   if (v === undefined || v === '') return new Date().toISOString().slice(0, 10);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), t = m && Number(m[1]) >= 1000 ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
-  if (!t || t.toISOString().slice(0, 10) !== v) die('DOCKET_TODAY is ' + JSON.stringify(v) + ', which is no date: it names the day an addendum is dated, as YYYY-MM-DD, a day the calendar has; nothing is written (FORMAT.md 6)', 2);
+  if (!t || t.toISOString().slice(0, 10) !== v) die('DOCKET_TODAY is ' + JSON.stringify(v) + ', which names no day it takes: an addendum is dated YYYY-MM-DD, a day the calendar has, from the year 1000 on; nothing is written (FORMAT.md 6)', 2);
   return v;
 }
 // git as the repository holds its files, whatever the person's configuration says (D40's addendum): a diff with no external
@@ -1335,7 +1335,7 @@ function inTime() { if (performance.now() > readBy) throw Object.assign(new Erro
 function startReadMs() {
   const v = process.env.DOCKET_START_MS;
   if (v === undefined || v === '') return START_READ_MS;
-  if (!/^\d{1,7}$/.test(v)) die('DOCKET_START_MS is ' + JSON.stringify(v) + ', which is no whole number of milliseconds (FORMAT.md 16)', 2);
+  if (!/^\d{1,7}$/.test(v)) die('DOCKET_START_MS is ' + JSON.stringify(v) + ', which is no whole number of milliseconds of seven digits at most (FORMAT.md 16)', 2);
   return Number(v);
 }
 const SESSION_START_WAIT_MS = 1000;   // D14's addendum: a fifth of the session-start hook's five seconds; the rest are the docket's to print in
@@ -2502,7 +2502,7 @@ function stop(argv) {
   try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
   if (typeof input !== 'object' || Array.isArray(input)) input = {};
   const waitRaw = flag(argv, '--wait');
-  const waitS = waitRaw === null ? STOP_WAIT : Number(waitRaw);
+  const waitS = waitRaw === null ? STOP_WAIT : /^\d+$/.test(waitRaw) ? Number(waitRaw) : NaN;   // a whole number written as one: not 1e3, 0x10 or +2
   if (!(Number.isInteger(waitS) && waitS >= 1)) die('stop: --wait takes a whole number of seconds, one or more: the bound on the judge it starts', 2);
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn

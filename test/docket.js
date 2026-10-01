@@ -3580,6 +3580,8 @@ const SEC = String.fromCharCode(0xa7);
     ok('stop: two answers of one failure and a third block with no record is the plateau after the third block: the fourth stop surfaces, the residue naming the block with no verdict and the two answers (D11, D38)', b && /residue: 3 blocks this session since its last PASS, 1 of them with no verdict recorded; located failures per verdict: 1 → 1\n/.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'w' }, ['--judge', judgeCmd('PASS'), '--wait', 'soon']);
     ok('stop: --wait takes a whole number of seconds, exit 2', r.code === 2 && /whole number of seconds/.test(r.err), r.err);
+    { const ws = ['1e3', '0x10', '+2'].map(w => stopIn({ session_id: 'w' }, ['--judge', judgeCmd('PASS'), '--wait', w]));
+      ok('…written as digits: 1e3, 0x10 and +2 are refused as no whole number written as one, exit 2, and no judge starts', ws.every(x => x.code === 2 && /whole number of seconds/.test(x.err)) && !started(), ws.map(x => x.code + ' ' + x.err.trim()).join(' | ')); }
     r = stopIn({ session_id: 'w' }, ['--judge', judgeCmd('PASS'), '--wait', '0']);
     ok('…one or more: a judge given no time is no judge', r.code === 2 && /one or more/.test(r.err), r.err);
     r = docket(['stop', '--judge', judgeCmd('words')], { cwd: d, input: 'not json' });
@@ -5018,7 +5020,7 @@ const SEC = String.fromCharCode(0xa7);
   const d = tempRepo(), fx = path.join(d, 'test', 'fixture'), led = path.join(fx, 'DECISIONS.md');
   const before = read(led);
   const bad = ['garbage', '2026-02-30', '2026-9-30', '0999-01-01', '2026-09-30\n### R9. Injected (issue #1)'].map(v => docket(['append', '--addendum', 'R3', '--text', 'x'], { cwd: fx, env: { DOCKET_TODAY: v } }));
-  ok('an addendum is dated by a day of the calendar, YYYY-MM-DD: a DOCKET_TODAY of garbage, of 30 February, of an unpadded month, of a three-digit year, or carrying a line of its own is refused, exit 2, and nothing is written (FORMAT.md 6, D4’s addendum)', bad.every(r => r.code === 2 && /^DOCKET_TODAY is .*, which is no date: /.test(r.err)) && read(led) === before, bad.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  ok('an addendum is dated by a day of the calendar from the year 1000 on, YYYY-MM-DD: a DOCKET_TODAY of garbage, of 30 February, of an unpadded month, of a year before 1000, or carrying a line of its own is refused, exit 2, the range named, and nothing is written (FORMAT.md 6, D4’s addendum)', bad.every(r => r.code === 2 && /^DOCKET_TODAY is .*, which names no day it takes: an addendum is dated YYYY-MM-DD, a day the calendar has, from the year 1000 on/.test(r.err)) && read(led) === before, bad.map(r => r.code + ' ' + r.err.trim()).join(' | '));
   const spec = docket(['append', '--addendum', 'R3', '--text', 'see UIUX ' + SEC + '99 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2026-09-30' } });
   const bare = docket(['append', '--addendum', 'R3', '--text', 'see ' + SEC + '4 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2026-09-30' } });
   ok('an addendum that would add a failure to check — a spec cite to no heading, a bare § past the allowance — is refused before it is written, as an entry is, and the ledger is as it was (FORMAT.md 11, D4’s addendum)', spec.code === 2 && /^append: the addendum would fail as written/.test(spec.err) && /check 3, line \d+: /.test(spec.err) && bare.code === 2 && /check 4, line \d+: /.test(bare.err) && read(led) === before, spec.err + ' | ' + bare.err);
@@ -5060,6 +5062,8 @@ const SEC = String.fromCharCode(0xa7);
   }
   const bad = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: 'soon' } });
   ok('…and a bound that is no whole number of milliseconds is refused', bad.code === 2 && /^DOCKET_START_MS is "soon", which is no whole number/.test(bad.err), bad.err);
+  const big = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: '10000000' } });
+  ok('…and one of eight digits is refused with the range it takes named, seven digits at most (FORMAT.md 16)', big.code === 2 && /^DOCKET_START_MS is "10000000", which is no whole number of milliseconds of seven digits at most/.test(big.err), big.err);
 }
 
 // ── one stop counts once, the later word on a diff decides, and the stop names how its judge ended as it ended (D37's and D38's addenda) ──
