@@ -621,7 +621,7 @@ failing, would leave every tracked file read as deleted; and a repository git
 will not read — its ownership, its config — is not a tree with no repository,
 whose governed files all read as new, as they do before a first commit. `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
-`SURFACE` when the session has been blocked five times since its last PASS or
+`SURFACE` when the session has been blocked five times or more since its last PASS or
 its located failures have not fallen across the last two verdicts after the
 third block, with the residue printed beneath and the session marked surfaced —
 the residue's last verdict is `last`, one for the repository (below), and one

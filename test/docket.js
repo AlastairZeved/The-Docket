@@ -4594,6 +4594,13 @@ const SEC = String.fromCharCode(0xa7);
     const g = docket(['gate', '--session', 'e5'], { cwd: d });
     ok('the gate reads an empty diff before the count: a session at five blocks with nothing governed changed answers SKIP, not SURFACE, and is not marked (D10, D11)', /^SKIP$/m.test(g.out) && stateOf(d).sessions.e5.surfaced === false, g.out + JSON.stringify(stateOf(d).sessions));
   }
+  // C2: past the cap as at it — a count beyond five, a state an older core or a hand wrote, its failures falling (D11)
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 6; // R2\n');
+    state(d, { sessions: { c6: { blocks: 6, history: [6, 5, 4, 3, 2, 1], surfaced: false } } });
+    const g = docket(['gate', '--session', 'c6'], { cwd: d });
+    ok('the gate surfaces a count past five as it surfaces five: six blocks, not surfaced, their failures falling, answer SURFACE and the mark is written — the cap is five blocks or more (D11, FORMAT.md 16)', /^SURFACE\nresidue: 6 blocks/.test(g.out) && stateOf(d).sessions.c6.surfaced === true, g.out + JSON.stringify(stateOf(d).sessions));
+  }
   // D2: PRD.md's list before the ledger's preamble
   {
     const d = tempRepo(x => { const lp = path.join(x, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(lp, read(lp).replace(/\n## /, '\n**Principles.** The preamble’s own list, which the PRD beside it outranks.\n\n- **Preamble only.** never the list read while PRD.md holds one.\n\n## ')); });
