@@ -279,6 +279,7 @@ const SEC = String.fromCharCode(0xa7);
   fs.writeFileSync(path.join(emptied, 'test', 'fixture', 'DECISIONS.md'), '# Emptied after the commit\n');
   r = docket(['check'], { cwd: emptied });
   ok('check 7: a committed ledger emptied in the working tree is nine removals, beside the info line', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 7: A1 was removed \(append only\)$/m.test(r.out) && /^test\/fixture\/DECISIONS\.md:\d+  check 7: R8 was removed \(append only\)$/m.test(r.out) && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out), r.out);
+  ok('…nine, each entry of the committed ledger named once: A1 and R1 to R8', (r.out.match(/^test\/fixture\/DECISIONS\.md:\d+  check 7: [A-Z]\d+ was removed \(append only\)$/gm) || []).length === 9, r.out);
   const cr = tempRepo(d => { const p = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(p, read(p).replace(/\n/g, '\r')); });
   r = docket(['check'], { cwd: cr });
   ok('check: a ledger with bare CR endings that opens with its preamble is one line with no entries — the info line names it — and check 2 fails at its first heading, which a bare CR began, on the one line this reader counts (FORMAT.md 1, D39)', r.code === 1 && /^info  test\/fixture\/DECISIONS\.md: no entries/m.test(r.out) && /^test\/fixture\/DECISIONS\.md:1  check 2: no entries, yet 9 lines begin "### ", the first "### A1\." after a bare CR, which ends no line here \(FORMAT\.md 1\)/m.test(r.out), r.out + r.err);
@@ -1849,7 +1850,7 @@ const SEC = String.fromCharCode(0xa7);
     // SessionStart: every source the host documents, each one named here. A missing source is a
     // session that silently starts without its docket.
     for (const source of ['startup', 'resume', 'clear', 'compact']) {
-      ok('SessionStart matches "' + source + '", so a session begun that way still prints the docket', ses && ses.matcher.split('|').includes(source), ses && ses.matcher);
+      ok('SessionStart matches "' + source + '", so a session begun that way still prints the docket', ses && ses.matcher === 'startup|resume|clear|compact' && ses.matcher.split('|').includes(source), ses && ses.matcher);
     }
     const sesCmd = ses && ses.hooks && ses.hooks[0];
     ok('…and SessionStart runs status, not near', sesCmd && /\bstatus\b/.test(sesCmd.command) && !/\bnear\b/.test(sesCmd.command), sesCmd && sesCmd.command);
@@ -2505,6 +2506,8 @@ const SEC = String.fromCharCode(0xa7);
     ok('CONSTITUTE.md gives the JSON shape with every key constitute reads: ' + keys.join(' '), keys.every(k => CONST.includes(k)) && /docket constitute --answers <that file>/.test(CONST), keys.filter(k => !CONST.includes(k)).join(','));
     const core = read(CORE);
     ok('…and the core reads exactly those keys', ['o.what', 'o.who', 'who.role', 'who.knows', 'who.doesntKnow', 'o.feeling', 'o.refuses', 'o.prefix', 'o.name'].every(k => core.includes(k)), 'a key the intake names is not read');
+    { const ra = (core.match(/function readAnswers\(argv\) \{[\s\S]*?\n\}\n/) || [''])[0], seen = Array.from(new Set(ra.match(/(?<![\w.])(?:o|who)\.[A-Za-z]+/g) || [])).sort();
+      ok('…and no other: the keys readAnswers reads are exactly the nine the intake names', JSON.stringify(seen) === JSON.stringify(['o.feeling', 'o.name', 'o.prefix', 'o.refuses', 'o.what', 'o.who', 'who.doesntKnow', 'who.knows', 'who.role']), seen.join(',')); }
   }
 
   // ── the skills: thin bindings that point at the core (D13) ──
@@ -2924,7 +2927,7 @@ const SEC = String.fromCharCode(0xa7);
     v = vd('FAIL', 2, held(1) + '\n' + gone(1).replace(':262', ':263'));
     ok('…and a FAIL with a stale line among its lines, the stale one keeping its addendum route', v.code === 0, v.err);
     const log = read(path.join(d, '.docket', 'verdicts.jsonl')).split('\n').filter(Boolean).map(l => JSON.parse(l));
-    ok('every recorded verdict is appended to .docket/verdicts.jsonl, one JSON line each, in order, each the record verdict.json held as the last', log.length === 4 && log.map(x => x.verdict).join() === 'FAIL,FAIL,STALE,FAIL' && log.every(x => x.hash === H && x.session === 'v') && JSON.stringify(log[3]) === JSON.stringify(JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).last), JSON.stringify(log.map(x => x.verdict)));
+    ok('every recorded verdict is appended to .docket/verdicts.jsonl, one JSON line each, in order, the last of them the record verdict.json holds as the last', log.length === 4 && log.map(x => x.verdict).join() === 'FAIL,FAIL,STALE,FAIL' && log.every(x => x.hash === H && x.session === 'v') && JSON.stringify(log[3]) === JSON.stringify(JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).last), JSON.stringify(log.map(x => x.verdict)));
     ok('.docket/verdicts.jsonl is ignored by git, as the rest of .docket/ is', sh('git', ['check-ignore', '.docket/verdicts.jsonl'], ROOT).status === 0, 'not ignored');
     fs.rmSync(d, { recursive: true, force: true });
   }
@@ -3331,7 +3334,7 @@ const SEC = String.fromCharCode(0xa7);
     b = block(r);
     ok('stop: the judge’s FAIL is the block, with the recorded lines and the route through the law (D35)', r.code === 0 && b && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:41 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions \(test\/fixture\/app\.js:40\) · change the code\nChange the code, or supersede the ruling through \/rule\./.test(b), r.out);
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('STALE')], { JUDGE_REASON: gone(1) });
-    ok('…and its STALE the same way, with the addendum route', /recorded STALE for this stop/.test(r.out) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
+    ok('…and its STALE the same way: the line recorded, its addendum route among it, and the route the block names', /recorded STALE for this stop/.test(r.out) && r.out.includes(gone(1)) && /The route is an addendum through \/rule, not a rewrite\./.test(r.out), r.out);
     r = stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('words')]);
     ok('stop: a record older than the judge this stop started is not this stop’s answer: blocked, no verdict', block(r) && /recorded no verdict for this stop’s diff/.test(block(r)), r.out);
     forget();
@@ -3446,6 +3449,7 @@ const SEC = String.fromCharCode(0xa7);
       ok('docket protocol --json prints one object: its file and its text, byte for byte', pj.code === 0 && !!j && j.file === 'judge/PROTOCOL.md' && j.text === read(path.join(ROOT, 'judge', 'PROTOCOL.md')) && Object.keys(j).length === 2, pj.code + ' ' + pj.out.slice(0, 80)); }
     r = docket(['pack', '--list']);
     ok('docket pack --list names the four packs with their Domain lines, in name order', r.code === 0 && /^code  everything that is not a spec document/m.test(r.out) && /^decisions  the ledger/m.test(r.out) && /^design  `\*\.css`, `\*\.html`, `UIUX\.md`, `PRD\.md`$/m.test(r.out) && /^prose  `\*\.md` except a ledger/m.test(r.out) && r.out.split('\n').filter(Boolean).length === 4, r.out);
+    ok('…in name order indeed: code, decisions, design, prose, one a line', r.out.split('\n').filter(Boolean).map(l => l.split('  ')[0]).join(',') === 'code,decisions,design,prose', r.out);
     for (const n of ['code', 'design', 'prose', 'decisions']) { const p = docket(['pack', n]); ok('docket pack ' + n + ' prints packs/' + n + '.md, byte for byte', p.code === 0 && p.out === read(path.join(ROOT, 'packs', n + '.md')), p.code + ' ' + p.err); }
     { const pc = docket(['pack', 'code', 'decisions']);
       ok('docket pack takes several names and prints each file byte for byte, one after another, in the order given (D30)', pc.code === 0 && pc.out === read(path.join(ROOT, 'packs', 'code.md')) + '\n' + read(path.join(ROOT, 'packs', 'decisions.md')), pc.code + ' ' + pc.err); }
@@ -3560,14 +3564,15 @@ const SEC = String.fromCharCode(0xa7);
     }
     const PRT = read(path.join(ROOT, 'judge', 'PROTOCOL.md'));
     ok('the protocol names the four cases in which a stop stands and no other, the never-record rule, and the one command shape `docket` means', /^## When the stop stands$/m.test(PRT) && /In four cases, and in no other/.test(PRT) && /the host's re-entry flag is set/.test(PRT) && /`docket gate` printed SKIP/.test(PRT) && /printing `verdict recorded: PASS`/.test(PRT) && /never\s+runs the verdict command to make the fourth case true/.test(PRT) && /`docket` in this file and in the packs is `node <core>`/.test(PRT) && /with\s+nothing before it and nothing after it — no `cd`, no `;`, `&&` or `\|`, no\s+redirection/.test(PRT), 'the protocol does not say');
+    ok('…each of the four by its number and in order: the re-entry flag, no ledger, SKIP, the PASS recorded', (i => i.every((x, k) => x > 0 && (k === 0 || x > i[k - 1])))([/\(1\) the host's re-entry flag is set/, /\(2\) the\s+project has no ledger/, /\(3\) `docket gate` printed SKIP/, /\(4\) the protocol, followed to its end/].map(re => PRT.search(re))), 'a case is missing or out of order');
     ok('the protocol gives the one command shape as the permission’s, and does not say a host permits it and no other: a host lets a command that only reads through unasked, which the protocol does not use (D25)', /because that is the shape the one permission names/.test(PRT) && !/a host permits that shape and no other/.test(PRT) && /A host\s+may let other commands through unasked/.test(PRT) && /what else a host lets through unasked, such as a command that only reads, the protocol does not use/.test(PRT), 'the protocol does not say');
     ok('the protocol says the judge never records a verdict to release a stop, and that a surfaced session is released by a PASS naming it with --session', /It never records a verdict to release a stop/.test(PRT) && /`docket verdict PASS\s+--session <id> --hash <hash> --failures 0`, naming that session/.test(PRT), 'the protocol does not say');
     ok('…and that the core cannot tell who records that PASS: the maker running the command releases the session too, and the boundary is the permission to run the core and the call\u2019s place in the transcript (D37)', /The core cannot tell who records it:\s+the same command run by the maker releases the session too/.test(PRT) && /the boundary is the permission to run the core, which the binding\s+gives the judge's session and the maker's only inside the docket's own skills/.test(PRT) && !/nothing the maker does alone/.test(PRT), 'the protocol does not say');
     ok('the protocol, the binding page and FORMAT.md 16 each say the stop starts the judge and reads its record, not its words (D37)', /^## The stop$/m.test(PRT) && /the stop reads the record, not the judge's words/.test(PRT.replace(/\s+/g, ' ')) && /give it, with `--judge`, the command that starts your agent headless as the judge/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md')).replace(/\s+/g, ' ')) && /`docket stop` is the stop: a host runs it/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'a document is silent');
     ok('USAGE lists stop, and the section map names it', /docket stop --judge "<command>"/.test(docket(['help']).out) && /^\/\/ 16  gate\/verdict\/stop/m.test(read(CORE)), 'stop is not listed');
     const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
-    ok('agents/docket-judge.md names itself, denies every writing tool, caps its turns at forty, and names no model', /^name:\s*docket-judge$/m.test(A) && /^disallowedTools:\s*Write, Edit, NotebookEdit$/m.test(A) && /^maxTurns:\s*40$/m.test(A) && !/^model:/m.test(A), A.split('\n').slice(0, 7).join('\n'));
-    ok('…and its body reads .docket/core, runs the core’s protocol, follows it, and writes nothing', /\.docket\/core/.test(A) && /node <core> protocol/.test(A) && /You write no file and edit nothing/.test(A), A);
+    ok('agents/docket-judge.md names and describes itself, denies every writing tool, caps its turns at forty, and names no model', /^name:\s*docket-judge$/m.test(A) && /^description: \S.{20,}$/m.test(A) && /^disallowedTools:\s*Write, Edit, NotebookEdit$/m.test(A) && /^maxTurns:\s*40$/m.test(A) && !/^model:/m.test(A), A.split('\n').slice(0, 7).join('\n'));
+    ok('…and its body reads .docket/core, runs the core’s protocol, follows it, and writes nothing', /\.docket\/core/.test(A) && /node <core> protocol/.test(A) && /follow what it prints, step by\s+step and in its order/.test(A) && /You write no file and edit nothing/.test(A), A);
     { const PB = read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'));
       ok('the binding page names its three calls, in order: near before an edit, status at session start, stop at done (D13)', /^\*\*1\. Before an edit\*\* — pipe the edit into `near`/m.test(PB) && /^\*\*2\. At session start\*\* — show `docket status`/m.test(PB) && /^\*\*3\. At "done"\*\* — run the core's `stop`/m.test(PB) && PB.indexOf('**1. Before an edit**') < PB.indexOf('**2. At session start**') && PB.indexOf('**2. At session start**') < PB.indexOf('**3. At "done"**'), PB.slice(0, 400)); }
     ok('the binding page says what this host cannot give the judge and what the core does about each: the breadcrumb, the printing, the one permission', /\.docket\/core/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /Bash\(node \*docket\.js\*\)/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))) && /cannot run the core cannot judge/.test(read(path.join(ROOT, 'docs', 'PROTOCOL-BINDING.md'))), 'the binding page is silent');
@@ -3585,7 +3590,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('the protocol’s seven steps are numbered 1 to 7 in order', [1, 2, 3, 4, 5, 6, 7].every((n, i, a) => idx(n) >= 0 && (i === 0 || idx(n) > idx(a[i - 1]))), [1, 2, 3, 4, 5, 6, 7].map(idx).join(','));
     const before5 = steps.slice(0, idx(5)), step2 = steps.slice(idx(2), idx(3));
     // Step 3 names the transcript only to say it stays closed; a step that opens it before 5 is the thing this pins.
-    ok('nothing before step 5 reads the transcript: the maker’s account is opened only after the packs are scored and the rulings read', idx(5) > 0 && !/transcript/i.test(step2) && !/(read|open|list)\S* the (maker.s )?transcript|`docket transcript`/i.test(before5.replace(/before\s+opening the transcript/i, '')) && /^5\. \*\*Only now read the transcript/m.test(steps), before5.match(/[^\n]*transcript[^\n]*/gi));
+    ok('nothing before step 5 names the transcript but to keep it closed — before opening it, and which features wait for it: the maker’s account is opened only after the packs are scored and the rulings read', idx(5) > 0 && !/transcript/i.test(step2) && !/transcript/i.test(before5.replace(/before\s+opening the transcript/i, '').replace(/all but[\s\S]*?scored at step 5/i, '')) && /^5\. \*\*Only now read the transcript/m.test(steps), before5.match(/[^\n]*transcript[^\n]*/gi));
     ok('step 4 spells out the stale test: for each contradicted ruling, whether its reason’s premise is still true after the diff — and that removing what the ruling keeps is not the premise going', /read its `Reason:` sentence and ask one more\s+question: is the premise that reason gives still true after this diff\?/.test(steps) && /never the thing the ruling\s+keeps: a diff that removes what a ruling keeps contradicts the ruling, and\s+that removal is not the premise going/.test(steps), 'step 4 does not ask');
     ok('step 1 is the gate with --diff, step 3 scores the packs before the transcript, step 6 records with the reason', /^1\. \*\*`docket gate --session <id> --diff`\*\*/m.test(steps) && /^3\. \*\*Score every pack feature[\s\S]*?before\s+opening the transcript/m.test(steps) && /docket verdict <PASS\|FAIL\|STALE> --hash <hash> --failures <n> --session <id> --reason/.test(steps), 'a step is not as stated');
     ok('the protocol routes a FAIL through the law by supersession, the one word D14 gives, and never "amend the law" (D35)', /FAIL → block, with the located failures and their fix routes: change the\n\s+code, or supersede the ruling through `\/rule`/.test(PR) && !/amend the law/.test(PR), 'step 7 says otherwise');
@@ -3603,7 +3608,7 @@ const SEC = String.fromCharCode(0xa7);
     const packs = {};
     for (const n of ['code', 'design', 'prose', 'decisions']) packs[n] = read(path.join(ROOT, 'packs', n + '.md'));
     for (const n of Object.keys(packs)) {
-      ok('packs/' + n + '.md opens with a Domain line and ends with a located failure that names the pack', /^Domain: .+$/m.test(packs[n]) && new RegExp('^    ' + n + ' · F\\d+ · ', 'm').test(packs[n].split('## Located failure')[1] || ''), n);
+      ok('packs/' + n + '.md opens with a Domain line and ends with a located failure that names the pack', /^#[^\n]*\n\nDomain: [^\n]+/.test(packs[n]) && new RegExp('^    ' + n + ' · F\\d+ · ', 'm').test(packs[n].split('## Located failure')[1] || ''), n);
       ok('packs/' + n + '.md names no host, no model, no vendor, and cites no source: every feature is the pack’s own statement', !HOST_NAMES.test(packs[n]) && !/\bsee\s+(the\s+)?(spec|plan|specification)\b/i.test(packs[n]), n);
     }
     const fids = s => Array.from(new Set((s.match(/\*\*F\d+[ab]?\b/g) || []).map(x => x.slice(2))));
@@ -3623,7 +3628,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('decisions F10 routes a changed ruled number with no entry to the code pack’s F3 and to /rule', /located failure in the code pack's F3, routed to `\/rule`/.test(packs.decisions), 'F10 is not as stated');
     ok('the packs’ located-failure lines and examples are not cites of this ledger: check passes over them', docket(['check']).code === 0, docket(['check']).out);
     ok('code’s domain is everything that is not a spec document', /^Domain: everything that is not a spec document — every governed file in the diff but `UIUX\.md` and `PRD\.md`/m.test(packs.code), (packs.code.match(/^Domain:.*$/m) || [''])[0]);
-    ok('code F1 names its three sources in order and says when it is not scored', /agent-instructions file names for\s+checking work/.test(packs.code) && /README's test section names/.test(packs.code) && /`node test\/docket\.js`\. Exit code decides\. If none of the three exists, or the\s+judge may not run the one that does, F1 is not scored, and the verdict says so\s+and names the command\./.test(packs.code), 'F1 is not as stated');
+    ok('code F1 names its three sources in order and says when it is not scored', /agent-instructions file names for\s+checking work/.test(packs.code) && /README's test section names/.test(packs.code) && packs.code.indexOf('agent-instructions file names') < packs.code.indexOf("README's test section names") && packs.code.indexOf("README's test section names") < packs.code.indexOf('`node test/docket.js`. Exit code') && /`node test\/docket\.js`\. Exit code decides\. If none of the three exists, or the\s+judge may not run the one that does, F1 is not scored, and the verdict says so\s+and names the command\./.test(packs.code), 'F1 is not as stated');
     ok('code F3 asks for the reason answer in the located line, with its line, and its example gives one (D23, D27)', /`reason holds: <the premise> \(<file:line>\)` where the code the\s+diff leaves still makes the premise true/.test(packs.code) && /reason holds: a deletion still cannot be undone \(src\/trash\.js:52\) · change the code, or supersede R4 through \/rule/.test(packs.code), 'F3 is not as stated');
     ok('code F4 lists what a skipped, disabled or deleted test looks like', /`skip`, `xit`, `only`, `\.skip\(`, `\.only\(`/.test(packs.code) && /a test file removed/.test(packs.code), 'F4 is not as stated');
     ok('design F5 carries its test sentence', /padding and shadow is a card whatever it is named; renaming is not redesigning/.test(packs.design), 'F5 is not as stated');
@@ -3695,6 +3700,14 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
       GOOD_R);
     ok('judge.sh prints D15’s floor met and every outcome not met when the stale case is read as a FAIL, and exits 1 on the outcome (D34)', r.status === 1 && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: met$/m.test(r.stdout) && /^  every outcome: not met: the stale case met its outcome in 0 of 1$/m.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-4).join(' | '));
+    // D15's floor, its failing side for every case: a PASS on each planted case and a FAIL on the clean one
+    r = runJudge(
+      say([turnText('Reviewed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Renamed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+      say([turnText('Reviewed.'), result()], { verdict: 'PASS' }),
+      say([turnText('Reviewed.'), result()], { verdict: 'PASS' }),
+      GOOD_R, WRITES + say([EDITS, turnText('Recorded.'), result()], { verdict: 'PASS' }));
+    ok('judge.sh prints D15’s floor not met, naming every case that fell below it — a PASS on each planted case, a FAIL on the clean one — and exits 1 (D15, D34)', r.status === 1 && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: not met: the violation fell below it in 1 of 1; the clean case fell below it in 1 of 1; the stale case fell below it in 1 of 1; the number case fell below it in 1 of 1; the provenance case fell below it in 1 of 1$/m.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-4).join(' | '));
     // a FAIL that names R6 only in another feature's line — the removed cite, code F5 — is not the violation read
     {
       const R6F5 = 'code · F5 · app.js:41 · R6 is cited in the deleted makeToolbar function; nothing accounts for the removed cite · reason holds: R6 is still cited above (app.js:40) · /rule --addendum R6';
@@ -3920,10 +3933,10 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
       say([turnText('I would print RULING — PLEASE CONFIRM here, but I will not.'), result()]));
     ok('judge.sh reads the confirm block’s heading at a line’s start: a sentence that mentions it has not reached it', /block reached: no /.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout), r.stdout);
-    ok('judge.sh selects scenarios with JUDGE_ONLY and says which it keeps with JUDGE_KEEP', /JUDGE_ONLY=v,c,s,n,r,p/.test(JS) && /JUDGE_KEEP=1 keeps the scratch directory/.test(JS), 'the header does not say');
+    ok('judge.sh’s header names JUDGE_ONLY and JUDGE_KEEP — what each does is witnessed where judge.sh runs', /JUDGE_ONLY=v,c,s,n,r,p/.test(JS) && /JUDGE_KEEP=1 keeps the scratch directory/.test(JS), 'the header does not say');
     const runOne = JS.slice(JS.indexOf('run_one() {'), JS.indexOf('\n}\n', JS.indexOf('run_one() {')));
-    ok('judge.sh states whose permission is whose — the judge’s one rule the binding’s, the maker none — that an allowed stop is not a PASS, that a block alone is not a judgement, and that it gates the calibration D15 asks for', /the binding grants it one rule —\n# to run the core — and nothing else \(D37\); the maker's session is started with no allow rule at all/.test(JS) && runOne.includes('claude "$2" -p') && !/--allowed-?[Tt]ools|--dangerously-skip-permissions|bypassPermissions/.test(runOne) && /An allowed stop with no record is the judge not\n#\s+running/.test(JS) && /A block alone is not a judgement/.test(JS) && /the GATE of its\n# calibration \(D15\)/.test(JS) && /D15's floor — a FAIL or a STALE as the judge's own first\n# verdict on every planted case, and a PASS on the clean one — and every outcome/.test(JS), 'the header does not say');
-    ok('judge.sh reads the judge’s first answer from the verdict log and every block the host added', /\.docket\/verdicts\.jsonl/.test(JS) && /^block_reasons\(\) \{/m.test(JS) && /^first_verdict\(\) \{/m.test(JS) && /^ran_verdict\(\) \{/m.test(JS), 'the helpers are missing');
+    ok('judge.sh’s header states whose permission is whose — the judge’s one rule the binding’s, the maker none — that an allowed stop is not a PASS, that a block alone is not a judgement, and that it gates the calibration D15 asks for', /the binding grants it one rule —\n# to run the core — and nothing else \(D37\); the maker's session is started with no allow rule at all/.test(JS) && runOne.includes('claude "$2" -p') && !/--allowed-?[Tt]ools|--dangerously-skip-permissions|bypassPermissions/.test(runOne) && /An allowed stop with no record is the judge not\n#\s+running/.test(JS) && /A block alone is not a judgement/.test(JS) && /the GATE of its\n# calibration \(D15\)/.test(JS) && /D15's floor — a FAIL or a STALE as the judge's own first\n# verdict on every planted case, and a PASS on the clean one — and every outcome/.test(JS), 'the header does not say');
+    ok('judge.sh defines its readers — the verdict log’s first answer, every block the host added, a verdict the maker ran — over .docket/verdicts.jsonl: their text, their reading witnessed by the runs above', /\.docket\/verdicts\.jsonl/.test(JS) && /^block_reasons\(\) \{/m.test(JS) && /^first_verdict\(\) \{/m.test(JS) && /^ran_verdict\(\) \{/m.test(JS), 'the helpers are missing');
   }
 }
 
@@ -4227,6 +4240,126 @@ const SEC = String.fromCharCode(0xa7);
     try { const d = tempRepo(); committed = sh('git', ['rev-parse', '--verify', '-q', 'HEAD'], d).status === 0; }
     finally { if (had === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = had; }
     ok('the witness’s scratch commits sign nothing under a git config that signs every commit with a signer that cannot run: its repositories are its own', committed, 'no commit was made');
+  }
+}
+
+// ── what one-token changes to the core slipped past, and what the measurement's own script does ──
+{
+  const LEDGER = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. One ruling\nPrinciple: One.\nReason: r.\n';
+  const Q = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
+  const fx = d => path.join(d, 'test', 'fixture');
+  const state = (d, o) => { fs.mkdirSync(path.join(d, '.docket'), { recursive: true }); fs.writeFileSync(path.join(d, '.docket', 'verdict.json'), JSON.stringify(Object.assign({ last: null, lastPassHash: null, sessions: {} }, o))); };
+  const stateOf = d => { try { return JSON.parse(read(path.join(d, '.docket', 'verdict.json'))); } catch (e) { return { sessions: {} }; } };
+  const hashOf = (d, id) => { try { return JSON.parse(docket(['gate', '--session', id, '--json'], { cwd: d }).out).hash; } catch (e) { return ''; } };
+  // A: the host's re-entry flag before the surfacing branch (D11)
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 7; // R2\n');
+    state(d, { sessions: { sa: { blocks: 5, history: [2, 2, 2, 2, 2], surfaced: false } } });
+    const flagged = docket(['stop', '--judge', 'touch started'], { cwd: d, input: JSON.stringify({ session_id: 'sa', stop_hook_active: true }) });
+    const unflagged = docket(['stop', '--judge', 'touch started'], { cwd: d, input: JSON.stringify({ session_id: 'sa' }) });
+    ok('stop reads the host’s re-entry flag before the gate’s surfacing: a session the gate would surface, stopped with the flag set, is allowed at once; without the flag the same stop is the surfacing block (D11)', flagged.code === 0 && flagged.out === '' && unflagged.code === 0 && /The docket surfaced this session/.test(unflagged.out) && !fs.existsSync(path.join(d, 'started')), flagged.out + '|' + unflagged.out.slice(0, 160));
+  }
+  // B: a PASS releases the session it names and no other, and the released session's next diff is judged
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 8; // R2\n');
+    state(d, { sessions: { one: { blocks: 5, history: [2, 2], surfaced: true }, two: { blocks: 5, history: [3, 3], surfaced: true } } });
+    const v = docket(['verdict', 'PASS', '--hash', hashOf(d, 'one'), '--failures', '0', '--session', 'one'], { cwd: d });
+    const st = stateOf(d);
+    ok('a PASS naming one surfaced session releases that one and no other: one unmarked and its count reset, two still surfaced (D11)', v.code === 0 && st.sessions.one && st.sessions.one.surfaced === false && st.sessions.one.blocks === 0 && st.sessions.two && st.sessions.two.surfaced === true && st.sessions.two.blocks === 5, v.err + JSON.stringify(st.sessions));
+    fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 9; // R2\n');
+    const g1 = docket(['gate', '--session', 'one'], { cwd: d }), g2 = docket(['gate', '--session', 'two'], { cwd: d });
+    ok('…and the released session’s next diff is judged afresh, while the other still answers SKIP: the rule ends with the PASS, for the session it names (D11)', /^JUDGE [0-9a-f]{64} /.test(g1.out) && /^SKIP$/m.test(g2.out), g1.out + '|' + g2.out);
+  }
+  // C: an empty diff before the count
+  {
+    const d = tempRepo(); state(d, { sessions: { e5: { blocks: 5, history: [3, 3, 3, 3, 3], surfaced: false } } });
+    const g = docket(['gate', '--session', 'e5'], { cwd: d });
+    ok('the gate reads an empty diff before the count: a session at five blocks with nothing governed changed answers SKIP, not SURFACE, and is not marked (D10, D11)', /^SKIP$/m.test(g.out) && stateOf(d).sessions.e5.surfaced === false, g.out + JSON.stringify(stateOf(d).sessions));
+  }
+  // D2: PRD.md's list before the ledger's preamble
+  {
+    const d = tempRepo(x => { const lp = path.join(x, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(lp, read(lp).replace(/\n## /, '\n**Principles.** The preamble’s own list, which the PRD beside it outranks.\n\n- **Preamble only.** never the list read while PRD.md holds one.\n\n## ')); });
+    const p = docket(['principles'], { cwd: fx(d) });
+    ok('principles reads PRD.md’s first section before the ledger’s preamble when both hold a list: the PRD’s principles, not the preamble’s (FORMAT.md 10)', p.code === 0 && /Capture precedes structure/.test(p.out) && !/Preamble only/.test(p.out), p.out);
+  }
+  // E: the nearer docs/ ledger before a farther plain one
+  {
+    const e2 = fs.realpathSync(tmpDir('e2-')), sub = path.join(e2, 'sub');
+    fs.mkdirSync(path.join(sub, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(e2, 'DECISIONS.md'), LEDGER.replace('## R. Rulings', '## Q. Rulings').replace('### R1.', '### Q1.'));
+    fs.writeFileSync(path.join(sub, 'docs', 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(sub, 'x.js'), 'x(); // R1 near\n');
+    const n = docket(['near'], { cwd: e2, input: nearInput(path.join(sub, 'x.js'), 'x();'), env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('discovery takes the nearer ledger — a docs/DECISIONS.md one directory up — before a plain DECISIONS.md farther up (FORMAT.md 1)', /^Governed here \([^)]*sub\/docs\/DECISIONS\.md, /m.test(n.out) && /^  R1  /m.test(n.out), n.out);
+  }
+  // F: the gate's hash recomputed from git's own diff
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 10; // R2\n');
+    const h = hashOf(d, 'hh'), diff = cp.spawnSync('git', ['diff', 'HEAD', '--no-renames', '--', 'test/fixture/app.js'], { cwd: d, encoding: 'utf8' }).stdout;
+    ok('the gate’s hash is the SHA-256 of the diff it reads, recomputed here from git’s own diff of the one file the change touched (FORMAT.md 16)', diff.length > 0 && h === require('crypto').createHash('sha256').update(diff).digest('hex'), h);
+  }
+  // G: the bound in force, with no --wait
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 11; // R2\n');
+    docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'gb' }) });
+    const log = fs.existsSync(path.join(d, '.docket', 'judge.log')) ? read(path.join(d, '.docket', 'judge.log')) : '';
+    ok('a stop given no --wait bounds its judge at seven hundred seconds, and the judge’s log names the bound it ran under (D37, D42)', /^the judge ended after \d+ seconds?(?:, before it read its prompt)? \(its bound: 700 seconds\)$/m.test(log), log.slice(0, 200));
+  }
+  // an edge stated in the title and again in the meta or the body: one edge, the first statement's clause
+  {
+    const d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. Keeps R2 for now (issue #9)\nPrinciple: Capture precedes structure.\nThis keeps R2 because a drag still reads positions. Reason: r.\n\n### R10. Keeps R3 always (issue #10; keeps R3)\nPrinciple: Capture precedes structure.\nIt keeps R3 as the fold. Reason: r.\n'));
+    let rs = []; try { rs = JSON.parse(docket(['index', '--json'], { cwd: fx(d) }).out).rulings; } catch (e) { rs = []; }
+    const of = (id, to) => ((rs.find(x => x.id === id) || {}).edges || []).filter(e => e.to === to);
+    ok('an edge stated in the title and again in the body is one edge, its clause the title’s; stated in the meta and again in the title, the meta’s (FORMAT.md 5)', of('R9', 'R2').length === 1 && of('R9', 'R2')[0].clause === 'Keeps R2 for now' && of('R10', 'R3').length === 1 && of('R10', 'R3')[0].clause === 'keeps R3', JSON.stringify([of('R9', 'R2'), of('R10', 'R3')]));
+  }
+  // a second surfaced session, beside the last verdict's
+  {
+    const d = tempRepo();
+    state(d, { last: { verdict: 'FAIL', hash: 'x', failures: 2, at: '2026-09-30T10:00:00.000Z', session: 'L' }, sessions: { L: { blocks: 5, history: [2, 2, 2, 2, 2], surfaced: true }, a: { blocks: 5, history: [1, 1], surfaced: true }, b: { blocks: 4, history: [3, 3], surfaced: true } } });
+    const s = docket(['status'], { cwd: fx(d) });
+    ok('status names every surfaced session beside the last verdict’s: the two others on the one Surfaced line, each with its blocks and its failures per verdict (FORMAT.md 16)', /session L is SURFACED/.test(s.out) && /^Surfaced: a \(5 blocks since its last PASS; located failures per verdict: 1 → 1\), b \(4 blocks since its last PASS; located failures per verdict: 3 → 3\) — each waits for the human/m.test(s.out), s.out);
+  }
+  // the gate, the verdict and the stop with no commit, and with no repository: every governed file new, its text the diff
+  for (const [what, git] of [['a repository with no commit', true], ['a tree with no repository', false]]) {
+    const d = fs.realpathSync(tmpDir('nocommit-')); fs.mkdirSync(path.join(d, 'test')); fs.cpSync(FIX, fx(d), { recursive: true });
+    if (git) sh('git', ['init', '-q', '-b', 'main'], d);
+    let g = {}; try { g = JSON.parse(docket(['gate', '--session', 'nc', '--json'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } }).out); } catch (e) { g = {}; }
+    const text = (g.files || []).map(f => '+++ ' + f + '\n' + read(path.join(d, f))).join('');
+    const v = docket(['verdict', 'PASS', '--hash', g.hash || '', '--failures', '0', '--session', 'nc'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } });
+    const again = docket(['gate', '--session', 'nc'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } });
+    const s = docket(['stop', '--judge', 'touch started'], { cwd: d, input: JSON.stringify({ session_id: 'nc' }), env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('in ' + what + ' the gate judges every governed file as new, its hash the SHA-256 of each file’s `+++ <path>` and text, recomputed here; a PASS on it is recorded, and the gate and the stop then let it be (FORMAT.md 16)', g.decision === 'JUDGE' && (g.files || []).includes('test/fixture/app.js') && g.hash === require('crypto').createHash('sha256').update(text).digest('hex') && v.code === 0 && /^SKIP$/m.test(again.out) && s.code === 0 && s.out === '', JSON.stringify(g).slice(0, 200) + '|' + v.err + '|' + again.out + '|' + s.out);
+  }
+  // CI runs neither measurement
+  ok('CI runs none of the measurements — judge.sh, cites.sh, constitute.sh — which need the host and its credentials: the witness and the docket are its steps', !/judge\.sh|cites\.sh|constitute\.sh/.test(read(path.join(ROOT, '.github', 'workflows', 'ci.yml'))), 'a measurement is in CI');
+  // what judge.sh's plants write: the stale case's relation marked, its menu emptied, every cite kept; the number case's fourth section
+  {
+    const JSH = read(path.join(ROOT, 'test', 'judge.sh'));
+    const plant = name => { const a = JSH.indexOf(name + '() {'), b = JSH.indexOf("'; }", a), d = tmpDir('plant-'); fs.cpSync(FIX, d, { recursive: true }); const before = read(path.join(d, 'app.js')); const r = a >= 0 && b > a ? cp.spawnSync('sh', ['-c', JSH.slice(a, b + 4) + '\n' + name], { cwd: d, encoding: 'utf8' }) : { status: -1 }; return { code: r.status, before, after: read(path.join(d, 'app.js')) }; };
+    const ids = t => (t.match(/(?<![\p{L}\p{N}_])R[1-9]\d*(?![\p{L}\p{N}_])/gu) || []).sort().join(',');
+    const s = plant('plant_s'), relate = (s.after.match(/function relate\(a, b\) \{[\s\S]*?\n\}/) || [''])[0];
+    ok('judge.sh’s stale plant marks the relation on the notes and draws no line, empties the relational plane’s menu with its R7 cite on it, and keeps every cite the file had (D19)', s.code === 0 && ids(s.before) === ids(s.after) && !/createElement/.test(relate) && /classList\.add\(mark\)/.test(relate) && /^function openMenu\(n, at\) \{ \/\/ R7: the relational plane keeps its long-press menu\n  return null;/m.test(s.after), s.code + ' ' + ids(s.before) + ' → ' + ids(s.after) + '\n' + relate);
+    const n = plant('plant_n'), bl = n.before.split('\n'), al = n.after.split('\n'), changed = al.map((l, i) => l !== bl[i] ? i : -1).filter(i => i >= 0);
+    ok('…and its number plant makes the sections four on the one line that rules them, its R5 cite kept, and changes nothing else', n.code === 0 && al.length === bl.length && changed.length === 1 && /^const SECTIONS = \['now', 'next', 'later', 'someday'\]; \/\/ R5: /.test(al[changed[0]]), n.code + ' ' + changed.map(i => al[i]).join('|'));
+  }
+  // judge.sh's own command line, its trail, and JUDGE_KEEP
+  {
+    const stubDir = tmpDir('jh-argv-'), argvFile = path.join(stubDir, 'argv'), q = s => "'" + s.replace(/'/g, "'\\''") + "'";
+    fs.writeFileSync(path.join(stubDir, 'claude'), ['#!/bin/sh', 'case "$1" in --version) echo "9.9.9 (stand-in)"; exit 0 ;; esac',
+      'printf "%s\\n" "$@" > ' + q(argvFile),
+      'mkdir -p .docket && printf "%s\\n" "2026-10-01T00:00:00.000Z gate --session x" "2026-10-01T00:00:03.000Z verdict PASS --hash h" > .docket/trail.log',
+      'printf "%s\\n" ' + q(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Renamed.' }] } })), ''].join('\n'));
+    fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+    const r = cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-argv-t-'), JUDGE_RUNS: '1', JUDGE_ONLY: 'c', JUDGE_KEEP: '1' }) });
+    const kept = (r.stdout.match(/^judge\.sh: keeping (.+)$/m) || [])[1] || '', argv = fs.existsSync(argvFile) ? read(argvFile).split('\n').filter(Boolean) : [];
+    ok('judge.sh starts the maker’s session as its header says: the prompt, then -p, the plugin’s copy by --plugin-dir, stream-json with --verbose, acceptEdits and twelve turns, and no allow rule (D37)', /rename the function foldSize to foldExtent/.test(argv[0] || '') && argv.slice(1).join(' ') === '-p --plugin-dir ' + kept + '/c1-plugin --output-format stream-json --verbose --permission-mode acceptEdits --max-turns 12', argv.join(' | '));
+    ok('…prints, under the run, the core’s trail in the project — each command and its seconds since the first (D25)', r.stdout.includes('      trail: gate +0s · verdict PASS +3s\n'), r.stdout);
+    ok('…and with JUDGE_KEEP keeps its scratch directory and names it, the run’s project inside it', kept !== '' && fs.existsSync(path.join(kept, 'c1-project', '.git')), kept + '\n' + r.stdout.slice(0, 200));   // kept under this witness's own temp directory, which goes at its exit
+  }
+  // the protocol's sentences no assertion read
+  {
+    const PR = read(path.join(ROOT, 'judge', 'PROTOCOL.md'));
+    ok('the protocol’s second step always adds the decisions pack to a change of the ledger, and its verdict is in four parts, in order: feature scores, trace discrepancies, failures, the verdict', /A change to the ledger always adds\s+`packs\/decisions\.md`\./.test(PR) && /^    Feature scores\b[^\n]*\n    Trace discrepancies\b[^\n]*\n    Failures\b[^\n]*\n    Verdict\b[^\n]*$/m.test(PR), 'the protocol does not say');
+    ok('…and that the judge never passes a diff with a feature failure because it “reads well overall”, nor tells the maker to “try again”', /never passes a diff with a feature failure because the\s+diff "reads well overall"/.test(PR) && /never tells the maker to\s+"try again"/.test(PR), 'the protocol does not say');
   }
 }
 

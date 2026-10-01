@@ -675,7 +675,7 @@ and is named so, never as one that could not be started) and where its output is
 the session's `blocks` as a recorded FAIL does, with nothing added to its
 `history` (D38). A stop it would judge with no `--judge` given is a usage error,
 exit 2. Beside that count it writes one file, `.docket/judge.log` — the command,
-how the judge ended, and what it printed — for a person to read; nothing in the
+how the judge ended and the bound it ran under, and what it printed — for a person to read; nothing in the
 core reads it (D37).
 
 With `DOCKET_TRAIL` set in the environment, every run of the core in a project
