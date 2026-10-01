@@ -183,10 +183,13 @@ function specDocs(ledgerPath) {
 // ─── 2. parse ───────────────────────────────────────────────────────────────
 
 const NUMERAL_MAX_DIGITS = 15;                                        // FORMAT.md 2: fifteen keeps the number exact
-const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+(.*?)[ \t]*$/s;   // s: a U+2028/U+2029 inside a heading is content to this reader, as it is to splitLines   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
-const SECTION_RE = /^## ([A-Za-z]+)\.\s+(.*?)\s*$/;
-const ADDENDUM_RE = /^> Addendum (\d{4}-\d{2}-\d{2}): (.*?)\s*$/;
-const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+){0,2})\s+(.*?)\s*$/;   // three levels at most (FORMAT.md 7): `§4.5.1.1` is no spec heading
+const HEADING_RE = /^### ([A-Za-z]+)([1-9]\d{0,14})\.[ \t]+((?:.*[^ \t])?)[ \t]*$/s;   // the title to its last non-blank character, read in one pass: a long run of spaces inside it costs no backtracking   // s: a U+2028/U+2029 inside a heading is content to this reader, as it is to splitLines   // a heading ends at spaces and tabs: a bare CR is content, not the end of a line (1)   // ASCII prefix, no leading zero, at most fifteen digits so n is exact (FORMAT.md 2)
+// An entry heading written in another form — another number of #, no space after them, bold, or the id alone at a line's
+// start — read only to name it in an entry-less ledger (D45): it opens no entry (FORMAT.md 2)
+const OTHER_HEADING_RE = /^(?:#{1,6}[ \t]*|\*\*)?[A-Za-z]+[1-9][0-9]*\.(?:\*\*)?(?:[ \t]|$)/;
+const SECTION_RE = /^## ([A-Za-z]+)\.\s+((?:.*\S)?)\s*$/;
+const ADDENDUM_RE = /^> Addendum (\d{4}-\d{2}-\d{2}): ((?:.*\S)?)\s*$/;
+const SPEC_HEADING_RE = /^#{1,6}\s+§(\d+(?:\.\d+){0,2})\s+((?:.*\S)?)\s*$/;   // three levels at most (FORMAT.md 7): `§4.5.1.1` is no spec heading
 // One verb may name several targets joined by "/" ("keeps R1/R2"): one edge per target, the same clause.
 // A verb or adverb may open a sentence with a capital — "Supersedes R1", "In part reverses R6" — and is recorded in
 // lowercase; any other casing is no edge (FORMAT.md 5).
@@ -909,8 +912,18 @@ function runCheck(root, opts) {
         fail(lp, line, 2, 'no entries, yet ' + at.length + (at.length === 1 ? ' line begins' : ' lines begin') + ' "### ", the first "### ' + seen[at[0]].slice(4).split(/[ \t]/)[0] + '"' +
           (viaCr ? ' after a bare CR, which ends no line here (FORMAT.md 1)' : ', not an entry heading (FORMAT.md 2)') +
           ': a ledger with no entries governs nothing, and one meant to govern nothing holds no such line (D39)');
+      } else {
+        const other = seen.map((l, i) => (OTHER_HEADING_RE.test(l) ? i : -1)).filter(i => i >= 0);
+        if (other.length) {
+          const line = (ledger.text.slice(0, starts[other[0]]).match(/\n/g) || []).length + 1;
+          fail(lp, line, 2, 'no entries, yet ' + other.length + (other.length === 1 ? ' line reads' : ' lines read') + ' as an entry heading in another form, the first "' + Array.from(seen[other[0]].trim()).slice(0, 40).join('') + '"; an entry heading is "### <P><n>. <title>" (FORMAT.md 2): a ledger with no entries governs nothing, and one meant to govern nothing holds no such line (D39, D45)');
+        }
       }
     }
+    // D45: a ledger is UTF-8 text; one saved as UTF-16, or holding a NUL byte, reads as no entries at all and would pass as
+    // ungoverned — it fails here, at its first line, named
+    { let b = null; try { b = fs.readFileSync(lp); } catch (e) { b = null; }
+      if (b && ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) || b.includes(0))) fail(lp, 1, 2, 'the ledger is not UTF-8 text' + ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) ? ' — a UTF-16 byte order mark opens it' : ' — it holds a NUL byte') + '; save it as UTF-8 (FORMAT.md 1, D45)'); }
     for (const e of empty ? [] : files) {                              // a spec cite with its space missing is a typo named, not a bare cite counted (FORMAT.md 8)
       const ls = splitLines(fileText(e)), fenced = fencedLines(ls);
       ls.forEach((l, i) => {
@@ -996,7 +1009,8 @@ function runCheck(root, opts) {
       }
       if (old.hasBaseline) {
         const since = ledger.rulings.filter(r => !old.byId.has(r.id));
-        const recorded = pair => since.some(r => r.heading.includes(pair) || r.bodyLines.some(l => l.includes(pair)));
+        // the pair as a word of its own: no path character before it, no digit after — `app.js=40` and `myapp.js=4` carry no `app.js=4`
+        const recorded = pair => { const re = new RegExp('(?:^|[\\s(\\[{,;:`\'"])' + escapeRe(pair) + '(?![0-9])'); return since.some(r => re.test(r.heading) || r.bodyLines.some(l => re.test(l))); };
         if (!ledger.hasBaseline) fail(lp, 1, 7, 'the bare-cites comment is gone, and every allowance with it; an allowance may fall, and rises only on the record (FORMAT.md 9, D41)');
         else for (const f of Object.keys(ledger.baseline)) {
           const was = Object.prototype.hasOwnProperty.call(old.baseline, f) ? old.baseline[f] : 0, now = ledger.baseline[f];
@@ -1211,9 +1225,13 @@ function writeLedger(ledger, text) {
   if (crlf && lf) die('append: ' + ledger.path + ' ends some lines with CRLF and some with LF; a write would have to give the whole file one ending, rewriting lines this entry does not touch, and the ledger is append only (FORMAT.md 1; D4)', 2);
   if (crlf) text = text.replace(/\r?\n/g, '\r\n');
   if (ledger.text.charCodeAt(0) === 0xFEFF && text.charCodeAt(0) !== 0xFEFF) text = '\uFEFF' + text;   // the mark it was saved with stays (FORMAT.md 1)
-  const tmp = ledger.path + '.docket-' + process.pid;
+  let target = ledger.path, mode = null;                              // a ledger that is a link is written where it points, and keeps its mode
+  try { target = fs.realpathSync(ledger.path); } catch (e) { target = ledger.path; }
+  try { mode = fs.statSync(target).mode & 0o7777; } catch (e) { mode = null; }
+  const tmp = target + '.docket-' + process.pid;
   fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, ledger.path);
+  if (mode !== null) fs.chmodSync(tmp, mode);
+  fs.renameSync(tmp, target);
 }
 // A ledger that two sessions can append to at once is a ledger that can lose an entry: each would read the same last
 // id, compute the same next one, and the later write would carry the earlier one away while both callers were told the
@@ -1287,6 +1305,7 @@ function entryArgs(argv) {
   if (!issue || !issue.trim()) die('append: --issue is required (an issue number, or a phrase naming the context the ruling answers)', 2);
   if (/[\r\n\u2028\u2029]/.test(issue)) die('append: --issue is one line — the meta sits on the heading line (FORMAT.md 4)', 2);
   if (/[;()]/.test(issue)) die('append: --issue may not contain ";", "(" or ")" — the meta is one parenthetical whose clauses are split on ";" (FORMAT.md 4)', 2);
+  if (isEdgeClause(issue.trim())) die('append: --issue "' + issue.trim() + '" reads as an edge; the meta opens with a grounding — an issue number or the context the ruling answers — and an edge goes in --edge (FORMAT.md 4, 11)', 2);
   if (!principle || !principle.trim()) die('append: --principle is required (one of `docket principles`)', 2);
   if (!body || !body.trim()) die('append: --body is required (the ruling in prose, with its Reason:)', 2);
   for (const [name, v] of [['--title', title], ['--issue', issue], ['--principle', principle], ['--body', body]].concat(edges.map(e => ['--edge', e]))) {
@@ -1341,7 +1360,26 @@ function buildEntry(argv, root, ledger) {
   }
   const grounding = /^#?\d+$/.test(issue.trim()) ? 'issue #' + issue.trim().replace('#', '') : issue.trim();
   const metaParts = [grounding].concat(parsedEdges.map(e => (e.adverb ? e.adverb + ' ' : '') + e.verb + ' ' + e.tos.join('/') + (e.qualifier ? ' (' + e.qualifier + ')' : '')));   // one clause, the targets joined as the grammar reads them (5)
-  return '### ' + prefix + n + '. ' + title.trim() + ' (' + metaParts.join('; ') + ')\n' + 'Principle: ' + pr.name + '.\n' + body.trim() + '\n';
+  const entry = '### ' + prefix + n + '. ' + title.trim() + ' (' + metaParts.join('; ') + ')\n' + 'Principle: ' + pr.name + '.\n' + body.trim() + '\n';
+  refuseFailing(root, ledger, selfId, entry);
+  return entry;
+}
+// FORMAT.md 11: an entry append writes satisfies the header contract and adds no failure to check — the ledger is append only, so
+// what check would fail is refused before the write, read as check reads it, on the ledger as it would stand: the title, the
+// grounding and every edge's qualifier are the entry's text as much as its body is.
+function refuseFailing(root, ledger, selfId, entry) {
+  const before = ledger.text, after = (before.trim() ? ensureNl(before) + '\n' : '') + entry;
+  const parsed = parseLedger(after, ledger.path), r = parsed.byId.get(selfId), why = [];
+  if (!r) why.push('the entry would not read as ' + selfId + ' (FORMAT.md 2)');
+  else {
+    const { meta, end } = metaOf(r.heading);
+    if (!meta || end !== r.heading.length - 1) why.push('the heading would not end with its parenthetical meta — a code span or a parenthesis in --title or --issue runs into it (FORMAT.md 4, 11)');
+    else { const cl = clausesOf(meta); if (!cl.length || isEdgeClause(cl[0])) why.push('the meta would open with an edge, not a grounding (FORMAT.md 11)'); for (const c of cl.slice(1)) if (!isEdgeClause(c)) why.push('a meta clause would not be an edge: "' + c + '" (FORMAT.md 11)'); }
+  }
+  const run = (text, led) => runCheck(root, { ctx: { root, ledgers: new Map([[ledger.path, led]]), files: [{ path: ledger.path, ledger: ledger.path, rel: rel(root, ledger.path), text }], vendored: [] } }).failures;
+  const key = f => f.k + '|' + f.line + '|' + f.message, had = new Set(run(before, ledger).map(key));
+  for (const f of run(after, parsed)) if (f.k !== 7 && !had.has(key(f))) why.push('check ' + f.k + ', line ' + f.line + ': ' + f.message);
+  if (why.length) die('append: the entry would fail as written, and the ledger is append only, so nothing is written (FORMAT.md 11):\n  ' + uniq(why).join('\n  '), 2);
 }
 function afterWrite(argv, root, ledger, printed) {
   const res = runCheck(root);
@@ -1355,7 +1393,9 @@ function appendAddendum(argv) {
   const id = flag(argv, '--addendum'), text = flag(argv, '--text');
   if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);   // usage first, outside the lock
   const { root, ledger, release } = lockedLedger(argv);
-  const r = ledger.byId.get(id);
+  const res = resolveRuling(ledger, id || '');                        // an id is read as governs and --edge read it (FORMAT.md 12)
+  if (res.ambiguous) die('append: --addendum ' + id + ' names ' + res.ambiguous.join(' and ') + ', which differ only in case — name one exactly', 2);
+  const r = res.r;
   if (!r) die('append: --addendum ' + id + ' names no ruling in ' + rel(root, ledger.path), 2);
   if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);
   const um = UNSAFE_RE.exec(text);
@@ -1388,9 +1428,16 @@ function rewriteBaseline(argv) {
   writeLedger(ledger, ensureNl(lines.join('\n')));
   return afterWrite(argv, root, ledger, comment);
 }
+// Each of append's three modes takes its own options, and refuses another's: an option accepted and dropped would let a reader
+// believe it had an effect (FORMAT.md 11).
+const ENTRY_OPTS = ['--title', '--issue', '--principle', '--body', '--edge', '--prefix'];
 function append(argv) {
-  if (has(argv, '--addendum')) return appendAddendum(argv);
-  if (has(argv, '--baseline')) return rewriteBaseline(argv);
+  const mode = has(argv, '--addendum') ? '--addendum' : has(argv, '--baseline') ? '--baseline' : null;
+  const foreign = mode === '--addendum' ? ENTRY_OPTS.concat(['--baseline']) : mode === '--baseline' ? ENTRY_OPTS.concat(['--text']) : ['--text'];
+  const extra = foreign.filter(o => has(argv, o));
+  if (extra.length) die('append: ' + (mode ? mode + ' does not take ' : 'an entry does not take ') + extra.join(', ') + ' — the option would be dropped, and a dropped option reads as one that worked (FORMAT.md 11)', 2);
+  if (mode === '--addendum') return appendAddendum(argv);
+  if (mode === '--baseline') return rewriteBaseline(argv);
   return appendEntry(argv);
 }
 
@@ -1456,7 +1503,7 @@ function blameCommits(ledgerPath) {
   const r = sh('git', ['blame', '-w', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));
   if (r.status !== 0) return null;
   const m = new Map();
-  for (const line of r.stdout.split('\n')) { const h = /^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/.exec(line); if (h) m.set(Number(h[2]), h[1]); }
+  for (const line of r.stdout.split('\n')) { const h = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) \d+ (\d+)(?: \d+)?$/.exec(line); if (h) m.set(Number(h[2]), h[1]); }   // SHA-1 or SHA-256 names
   return m;
 }
 function pendingAddenda(ledger) {
@@ -1465,12 +1512,14 @@ function pendingAddenda(ledger) {
   const writtenAfter = (edgeLine, addLine) => {
     if (blame === undefined) blame = blameCommits(ledger.path);
     if (!blame) return true;
-    const a = blame.get(addLine), e = blame.get(edgeLine), zero = /^0{40}$/;
+    const a = blame.get(addLine), e = blame.get(edgeLine), zero = /^0+$/;
     if (!a || !e || zero.test(e) || a === e) return true;             // unknown, not committed yet, or one commit
     if (zero.test(a)) return false;                                   // the addendum is not committed and the edge is: the edge came first
-    const k = a + e;
-    if (!anc.has(k)) anc.set(k, sh('git', ['merge-base', '--is-ancestor', a, e], path.dirname(ledger.path)).status === 0);
-    return anc.get(k);
+    // the commits after the addendum's, asked once for each addendum's commit and not once per pair: the edge's commit is one
+    // of them when the addendum's is its ancestor (blame names only ancestors of HEAD, or none)
+    if (!anc.has(a)) { const d = sh('git', ['rev-list', '--ancestry-path', a + '..HEAD'], path.dirname(ledger.path)); anc.set(a, d.status === 0 ? new Set(d.stdout.split('\n').filter(Boolean)) : null); }
+    const after = anc.get(a);
+    return after === null ? sh('git', ['merge-base', '--is-ancestor', a, e], path.dirname(ledger.path)).status === 0 : after.has(e);
   };
   for (const r of ledger.rulings) {
     for (const a of r.addenda) {
@@ -1573,8 +1622,9 @@ function diffLedgers(a, b) {
     if (!cur) { changed.push({ id: o.id, kind: 'removed', line: o.line }); continue; }
     if (cur.heading !== o.heading) changed.push({ id: o.id, kind: 'heading', from: o.heading, to: cur.heading, line: cur.line });
     if (!bodyOnlyAppended(o.bodyLines, cur.bodyLines)) changed.push({ id: o.id, kind: 'body', line: cur.line });
-    const had = new Set(o.addenda.map(x => x.date + '|' + x.text));
-    for (const x of cur.addenda) if (!had.has(x.date + '|' + x.text)) addenda.push({ id: o.id, date: x.date, text: x.text, line: x.line });
+    const had = new Map();                                             // counted, not a set: one that repeats an earlier one, date and words, is added too
+    for (const x of o.addenda) { const k = x.date + '|' + x.text; had.set(k, (had.get(k) || 0) + 1); }
+    for (const x of cur.addenda) { const k = x.date + '|' + x.text, n = had.get(k) || 0; if (n > 0) had.set(k, n - 1); else addenda.push({ id: o.id, date: x.date, text: x.text, line: x.line }); }
   }
   const oldEdges = new Set();
   for (const r of a.rulings) for (const e of r.edges) oldEdges.add(edgeKey(e));
@@ -1916,7 +1966,7 @@ function governedAt(root, have, base) {
     const name = path.posix.basename(p), dir = path.posix.dirname(p);
     if (name === 'DECISIONS.md') { out.push(p); continue; }           // a ledger the base held
     if ((name === 'UIUX.md' || name === 'PRD.md') && atBase.has(dir === '.' ? 'DECISIONS.md' : dir + '/DECISIONS.md')) { out.push(p); continue; }   // a spec document beside it (D40)
-    if (/^DECISIONS.*\.md$/.test(name)) continue;                     // a ledger document is never governed code
+    if (isLedgerDoc(p)) continue;                                      // a ledger document is never governed code, its name read in any case (FORMAT.md 8)
     const b = showBytes(p);
     if (b === null || b.subarray(0, SNIFF_BYTES).includes(0)) continue;   // binary at the base, as isTextFile reads the working tree
     const t = b.toString('utf8');

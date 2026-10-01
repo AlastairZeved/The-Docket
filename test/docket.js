@@ -4074,5 +4074,103 @@ const SEC = String.fromCharCode(0xa7);
   }
 }
 
+// ── the ledger's writer and readers agree: append refuses what check would fail; a pair, an addendum, an id, a link, a long
+// heading, a SHA-256 history, another heading form and a ledger document's name are each read one way (FORMAT.md 1, 8, 9,
+// 11, 12, 13; D21, D41, D45) ──
+{
+  const fx = d => path.join(d, 'test', 'fixture'), L = d => read(path.join(fx(d), 'DECISIONS.md'));
+  const ap = (d, extra) => docket(['append', '--title', 'A later ruling', '--principle', 'Capture precedes structure', '--body', 'It holds. Reason: r.'].concat(extra), { cwd: fx(d) });
+  const Q = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
+  {
+    const d = tempRepo(), before = L(d);
+    for (const [why, extra, title] of [
+      ['an --issue that reads as an edge to no ruling', ['--issue', 'extends R99']],
+      ['an --issue naming a ruling that does not exist', ['--issue', 'see R99']],
+      ['an --issue that reads as an edge to a ruling that exists: the meta opens with a grounding', ['--issue', 'supersedes R1']],
+      ['an edge whose qualifier names a ruling that does not exist', ['--issue', '7', '--edge', 'keeps R1 (see R99)']],
+      ['an --issue citing a spec heading the spec documents do not hold', ['--issue', 'UIUX ' + SEC + '9.9']],
+      ['a title that names an edge from the entry to itself', ['--issue', '7'], 'Keeps R9 always'],
+      ['a title and an --issue whose code span runs into the meta', ['--issue', 'b`'], 'Use `a'],
+    ]) {
+      const r = docket(['append', '--title', title || 'A later ruling', '--principle', 'Capture precedes structure', '--body', 'It holds. Reason: r.'].concat(extra), { cwd: fx(d) });
+      ok('append refuses, before writing, ' + why + ': exit 2, the ledger unchanged (FORMAT.md 11)', r.code === 2 && L(d) === before, r.code + ' ' + r.err + r.out);
+    }
+    const r = ap(d, ['--issue', '7']);
+    ok('…while the same call with a plain grounding is written, and check passes', r.code === 0 && /^### R9\. A later ruling \(issue #7\)$/m.test(L(d)) && /check: ok/.test(r.out), r.code + ' ' + r.err + r.out);
+  }
+  {
+    const d = tempRepo(), lp = path.join(fx(d), 'DECISIONS.md'), base = read(lp);
+    const raise = body => { fs.writeFileSync(lp, base.replace('bare-cites app.js=3', 'bare-cites app.js=4').replace(/\n*$/, '\n') + '\n### R9. The toolbar keeps a second bare cite (issue #9)\nPrinciple: Capture precedes structure.\n' + body + ' Reason: r.\n'); return docket(['check'], { cwd: fx(d) }); };
+    for (const body of ['It raises myapp.js=4 for the record.', 'It raises app.js=40 for the record.']) {
+      const r = raise(body);
+      ok('check 7 does not read the pair `app.js=4` inside "' + body + '": a pair is a word of its own (FORMAT.md 9, D41)', r.code === 1 && /bare-cites allowance for app\.js rose from 3 to 4 with no entry recording it/.test(r.out), r.out);
+    }
+    const r = raise('It raises `app.js=4`, the toolbar’s second label.');
+    ok('…and an entry written since that carries `app.js=4` as a word of its own records the rise: check passes (D41, both sides)', r.code === 0, r.out);
+  }
+  {
+    const d = tempRepo();
+    for (let i = 0; i < 2; i++) { docket(['append', '--addendum', 'R3', '--text', 'the same words'], { cwd: fx(d) }); sh('git', Q.concat(['commit', '-qam', 'a' + i]), d); }
+    const r = docket(['diff', 'HEAD~1', 'HEAD'], { cwd: fx(d) });
+    ok('diff lists an addendum that repeats an earlier one, date and words, as added: each is counted (FORMAT.md 13)', /^Addenda added \(1\):$/m.test(r.out) && /^  R3  \d{4}-\d{2}-\d{2}: the same words/m.test(r.out), r.out);
+  }
+  {
+    const d = tempRepo(), r = docket(['append', '--addendum', 'r3', '--text', 'read whatever its case'], { cwd: fx(d) });
+    ok('append --addendum resolves an id whatever its case, as governs and --edge do (FORMAT.md 12)', r.code === 0 && /read whatever its case/.test(docket(['governs', 'R3'], { cwd: fx(d) }).out), r.code + ' ' + r.err);
+  }
+  {
+    const d = tempRepo(), before = L(d);
+    for (const [why, args] of [['--addendum with --title', ['append', '--addendum', 'R3', '--text', 'x', '--title', 'y']], ['--baseline with --title', ['append', '--baseline', '--title', 'y']], ['--addendum with --baseline', ['append', '--addendum', 'R3', '--text', 'x', '--baseline']], ['an entry with --text', ['append', '--title', 'T', '--issue', '7', '--principle', 'Capture precedes structure', '--body', 'Reason: r.', '--text', 'x']]]) {
+      const r = docket(args, { cwd: fx(d) });
+      ok('append refuses ' + why + ': the option would be dropped, so nothing is written, exit 2 (FORMAT.md 11)', r.code === 2 && L(d) === before && /does not take/.test(r.err), r.code + ' ' + r.err);
+    }
+  }
+  {
+    const d = tempRepo(x => { const f = path.join(x, 'test', 'fixture'); fs.mkdirSync(path.join(f, 'shared')); fs.renameSync(path.join(f, 'DECISIONS.md'), path.join(f, 'shared', 'LEDGER.md')); fs.symlinkSync(path.join('shared', 'LEDGER.md'), path.join(f, 'DECISIONS.md')); });
+    const tgt = path.join(fx(d), 'shared', 'LEDGER.md'); fs.chmodSync(tgt, 0o640);
+    const r = ap(d, ['--issue', '7']);
+    ok('append writes a ledger that is a link through to its target: the link stays a link, the target gains the entry, its mode kept', r.code === 0 && fs.lstatSync(path.join(fx(d), 'DECISIONS.md')).isSymbolicLink() && /^### R9\. A later ruling/m.test(read(tgt)) && (fs.statSync(tgt).mode & 0o777) === 0o640, r.code + ' ' + r.err + r.out);
+  }
+  {
+    const d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. a' + ' '.repeat(64000) + 'b (issue #9)\nPrinciple: Capture precedes structure.\nReason: r.\n'));
+    const t0 = Date.now(), r = docket(['governs', 'R9'], { cwd: fx(d) }), ms = Date.now() - t0;
+    ok('a heading with sixty-four thousand spaces inside it is read in one pass: governs answers in under three seconds', r.code === 0 && ms < 3000, ms + ' ms, exit ' + r.code);
+  }
+  for (const fmt of ['sha1', 'sha256']) {
+    const d = tmpDir('fmt-'); fs.mkdirSync(path.join(d, 'test')); fs.cpSync(FIX, path.join(d, 'test', 'fixture'), { recursive: true });
+    sh('git', ['init', '-q', '--object-format=' + fmt, '-b', 'main'], d); sh('git', Q.concat(['add', '-A']), d); sh('git', Q.concat(['commit', '-qm', 'f']), d);
+    docket(['append', '--addendum', 'R6', '--text', 'written after every edge into it'], { cwd: fx(d) }); sh('git', Q.concat(['commit', '-qam', 'a']), d);
+    let st = {}; try { st = JSON.parse(docket(['status', '--json'], { cwd: fx(d) }).out); } catch (e) { st = {}; }
+    ok('an addendum written after every edge into its entry is pending in a ' + fmt.toUpperCase() + ' repository too: blame names commits of either length (D21)', (st.pendingAddenda || []).some(x => x.id === 'R6' && /written after every edge/.test(x.text)), JSON.stringify(st.pendingAddenda));
+  }
+  {
+    const d = tempRepo(), tr = path.join(tmpDir('trace-'), 'git.log');
+    for (let i = 0; i < 3; i++) { docket(['append', '--addendum', 'R1', '--text', 'addendum ' + i], { cwd: fx(d) }); sh('git', Q.concat(['commit', '-qam', 'add' + i]), d); }
+    for (let i = 0; i < 4; i++) { ap(d, ['--issue', String(20 + i), '--edge', 'extends R1']); sh('git', Q.concat(['commit', '-qam', 'edge' + i]), d); }
+    const r = docket(['status', '--json'], { cwd: fx(d), env: { GIT_TRACE: tr } });
+    const t = fs.existsSync(tr) ? read(tr) : '', mb = (t.match(/merge-base/g) || []).length, rl = (t.match(/rev-list --ancestry-path/g) || []).length;
+    let st = {}; try { st = JSON.parse(r.out); } catch (e) { st = {}; }
+    ok('status asks git for ancestry once per addendum commit, not once per (addendum, edge) pair: three addenda against four later edges, no merge-base, at most one rev-list for each commit that wrote an addendum (FORMAT.md 6, D21)', mb === 0 && rl >= 1 && rl <= 4 && !(st.pendingAddenda || []).some(x => x.id === 'R1'), 'merge-base ' + mb + ', rev-list ' + rl + ', pending ' + JSON.stringify(st.pendingAddenda));
+  }
+  for (const [form, text] of [['## R1.', '## R1. First (issue #1)\nBody. Reason: a.\n'], ['###R1.', '###R1. First (issue #1)\nReason: a.\n'], ['**R1.**', '**R1.** First (issue #1)\nReason: a.\n'], ['R1. at a line’s start', 'R1. First (issue #1)\nReason: a.\n']]) {
+    const d = tmpDir('forms-'); fs.writeFileSync(path.join(d, 'DECISIONS.md'), 'Preamble.\n\n' + text); fs.writeFileSync(path.join(d, 'a.js'), 'const a = 1;\n'); sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d);
+    const r = docket(['check'], { cwd: d }), first = text.split('\n')[0];
+    ok('check 2 fails an entry-less ledger holding an entry heading in another form — ' + form + ' — at its line, named (D45)', r.code === 1 && r.out.split('\n').some(l => l.startsWith('DECISIONS.md:3  check 2: no entries, yet 1 line reads as an entry heading in another form, the first "' + first + '"')), r.out + r.err);
+  }
+  {
+    const d = tmpDir('utf16-');
+    fs.writeFileSync(path.join(d, 'DECISIONS.md'), Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from('Preamble.\n\n### R1. First (issue #1)\nReason: a.\n', 'utf16le')]));
+    fs.writeFileSync(path.join(d, 'a.js'), 'const a = 1;\n'); sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d);
+    const r = docket(['check'], { cwd: d });
+    ok('check 2 fails a ledger saved as UTF-16: it is not UTF-8 text, and read as such it holds no entries (FORMAT.md 1, D45)', r.code === 1 && /^DECISIONS\.md:1  check 2: the ledger is not UTF-8 text — a UTF-16 byte order mark opens it; save it as UTF-8 \(FORMAT\.md 1, D45\)$/m.test(r.out), r.out + r.err);
+  }
+  {
+    const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), 'Notes on R6.\n'));
+    fs.appendFileSync(path.join(fx(d), 'decisions-notes.md'), 'More on R6.\n');
+    const g = docket(['gate', '--session', 'ld'], { cwd: d });
+    ok('a ledger document named in lower case is a ledger document to the gate as to near and governs: its edit is no governed change, the gate answers SKIP (FORMAT.md 8)', /^SKIP/.test(g.out), g.out + g.err);
+  }
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -30,7 +30,13 @@ and `check` says so with an info line. Such a ledger holds no line that begins
 reads as though it rules and would rule
 nothing — its headings fail the grammar (2), or a bare CR began them — and check 2
 fails at the first such line, its lines read for this one question as its author
-ended them, a bare CR ending one (13, D39). A file
+ended them, a bare CR ending one (13, D39). Nor does it hold a line that reads
+as an entry heading in another form — another number of `#`, no space after
+them, bold, or the id alone at a line's start (`## R1.`, `###R1.`, `**R1.**`,
+`R1.`) — and check 2 fails at the first such line too. And a ledger is UTF-8
+text: one that a UTF-16 byte order mark opens reads as no entries at all, and
+one that holds a NUL byte is not text (1), so check 2 fails either at its first
+line (D45). A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand.
 
 The stop's commands take the same root: `gate`, `verdict` and `stop`, and the
@@ -296,7 +302,7 @@ than the number of files that carry a cite, and why a ledger with no entries
 still has a governed tree to name while governing nothing in it.
 
 A **governed file** is a text file with at least one cite that resolves. A
-**ledger document** — any file named `DECISIONS*.md`, the ledger itself or a
+**ledger document** — any file named `DECISIONS*.md`, the name read in any case, the ledger itself or a
 frozen copy of it — has its cites checked (check 1) but is never governed code:
 `governs`, `status` and `gate` leave it out of code cites and governed files,
 and `near` is silent for an edit inside one: the ledger is amended through
@@ -340,7 +346,8 @@ file's allowance is 0. When the comment is absent, counts are reported and
 nothing fails. `docket append --baseline` rewrites the comment from the current
 counts; on a tree with no bare cites that is the empty comment, the strictest
 baseline. An allowance may fall; one it raises, or a file it lists anew, fails
-check 7 until an entry written since carries the new pair, `app.js=4` — the
+check 7 until an entry written since carries the new pair, `app.js=4`, as a word of its own — no
+path character before it and no digit after, so `app.js=40` and `myapp.js=4` do not carry it — the
 ratchet is loosened on the record, with its reason, or not at all (13, D41).
 
 ## 10. Principles
@@ -378,8 +385,14 @@ Both are read outside code spans and fenced blocks (5): a `Reason:` or a
 `Principle:` line quoted in code is an example, not the statement.
 
 `docket append` writes only entries that satisfy it, and refuses — before
-writing, since the ledger is append only — an entry whose title or body names a
-ruling that does not exist (the entry's own id excepted); it writes in this form:
+writing, since the ledger is append only — an entry that would add a failure to
+`check`: its title, its grounding, an edge's qualifier or its body naming a ruling
+that does not exist (the entry's own id excepted) or a spec heading that does not,
+an edge to itself, a meta a code span runs into, or an `--issue` that reads as an
+edge; it is read as `check` reads it, on the ledger as it would stand. Each of its
+three modes refuses another mode's options — `--addendum` takes `--text`, `--baseline`
+takes neither, an entry takes no `--text` — since a dropped option reads as one that
+worked. It writes in this form:
 
     ### <P><n+1>. <title> (<grounding>; <verb> <P>m; <verb> <P>k)
     Principle: <principle>.
@@ -394,7 +407,10 @@ fail (check 2), and a repeated id resolves — for a cite, `query`, `governs` an
 `near` — to the first entry bearing it, the one at its position; `docket
 append` writes `<P><max+1>` for the prefix given with `--prefix`, else for the
 prefix of the ledger's last entry; a ledger with no entry requires `--prefix`
-and `append` exits 2 without it.
+and `append` exits 2 without it. An id given to a command — `governs`,
+`append --edge` and `append --addendum` — resolves exactly, and failing that
+whatever its case, when exactly one entry's id matches it so; two ids that
+differ only in case are both named and the command exits 2.
 
 ## 13. What `docket check` verifies
 
@@ -409,7 +425,7 @@ prints straight.
 | k | Check | Fails when |
 |---|---|---|
 | 1 | Cites resolve | a cite in a git-tracked text file names a number that does not exist in that file's ledger |
-| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows; or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39) |
+| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows; or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39); or the ledger has no entries and a line of it reads as an entry heading in another form (1, D45); or the ledger is not UTF-8 text — a UTF-16 byte order mark opens it, or it holds a NUL byte (1, D45) |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |
@@ -459,7 +475,8 @@ exits 2 when `<id>` is not one of its entries; `query <term>` prints that nothin
 matches and exits 0; `diff` exits 2 when a revision or file cannot be read,
 and 1 when an existing entry's heading or body differs between the two readings
 — the comparison is check 7's own, so the two cannot disagree — and lists that
-first, before what was added.
+first, before what was added; each addendum is counted, so one that repeats an
+earlier one, date and words, is listed as added.
 
 ## 14. A worked example
 
