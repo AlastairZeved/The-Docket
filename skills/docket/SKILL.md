@@ -9,7 +9,7 @@ allowed-tools: Bash(node *docket.js*)
 `/docket` — the docket: the last rulings, the uncited ones, pending addenda,
 and what the witness says.
 
-`/docket query <term>` — every ruling whose heading or body matches, with its
+`/docket query <terms>` — every ruling whose heading or body matches any of the terms, with its
 edges and addenda.
 
 `/docket governs <id>` — one ruling: what it governs, what governs it, each
@@ -27,7 +27,7 @@ run `status`:
 For `query`, `governs` and `diff`, run the command yourself with the arguments given:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" query <term>
+node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" query <terms>
 node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" governs <id>
 node "${CLAUDE_PLUGIN_ROOT}/bin/docket.js" diff <a> <b>
 ```

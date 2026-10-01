@@ -807,15 +807,18 @@ function printRuling(ledger, r, lines) {
   for (const e of inEdges(ledger, r.id)) lines.push('  ← ' + renderEdge(e) + '  — "' + e.clause + '"');
   for (const a of r.addenda) lines.push('  > Addendum ' + a.date + ': ' + a.text);
 }
+// Every ruling any term matches — its id, or a word of its heading or body — once each, in the ledger's order: the intake runs
+// it with the nouns of an answer (RULE.md 4, D4's addendum)
 function query(argv) {
-  const term = argv._[1];
-  if (!term) die('usage: docket query <term>', 2);
+  const terms = argv._.slice(1);
+  if (!terms.length) die('usage: docket query <term>…', 2);
+  if (terms.some(t => !t.trim())) die('query: a term is empty or blank, and would match every ruling; name a word', 2);
   const { ledger } = ledgerFromCwd(argv);
-  const t = term.toLowerCase();
-  const hits = ledger.rulings.filter(r => r.id.toLowerCase() === t || r.heading.toLowerCase().includes(t) || r.body.toLowerCase().includes(t));
+  const ts = terms.map(t => t.toLowerCase());
+  const hits = ledger.rulings.filter(r => ts.some(t => r.id.toLowerCase() === t || r.heading.toLowerCase().includes(t) || r.body.toLowerCase().includes(t)));
   if (argv.json) { out(JSON.stringify(hits.map(r => Object.assign(rulingJson(r), { inEdges: inEdges(ledger, r.id).map(e => ({ from: e.from, verb: e.verb, adverb: e.adverb, to: e.to, qualifier: e.qualifier, clause: e.clause })) })), null, 2)); return 0; }
   const lines = [];
-  if (!hits.length) lines.push('no ruling matches "' + term + '" in ' + path.basename(ledger.path));
+  if (!hits.length) lines.push('no ruling matches ' + terms.map(t => '"' + t + '"').join(', ') + ' in ' + path.basename(ledger.path));
   for (const r of hits) printRuling(ledger, r, lines);
   out(lines.join('\n'));
   return 0;
@@ -2475,6 +2478,7 @@ function protocol(argv) {
 }
 function pack(argv) {
   const dir = path.join(__dirname, '..', 'packs');
+  if (has(argv, '--list') && argv._.length > 1) die('pack: --list prints every pack and takes no name; name the packs without it', 2);   // an argument accepted and ignored is a silence
   if (has(argv, '--list') || !argv._[1]) {
     if (!isDir(dir)) die('pack: packs/ is not beside this file\'s bin/ — the packs live in the plugin; the vendored witness at test/docket.js carries none', 2);
     const names = fs.readdirSync(dir).filter(f => /\.md$/.test(f)).sort();
@@ -2569,7 +2573,7 @@ const USAGE = [
   '  docket check                        the seven checks (exit 1 on a failure)',
   '  docket spec-check [--all]           token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
   '  docket index                        the whole parse as JSON',
-  '  docket query <term>                 rulings whose heading or body match, with edges and addenda',
+  '  docket query <term>…               rulings whose heading or body match any term, with edges and addenda',
   '  docket governs <id> [<id>…]         edges in and out with their clauses, addenda, code cites',
   '  docket principles                   the principle list',
   '  docket append --title --issue --principle [--edge "<verb> <id>"]... --body   a new entry, checked',
@@ -2594,6 +2598,9 @@ const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '-
 const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
+// The arguments each subcommand takes, beside its options: a number, or every one it is given
+const POSITIONALS = { near: 0, index: 0, check: 0, 'spec-check': 0, append: 0, query: Infinity, governs: Infinity, principles: 0, status: 0, diff: 2, vendor: 1,
+  constitute: 0, intake: 1, gate: 0, verdict: 1, protocol: 0, pack: Infinity, transcript: 1, stop: 0 };
 const OPTIONS = {
   near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
@@ -2672,6 +2679,10 @@ function main() {
     if (a.startsWith('--') && a !== '--help' && !allowed.includes(a)) die(sub + ': ' + a + ' is not an option of ' + sub + '; its options are ' + (allowed.join(', ') || 'none'), 2);
     if (TAKES_VALUE.has(a)) i++;                                        // the value after a flag is a value, whatever it looks like
   }
+  // An argument it does not take is a usage error, as an option it does not read is: accepted and ignored, a second word would
+  // let a reader believe it had narrowed what ran (FORMAT.md 13, D4's addendum)
+  const most = POSITIONALS[sub], extra = argv._.slice(1 + most);
+  if (extra.length) die(sub + ': ' + JSON.stringify(extra[0]) + ' is an argument ' + sub + ' does not take; it takes ' + (most === 0 ? 'none' : most === 1 ? 'one' : 'two') + ' (docket --help)', 2);
   return table[sub](argv);
 }
 // The walk's bound is thrown, so that a command that reads a tree past it as ungoverned can; any other refuses here, exit 2,

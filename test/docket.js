@@ -1096,7 +1096,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('…a loose entry (no contract line) is held to nothing: check passes and the edge stays unread — D4\'s cost, stated in FORMAT.md 4', r.code === 0 && JSON.parse(docket(['index'], { cwd: path.join(loose, 'test', 'fixture', 'loose') }).out).rulings.find(x => x.id === 'R2').edges.length === 0, r.out);
   // usage errors for a bare query or governs, and append's other required flags
   r = docket(['query'], { cwd: FIX });
-  ok('query without a term is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket query <term>', r.err);
+  ok('query without a term is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket query <term>…', r.err);
   r = docket(['governs'], { cwd: FIX });
   ok('governs without an id is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket governs <id> [<id>…]', r.err);
   const rq = tempRepo(), rqCwd = path.join(rq, 'test', 'fixture');
@@ -4641,6 +4641,20 @@ const SEC = String.fromCharCode(0xa7);
   ok('an addendum that would add a failure to check — a spec cite to no heading, a bare § past the allowance — is refused before it is written, as an entry is, and the ledger is as it was (FORMAT.md 11, D4’s addendum)', spec.code === 2 && /^append: the addendum would fail as written/.test(spec.err) && /check 3, line \d+: /.test(spec.err) && bare.code === 2 && /check 4, line \d+: /.test(bare.err) && read(led) === before, spec.err + ' | ' + bare.err);
   const good = docket(['append', '--addendum', 'R3', '--text', 'see UIUX ' + SEC + '2 for the floor'], { cwd: fx, env: { DOCKET_TODAY: '2030-02-28' } });
   ok('…and one that adds none is written, dated the day DOCKET_TODAY names', good.code === 0 && read(led).includes('> Addendum 2030-02-28: see UIUX ' + SEC + '2 for the floor'), good.out + good.err);
+}
+
+// ── query reads each argument as a term; an argument a subcommand does not take is refused (FORMAT.md 13, D4's addendum) ──
+{
+  const fx = path.join(tempRepo(), 'test', 'fixture');
+  const ids = r => r.out.split('\n').filter(l => /^[A-Za-z]+\d+  /.test(l)).map(l => l.split(' ')[0]);
+  const order = JSON.parse(docket(['index', '--json'], { cwd: fx }).out).rulings.map(r => r.id);
+  const q1 = docket(['query', 'toolbar'], { cwd: fx }), q3 = docket(['query', 'lot'], { cwd: fx }), q2 = docket(['query', 'lot', 'toolbar'], { cwd: fx });
+  const want = order.filter(id => ids(q1).includes(id) || ids(q3).includes(id));
+  ok('query reads each argument as a term and lists every ruling any term matches, once each, in the ledger’s order — the nouns of an answer, as the intake runs it (RULE.md 4, FORMAT.md 13)', q2.code === 0 && ids(q1).length > 0 && ids(q3).some(id => !ids(q1).includes(id)) && ids(q2).join() === want.join(), [ids(q1), ids(q3), ids(q2)].map(x => x.join()).join(' | '));
+  const none = docket(['query', 'xyzzy', 'plugh'], { cwd: fx }), blank = docket(['query', 'toolbar', ' '], { cwd: fx });
+  ok('…says which terms matched nothing when none did, exit 0, and refuses a blank term, which would match every ruling', none.code === 0 && none.out.trim() === 'no ruling matches "xyzzy", "plugh" in DECISIONS.md' && blank.code === 2 && /^query: a term is empty or blank/.test(blank.err), none.out + ' | ' + blank.err);
+  const ex = [['check', 'extra'], ['gate', '--session', 'x', 'extra'], ['diff', 'HEAD', 'HEAD', 'extra'], ['status', 'x'], ['verdict', 'PASS', 'x'], ['pack', '--list', 'code']].map(a => docket(a, { cwd: fx }));
+  ok('every subcommand refuses, exit 2, an argument it does not take, as it refuses an option it does not read — check, gate, diff, status, verdict, and pack --list given a name', ex.every(r => r.code === 2 && /(is an argument \w+ does not take|--list prints every pack and takes no name)/.test(r.err)), ex.map(r => r.code + ' ' + r.err.trim()).join(' | '));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

@@ -497,8 +497,11 @@ another shape (`4.5:10`, `4.5 : 1`, `4.5 to 1`) fails, named, and is not read as
 prose — which names exactly two tokens or fails, and whose ratio is recomputed from the two
 hexes to two decimals (b): the stated ratio is rounded half-up on its written
 digits, the recomputed one on its value, and the two are compared in hundredths. `governs <id>` names the ledger it searched and
-exits 2 when `<id>` is not one of its entries; `query <term>` prints that nothing
-matches and exits 0; `diff` exits 2 when a revision or file cannot be read,
+exits 2 when `<id>` is not one of its entries; `query <term>…` reads each argument
+as a term, lists every ruling any term matches, once each, in the ledger's order,
+refuses a blank term, and prints that nothing matches and exits 0 when none does;
+every subcommand refuses, exit 2, an argument it does not take, as it refuses an
+option it does not read; `diff` exits 2 when a revision or file cannot be read,
 and 1 when an existing entry's heading or body differs between the two readings
 — the comparison is check 7's own, so the two cannot disagree — and lists that
 first, before what was added; each addendum is counted, so one that repeats an
