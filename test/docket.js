@@ -4442,5 +4442,22 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and with n below the count keeps the last n assistant turns and what follows the first of them', t2 === '── assistant\ntwo\n── assistant\nthree\n', JSON.stringify(t2));
 }
 
+// ── the trail's cuts, one rule (D14's addendum, D42): n characters in all, the mark among them, by code points ──
+{
+  const d = tempRepo(); fs.mkdirSync(path.join(d, '.docket'), { recursive: true });
+  const id40 = 'a'.repeat(40), id41 = 'b'.repeat(38) + '\u{1F600}' + 'cc';       // 41 code points, two UTF-16 units at the 39th
+  docket(['gate', '--session', id40], { cwd: d, env: { DOCKET_TRAIL: '1' } });
+  docket(['gate', '--session', id41], { cwd: d, env: { DOCKET_TRAIL: '1' } });
+  docket(['governs', 'R' + '9'.repeat(450)], { cwd: path.join(d, 'test', 'fixture'), env: { DOCKET_TRAIL: '1' } });   // inside the fixture: no ruling R999…, the id named whole
+  const long = Array.from({ length: 4 }, (_, i) => String.fromCharCode(97 + i).repeat(110) + '.js');
+  for (const f of long) fs.writeFileSync(path.join(d, 'test', 'fixture', f), 'const x = 1; // R2\n');
+  docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'tc' }), env: { DOCKET_TRAIL: '1' } });
+  const tl = read(path.join(d, '.docket', 'trail.log')).split('\n').filter(Boolean);
+  const at = re => tl.find(l => re.test(l)) || '';
+  ok('the trail keeps an argument of forty characters whole, and cuts one of forty-one to forty in all, its mark among them and no character split (D14’s addendum, D42)', at(/ gate --session a+$/).endsWith(' --session ' + id40) && at(/ gate --session b/).endsWith(' --session ' + 'b'.repeat(38) + '\u{1F600}…'), tl.slice(0, 2).join(' | '));
+  const ref = at(/^  refused /), blk = at(/^  blocked: /);
+  ok('…and cuts a refusal’s line and a block’s first line over four hundred characters to four hundred in all, the mark among them, where the block’s had been cut silently at two hundred', Array.from(ref.replace(/^  refused \(exit \d+\): /, '')).length === 400 && ref.endsWith('…') && Array.from(blk.replace(/^  blocked: /, '')).length === 400 && blk.endsWith('…'), [Array.from(ref).length, Array.from(blk).length, blk.slice(0, 80)].join(' | '));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

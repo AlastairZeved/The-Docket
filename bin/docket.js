@@ -62,7 +62,7 @@ function out(s) { const t = plain(s); process.stdout.write(t.endsWith('\n') ? t 
 process.stdout.on('error', e => { if (e && e.code === 'EPIPE') process.exit(0); throw e; });
 let TRAIL = null;                                                      // the trail this run wrote to, when DOCKET_TRAIL is set (D25)
 function die(msg, code) {
-  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + plain(msg).replace(/\s+/g, ' ').slice(0, 400 /* a refusal's first sentence: the line and the rule (D14's addendum) */) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
+  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  refused (exit ' + (code === undefined ? 2 : code) + '): ' + trailCut(plain(msg).replace(/\s+/g, ' '), 400 /* a refusal's first sentence: the line and the rule (D14's addendum) */) + '\n'); } catch (e) { /* the measurement's, not the command's */ } }
   process.stderr.write(plain(msg) + '\n'); process.exit(code === undefined ? 2 : code);
 }
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
@@ -113,6 +113,9 @@ function stripMarks(s) { return s.replace(/`/g, '').replace(/\*\*/g, ''); }
 // One glance (D14): a text of more than GLANCE characters — code points (FORMAT.md 3), so no character is split — keeps
 // GLANCE - 1 of them and a mark, so the cut is never silent; governs cuts a cited line and status a pending addendum by it
 function glance(s) { const t = Array.from(s); return t.length > GLANCE ? t.slice(0, GLANCE - 1).join('').trimEnd() + '\u2026' : s; }
+// A cut in the trail (D14's addendum): over n characters — code points, so no character is split — a text keeps n in all,
+// the mark among them, as the transcript's cut counts its mark (D42); never silent
+function trailCut(s, n) { const t = Array.from(s); return t.length > n ? t.slice(0, n - 1).join('') + '\u2026' : s; }
 
 // ─── 1. discovery (D5) ──────────────────────────────────────────────────────
 
@@ -2342,7 +2345,7 @@ function judgeShapeFault(cmd) {
 // A block, made and written to the trail when one is kept (D25), so a measurement reads the blocks the stop made from the
 // core's own record, beside the host's wording of them
 function blockStop(reason) {
-  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  blocked: ' + plain(String(reason).split('\n')[0]).slice(0, 200) + '\n'); } catch (e) { /* the measurement's, not the stop's */ } }
+  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  blocked: ' + trailCut(plain(String(reason).split('\n')[0]), 400 /* a block's line, as a refusal's (D14's addendum) */) + '\n'); } catch (e) { /* the measurement's, not the stop's */ } }
   out(JSON.stringify({ decision: 'block', reason })); return 0;
 }
 function stop(argv) {
@@ -2590,7 +2593,7 @@ function leaveTrail() {
   if (!process.env.DOCKET_TRAIL) return;
   try {
     const d = path.join(stopRoot(process.cwd()), '.docket');         // with the state it measures (D28)
-    if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => a.length > 40 /* what ran, not a body (D14's addendum) */ ? a.slice(0, 40) + '…' : a).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
+    if (isDir(d)) { fs.appendFileSync(path.join(d, 'trail.log'), new Date().toISOString() + ' ' + process.argv.slice(2).map(a => trailCut(a, 40 /* what ran, not a body (D14's addendum) */)).join(' ').replace(/\s+/g, ' ') + '\n'); TRAIL = path.join(d, 'trail.log'); }
   } catch (e) { /* the trail is the measurement's; the command runs whatever it does */ }
 }
 function main() {

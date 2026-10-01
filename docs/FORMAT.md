@@ -684,10 +684,14 @@ core reads it (D37).
 
 With `DOCKET_TRAIL` set in the environment, every run of the core in a project
 that has a `.docket/` appends one line to `.docket/trail.log` — the time and the
-command as given — so a measurement can read what a judge ran when its session
-keeps no transcript (D25); and `stop` adds a line for each block it makes,
-`  blocked: ` and the block's first line, so a measurement reads the stop's blocks
-from the core's own record, beside the host's wording of them. It is off by default.
+command as given, an argument over forty characters cut to forty — so a
+measurement can read what a judge ran when its session keeps no transcript
+(D25); a refusal adds `  refused (exit <n>): ` and the refusal, and `stop` adds a
+line for each block it makes, `  blocked: ` and the block's first line, each cut
+to four hundred characters, so a measurement reads the stop's blocks and the
+core's refusals from the core's own record, beside the host's wording of them.
+Every cut keeps that many characters in all, its mark `…` among them, counted as
+code points (D14's addendum, D42). It is off by default.
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
