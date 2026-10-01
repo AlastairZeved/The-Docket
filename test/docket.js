@@ -3708,6 +3708,41 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), result()], { verdict: 'PASS' }),
       GOOD_R, WRITES + say([EDITS, turnText('Recorded.'), result()], { verdict: 'PASS' }));
     ok('judge.sh prints D15’s floor not met, naming every case that fell below it — a PASS on each planted case, a FAIL on the clean one — and exits 1 (D15, D34)', r.status === 1 && /^  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: not met: the violation fell below it in 1 of 1; the clean case fell below it in 1 of 1; the stale case fell below it in 1 of 1; the number case fell below it in 1 of 1; the provenance case fell below it in 1 of 1$/m.test(r.stdout), r.status + ' ' + r.stdout.split('\n').slice(-4).join(' | '));
+    // each route in the form the protocol gives it: "not an addendum" and "do not supersede" name no route
+    {
+      const STALE_NOT = 'code · F3 · app.js:80 · R7 keeps the relational plane’s menu; this diff removes it · reason gone: relations are marks on the notes (app.js:191) · not an addendum: supersede R7 through /rule';
+      const NUM_NOT = 'code · F3 · app.js:12 · R5 ruled three sections; this diff makes four · reason holds: three tabs still read three sections (app.js:14) · do not supersede R5; change the code';
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE_NOT), result()], { verdict: 'STALE', reason: STALE_NOT }),
+        say([turnText('Reviewed.'), blockTurn(NUM_NOT), result()], { verdict: 'FAIL', reason: NUM_NOT }),
+        GOOD_R);
+      ok('judge.sh reads the stale case’s route as the protocol writes it, `/rule --addendum R7`: a route field that says “not an addendum” is no addendum route', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
+      ok('…and the number case’s as `supersede R5`: “do not supersede R5” is no supersede route', /\(n\) number     0 of 1/.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: no /.test(r.stdout), r.stdout);
+    }
+    // a block read from the core's own trail too: a host that words its block otherwise still blocks the clean case and the amend
+    {
+      const CORE_BLOCK = 'mkdir -p .docket && printf "%s\\n" "  blocked: The docket’s judge recorded no verdict for this stop’s diff" >> .docket/trail.log; ';
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        CORE_BLOCK + say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        CORE_BLOCK + GOOD_R);
+      ok('judge.sh reads a block from the core’s trail as well as the host’s turns: a clean run the stop blocked, in words the host did not mark, is blocked, 0 of 1', /\(c\) run 1  blocked: yes  judge: PASS/.test(r.stdout) && /\(c\) clean      0 of 1/.test(r.stdout), r.stdout);
+      ok('…and an amend run so blocked is no halt: 0 of 1', /stop blocked: yes/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout), r.stdout);
+    }
+    // a verdict the maker recorded by any means: through .docket/core or a variable, or by writing .docket/ itself
+    for (const call of [toolTurn('Bash', { command: 'node "$(cat .docket/core)" verdict PASS --hash x --failures 0' }), toolTurn('Bash', { command: 'node $CORE verdict PASS --hash x --failures 0' }), toolTurn('Write', { file_path: '/p/.docket/verdicts.jsonl', content: '{"verdict":"PASS"}' })]) {
+      r = runJudge(
+        say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
+        say([call, turnText('Renamed.'), result()], { verdict: 'PASS' }),
+        say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
+        say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
+        GOOD_R);
+      ok('judge.sh does not score a run whose maker recorded a verdict itself — ' + (JSON.parse(call).message.content[0].input.command || 'a write of .docket/verdicts.jsonl') + ' — the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
+    }
     // a FAIL that names R6 only in another feature's line — the removed cite, code F5 — is not the violation read
     {
       const R6F5 = 'code · F5 · app.js:41 · R6 is cited in the deleted makeToolbar function; nothing accounts for the removed cite · reason holds: R6 is still cited above (app.js:40) · /rule --addendum R6';
@@ -3751,7 +3786,7 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(FAIL7), result()], { verdict: 'FAIL', reason: FAIL7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5X), result()], { verdict: 'FAIL', reason: NUM5X }),
       say([turnText('RULING — PLEASE CONFIRM\nTitle: The toolbar goes'), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]));
-    ok('judge.sh does not score a run whose maker ran the verdict command itself: the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker ran the verdict command; the record is not the judge's alone/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
+    ok('judge.sh does not score a run whose maker ran the verdict command itself: the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of \.docket\/; the record is not the judge's alone/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
     ok('…scores a FAIL naming R7 where STALE was due as not a pass, and says R7 was named', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: FAIL   names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
     ok('…scores a FAIL on the number routed as an addendum as not a pass: the route is the supersede one', /\(n\) number     0 of 1/.test(r.stdout) && /the supersede route: no /.test(r.stdout), r.stdout);
     ok('…fails the halt when append ran before the word', /\(r\) amend      0 of 1/.test(r.stdout) && /ledger written: yes/.test(r.stdout), r.stdout);
@@ -3910,7 +3945,7 @@ const SEC = String.fromCharCode(0xa7);
         say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
         GOOD_R);
-      ok('judge.sh does not score a run whose maker ran the verdict command as ' + JSON.stringify(cmd.split(' verdict')[0]) + ' — quoted, or an option before the subcommand', /\(c\) run 1  NOT SCORED — the maker ran the verdict command/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
+      ok('judge.sh does not score a run whose maker ran the verdict command as ' + JSON.stringify(cmd.split(' verdict')[0]) + ' — quoted, or an option before the subcommand', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
     }
     // the halt at /rule leaves the ledger the fixture's own commit: staged, committed, or written and put back, it is not the halt
     for (const [what, act] of [['amended and staged', 'printf "%s\\n" "> Addendum 2026-09-30: amended" >> DECISIONS.md; git add DECISIONS.md; '],
@@ -4361,6 +4396,14 @@ const SEC = String.fromCharCode(0xa7);
     ok('the protocol’s second step always adds the decisions pack to a change of the ledger, and its verdict is in four parts, in order: feature scores, trace discrepancies, failures, the verdict', /A change to the ledger always adds\s+`packs\/decisions\.md`\./.test(PR) && /^    Feature scores\b[^\n]*\n    Trace discrepancies\b[^\n]*\n    Failures\b[^\n]*\n    Verdict\b[^\n]*$/m.test(PR), 'the protocol does not say');
     ok('…and that the judge never passes a diff with a feature failure because it “reads well overall”, nor tells the maker to “try again”', /never passes a diff with a feature failure because the\s+diff "reads well overall"/.test(PR) && /never tells the maker to\s+"try again"/.test(PR), 'the protocol does not say');
   }
+}
+
+// ── the stop writes each block it makes to the core's trail, when one is kept (D25; FORMAT.md 16) ──
+{
+  const d = tempRepo(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 12; // R2\n'); fs.mkdirSync(path.join(d, '.docket'), { recursive: true });
+  const s = docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'tb' }), env: { DOCKET_TRAIL: '1' } });
+  const t = fs.existsSync(path.join(d, '.docket', 'trail.log')) ? read(path.join(d, '.docket', 'trail.log')) : '';
+  ok('stop writes the block it makes to the trail kept for a measurement — `  blocked: ` and the block’s first line — beside the command that ran (D25)', /"decision":"block"/.test(s.out) && /^\S+ stop --judge true$/m.test(t) && /^  blocked: The docket's judge recorded no verdict for this stop's diff \(test\/fixture\/app\.js\)/m.test(t), t);
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

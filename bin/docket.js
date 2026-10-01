@@ -2336,6 +2336,12 @@ function judgeShapeFault(cmd) {
   if (/^\s*[A-Za-z_][A-Za-z0-9_]*=/.test(cmd)) return 'an assignment before the command';
   return null;
 }
+// A block, made and written to the trail when one is kept (D25), so a measurement reads the blocks the stop made from the
+// core's own record, beside the host's wording of them
+function blockStop(reason) {
+  if (TRAIL) { try { fs.appendFileSync(TRAIL, '  blocked: ' + plain(String(reason).split('\n')[0]).slice(0, 200) + '\n'); } catch (e) { /* the measurement's, not the stop's */ } }
+  out(JSON.stringify({ decision: 'block', reason })); return 0;
+}
 function stop(argv) {
   let input = {};
   try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
@@ -2351,7 +2357,7 @@ function stop(argv) {
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.join(', ');
   const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
-  if (g.decision === 'SURFACE') { out(JSON.stringify({ decision: 'block', reason: surfacedReason(g.st, g.sess, tail, id) })); return 0; }   // D11: no judge; the residue goes to the maker
+  if (g.decision === 'SURFACE') return blockStop(surfacedReason(g.st, g.sess, tail, id));   // D11: no judge; the residue goes to the maker
   const judge = flag(argv, '--judge');
   if (!judge) die('stop: this stop is judged, and --judge names no command to start the judge: the host\'s binding gives one, which reads its prompt on stdin (docs/FORMAT.md 16)', 2);
   const fault = judgeShapeFault(judge);
@@ -2369,13 +2375,12 @@ function stop(argv) {
     : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status) + (unread ? ', before it read its prompt' : '');
   try { docketDir(root); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + (r.error && r.error.code === 'ETIMEDOUT' ? '' : ' (its bound: ' + waitS + ' seconds)') + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
   const st = loadState(root), l = st.last;
-  if (st.sessions[id] && st.sessions[id].surfaced) { out(JSON.stringify({ decision: 'block', reason: surfacedReason(st, st.sessions[id], tail, id) })); return 0; }   // surfaced while the judge ran (D11)
+  if (st.sessions[id] && st.sessions[id].surfaced) return blockStop(surfacedReason(st, st.sessions[id], tail, id));   // surfaced while the judge ran (D11)
   if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS
   if (l && l.hash === d.hash && l.session === id && Date.parse(l.at) >= start && (l.verdict === 'FAIL' || l.verdict === 'STALE')) {   // this session's record of this diff, and no other's
     const n = l.failures;
     const reason = 'The docket\'s judge recorded ' + l.verdict + ' for this stop\'s diff (' + files + '), ' + n + ' located failure' + (n === 1 ? '' : 's') + ':\n' + (l.reason ? String(l.reason) : '(no reason was recorded with it)') + '\n' + (l.verdict === 'STALE' ? 'The route is an addendum through /rule, not a rewrite.' : 'Change the code, or supersede the ruling through /rule.') + tail;
-    out(JSON.stringify({ decision: 'block', reason }));
-    return 0;
+    return blockStop(reason);
   }
   // A block with no record is a block (D38): it counts toward the session's five as a recorded one does, so a judge that
   // never records surfaces the session, and its residue reaches the person, as a judge that never passes does (D11).
@@ -2384,8 +2389,7 @@ function stop(argv) {
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
   // whose job it is, what to do — nothing, then stop again — and where a person finds the judge's own words.
   const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since its last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
-  out(JSON.stringify({ decision: 'block', reason }));
-  return 0;
+  return blockStop(reason);
 }
 
 // ─── 17. protocol, pack, transcript: what the judge reads, printed by the core ─
