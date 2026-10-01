@@ -2271,14 +2271,16 @@ function pack(argv) {
 // or its file, pattern or prompt, a line after the first indented under it; and each result, marked as one. The judge
 // checks the maker's claims against the commands the transcript shows were run and their output (code F6), and a call
 // that writes the ledger on its second line is still the maker's call (protocol step 5): a first line alone hid both.
-// A call or a result over TRANSCRIPT_HEAD + TRANSCRIPT_TAIL lines keeps its first and last with the count between —
-// its head names what ran, and a runner prints its verdict last — and a line over TRANSCRIPT_WIDTH characters is cut,
-// marked (D14). A line that is not JSON, or a file that is not such a log, is printed as it is. `--last <n>` keeps the
-// last n assistant turns.
-const TRANSCRIPT_HEAD = 10, TRANSCRIPT_TAIL = 30, TRANSCRIPT_WIDTH = 400;
+// A call or a result over TRANSCRIPT_LINES lines prints that many in all: its first TRANSCRIPT_HEAD, the count between,
+// and the rest from its end — its head names what ran, and a runner prints its verdict last — so the mark stands for two
+// lines or more and the cut never prints more than it keeps out; and a line over TRANSCRIPT_WIDTH characters is cut,
+// marked (D14, D42). A line that is not JSON, or a file that is not such a log, is printed as it is. `--last <n>` keeps
+// the last n assistant turns.
+const TRANSCRIPT_LINES = 40, TRANSCRIPT_HEAD = 10, TRANSCRIPT_WIDTH = 400;
 function transcriptItem(label, text) {
   let ls = String(text).replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
-  if (ls.length > TRANSCRIPT_HEAD + TRANSCRIPT_TAIL) ls = ls.slice(0, TRANSCRIPT_HEAD).concat(['\u2026 ' + (ls.length - TRANSCRIPT_HEAD - TRANSCRIPT_TAIL) + ' lines \u2026'], ls.slice(-TRANSCRIPT_TAIL));
+  const tail = TRANSCRIPT_LINES - TRANSCRIPT_HEAD - 1;                 // twenty-nine: forty lines in all, the mark among them
+  if (ls.length > TRANSCRIPT_LINES) ls = ls.slice(0, TRANSCRIPT_HEAD).concat(['\u2026 ' + (ls.length - TRANSCRIPT_HEAD - tail) + ' lines \u2026'], ls.slice(-tail));
   ls = ls.map(l => { const a = Array.from(l); return a.length > TRANSCRIPT_WIDTH ? a.slice(0, TRANSCRIPT_WIDTH - 1).join('') + '\u2026' : l; });
   return label + ' ' + ls[0] + ls.slice(1).map(l => '\n    ' + l).join('');
 }

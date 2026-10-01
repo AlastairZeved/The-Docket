@@ -51,10 +51,10 @@ tool denied, one permission — to run the core — and a turn limit of its own:
 `stop` decides what needs no judge, starts the judge for the rest with a prompt
 that names the core and carries the hook input's session, transcript path and
 directory — none of what the maker wrote — waits for it, and answers on
-stdout: nothing, to allow the stop, or a block with its reason as JSON. Where the
-host lets the judge run on a model other than the maker's, bind it that way
-(D8): shared training is shared blind spots. Name no model in the binding; let
-the host choose.
+stdout: nothing, to allow the stop, or a block with its reason as JSON. The judge
+runs on the model the host gives a headless session; name no model in the
+binding, and a person who wants the judge on a model other than the maker's —
+shared training is shared blind spots — sets that in the host (D43).
 
 Two things the judge needs that a host may not give it, and what the core does
 about each. Where the plugin is: `stop` is the core, so it writes its own path

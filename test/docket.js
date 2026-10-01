@@ -3481,7 +3481,7 @@ const SEC = String.fromCharCode(0xa7);
     fs.writeFileSync(path.join(td, 'long.jsonl'), [JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't3', content: long }] } }), JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't4', content: 'y'.repeat(1000) }] } })].join('\n') + '\n');
     r = docket(['transcript', path.join(td, 'long.jsonl')]);
     { const ls = r.out.split('\n');
-      ok('…a result over forty lines keeps its first ten and its last thirty, the count between (D14)', ls[1] === '[result] line 1' && ls[10] === '    line 10' && ls[11] === '    \u2026 60 lines \u2026' && ls[12] === '    line 71' && ls[41] === '    line 100' && !r.out.includes('line 11\n'), JSON.stringify(ls.slice(0, 14)));
+      ok('…a result over forty lines prints forty in all: its first ten, the count between and its last twenty-nine (D14, D42)', ls[1] === '[result] line 1' && ls[10] === '    line 10' && ls[11] === '    \u2026 61 lines \u2026' && ls[12] === '    line 72' && ls[40] === '    line 100' && ls[41] === '── user' && !r.out.includes('line 11\n'), JSON.stringify(ls.slice(0, 14)));
       ok('…and a line over four hundred characters is cut there, marked', r.out.includes('[result] ' + 'y'.repeat(399) + '\u2026\n') && !r.out.includes('y'.repeat(400)), r.out.slice(-60)); }
     r = docket(['transcript', path.join(td, 'missing.jsonl')]);
     ok('transcript names a path it cannot read, exit 2', r.code === 2 && /cannot read/.test(r.err), r.err);
@@ -3924,6 +3924,19 @@ const SEC = String.fromCharCode(0xa7);
   const g2 = docket(['gate', '--session', 'rm', '--diff'], { cwd: d2 });
   const listed2 = ((g2.out.split('(D33):')[1] || '').match(/^([A-Z]+\d+)  /gm) || []).map(x => x.trim());
   ok('…and a deleted governed file is read in the base, whole: its rulings are listed (D22, D33)', /^JUDGE [0-9a-f]{64} test\/fixture\/styles\.css$/m.test(g2.out) && listed2.includes('R6'), listed2.join(',') + ' | ' + g2.out.slice(0, 200));
+}
+
+// ── the transcript's cut at its edge (D42): forty lines print whole; forty-one print forty, the mark standing for two ──
+{
+  const td = tmpDir('cut-'), res = n => JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't' + n, content: Array.from({ length: n }, (_, i) => 'line ' + (i + 1)).join('\n') }] } });
+  fs.writeFileSync(path.join(td, 'edge.jsonl'), res(40) + '\n' + res(41) + '\n');
+  const ls = docket(['transcript', path.join(td, 'edge.jsonl')]).out.split('\n');
+  const second = ls.indexOf('[result] line 1', 2), forty = ls.slice(1, second - 1), fortyOne = ls.slice(second).filter(l => l !== '');   // each result its own turn, under its own header
+  ok('transcript prints a result of forty lines whole, with no mark (D42)', forty.length === 40 && forty[39] === '    line 40' && !forty.some(l => l.includes('…')), JSON.stringify(forty.slice(-3)));
+  ok('…and one of forty-one as forty lines in all, the mark standing for the two it keeps out: never more lines than the cut saves (D42)', fortyOne.length === 40 && fortyOne[10] === '    … 2 lines …' && fortyOne[11] === '    line 13' && fortyOne[39] === '    line 41', JSON.stringify(fortyOne.slice(8, 13)) + ' ' + fortyOne.length);
+  fs.writeFileSync(path.join(td, 'said.jsonl'), JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'w'.repeat(450) }] } }) + '\n');
+  const said = docket(['transcript', path.join(td, 'said.jsonl')]).out;
+  ok('…while the maker’s own text prints whole, a line of four hundred and fifty characters among it: the cut is a call’s and a result’s (D14, FORMAT.md 13)', said.includes('w'.repeat(450)) && !said.includes('…'), said.length + ' characters');
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
