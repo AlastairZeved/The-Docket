@@ -49,7 +49,8 @@ tool denied, one permission — to run the core — and a turn limit of its own:
     node bin/docket.js stop --permission "<the rule>" --judge "<the command>"
 
 `stop` decides what needs no judge, starts the judge for the rest with a prompt
-that names the core and carries the hook input, waits for it, and answers on
+that names the core and carries the hook input's session, transcript path and
+directory — none of what the maker wrote — waits for it, and answers on
 stdout: nothing, to allow the stop, or a block with its reason as JSON. Where the
 host lets the judge run on a model other than the maker's, bind it that way
 (D8): shared training is shared blind spots. Name no model in the binding; let

@@ -1936,23 +1936,13 @@ function wideDiff(root, d) {
   return body.replace(/\n*$/, '\n') + '\nThe rulings cited within ' + WINDOW + ' lines of each hunk, each as governs prints it (D33):\n\n' + blocks.join('\n\n');
 }
 // The rulings cited within WINDOW lines of each hunk of each touched file — read as near reads an edit (D7), a new file
-// whole — each once, in the order of the files and their lines. A deleted file has no lines to read.
+// whole — each once, in the order of the files and their lines. A hunk has two sides: its lines in the working tree, and
+// the lines it removed, read in the base's version of the file, so a ruling cited only on a removed line — the thing a
+// removal contradicts — is listed too (D33); a deleted file is its base version, whole.
 function touchedRulings(root, d) {
   const found = [], ledgers = new Map(), untracked = new Set(d.untracked);
-  for (const rf of d.touched) {
-    const abs = path.join(root, rf), lp = findLedger(abs, root);
-    if (!lp || !isFile(abs) || !isTextFile(abs)) continue;
-    if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
-    const ledger = ledgers.get(lp), lines = splitLines(normEol(readText(abs))), N = lines.length, fenced = fencedLines(lines);
-    const ranges = [];
-    if (!d.rels.length || untracked.has(rf)) ranges.push([1, N]);         // a new file whole, as near reads a Write
-    else {
-      const h = sh('git', ['diff', d.base, '--no-renames', '-U0', '--', rf], root);
-      for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
-        const c = Number(m[1]), n = m[2] === undefined ? 1 : Number(m[2]);
-        ranges.push([Math.max(1, c - WINDOW), Math.min(N, c + Math.max(n, 1) - 1 + WINDOW)]);
-      }
-    }
+  const read = (ledger, lines, ranges) => {
+    const fenced = fencedLines(lines);
     for (const [a, b] of ranges) for (let ln = a; ln <= b; ln++) {
       if (fenced[ln - 1]) continue;
       for (const c of citesInLine(lines[ln - 1], ledger)) {
@@ -1961,6 +1951,26 @@ function touchedRulings(root, d) {
         if (r) found.push({ ledger, r });
       }
     }
+  };
+  for (const rf of d.touched) {
+    const abs = path.join(root, rf), lp = findLedger(abs, root);
+    if (!lp) continue;
+    if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
+    const ledger = ledgers.get(lp);
+    const now = isFile(abs) && isTextFile(abs) ? splitLines(normEol(readText(abs))) : null;
+    if (!d.rels.length || untracked.has(rf)) { if (now) read(ledger, now, [[1, now.length]]); continue; }   // a new file whole, as near reads a Write
+    const b = cp.spawnSync('git', ['show', d.base + ':' + rf], { cwd: root, maxBuffer: 1 << 28 });
+    const was = b.status === 0 && !b.stdout.subarray(0, SNIFF_BYTES).includes(0) ? splitLines(normEol(b.stdout.toString('utf8'))) : null;
+    if (!now) { if (was) read(ledger, was, [[1, was.length]]); continue; }   // deleted: its base version, whole
+    const h = sh('git', ['diff', d.base, '--no-renames', '-U0', '--', rf], root);
+    const nowR = [], wasR = [];
+    for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
+      const oc = Number(m[1]), on = m[2] === undefined ? 1 : Number(m[2]), nc = Number(m[3]), nn = m[4] === undefined ? 1 : Number(m[4]);
+      nowR.push([Math.max(1, nc - WINDOW), Math.min(now.length, nc + Math.max(nn, 1) - 1 + WINDOW)]);
+      if (was && on > 0) wasR.push([Math.max(1, oc - WINDOW), Math.min(was.length, oc + on - 1 + WINDOW)]);   // the removed lines, in the base
+    }
+    read(ledger, now, nowR);
+    if (was) read(ledger, was, wasR);
   }
   return found;
 }
@@ -2159,6 +2169,9 @@ function verdict(argv) {
 function surfacedReason(st, sess, tail, id) {
   return 'The docket surfaced this session: its located failures have not fallen, or it has been blocked ' + BLOCK_CAP + ' times, since its last PASS.\n' + residueLines(st, sess, id).join('\n') + '\nreport this to the user verbatim, then stop again\n' + tail.trimStart();   // the gate's relay line, as written (D11)
 }
+// The hook input's fields the judge reads — the session, the transcript it reads at step 5, the directory — and nothing
+// else: a field the maker wrote, as the host's copy of its last message is, would reach the judge before its own reading.
+function hookFields(input) { const o = {}; for (const k of ['session_id', 'transcript_path', 'cwd']) if (typeof input[k] === 'string') o[k] = input[k]; return o; }
 function judgePrompt(core, perm, input) {
   core = /^[\w\/.@:+-]+$/.test(core) ? core : JSON.stringify(core);   // a path the shell would split is written quoted, as the rule allows
   return [
@@ -2166,7 +2179,7 @@ function judgePrompt(core, perm, input) {
     'Run `node ' + core + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix' + (perm ? ': your one permission, ' + perm + ', matches that shape alone' : '') + '.',
     'Follow the protocol to its end: your answer is the record `node ' + core + ' verdict` makes, and the stop reads that record and nothing else you say.',
     'If a command of that shape is denied, record nothing, and say in one line that the judge could not run the core.',
-    'Hook input: ' + JSON.stringify(input),
+    'Hook input: ' + JSON.stringify(hookFields(input)),
   ].join('\n') + '\n';
 }
 function stop(argv) {
