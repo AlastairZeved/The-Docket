@@ -1699,6 +1699,28 @@ const SEC = String.fromCharCode(0xa7);
     sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'both at once'], one);
     ok('status: an addendum and the ruling that answers it in one commit — the preamble’s order — are answered', !JSON.parse(docket(['status', '--json'], { cwd: fx1 }).out).pendingAddenda.some(a => a.id === 'R6'), docket(['status'], { cwd: fx1 }).out);
     fs.rmSync(one, { recursive: true, force: true });
+    // where history holds no order — one commit, or neither committed — the ledger's own dates are read first: a ruling that carries
+    // an addendum dated before the one in question was written before it, and its edge answers nothing; where the dates say
+    // nothing, the preamble's order (FORMAT.md 6, D21's addendum)
+    for (const commit of [false, true]) {
+      const dr = tempRepo(), fxd = path.join(dr, 'test', 'fixture');
+      const at = day => ({ cwd: fxd, env: { DOCKET_TODAY: day } });
+      docket(['append', '--title', 'The toolbar collapses on narrow screens', '--issue', '94', '--principle', 'Zero cognitive tax', '--edge', 'extends R6', '--body', 'Icons below 480px. Reason: the labels do not fit.'], at('2026-09-20'));
+      docket(['append', '--addendum', 'R9', '--text', 'the icons read at 480px'], at('2026-09-20'));
+      docket(['append', '--addendum', 'R6', '--text', 'the toolbar is gone from the relational plane'], at('2026-10-01'));
+      if (commit) sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'the ruling, its addendum and a later one under R6, in one commit'], dr);
+      const p6 = JSON.parse(docket(['status', '--json'], { cwd: fxd }).out).pendingAddenda.filter(a => a.id === 'R6').map(a => a.date);
+      ok('status reads the ledger’s own dates where history holds no order (' + (commit ? 'one commit' : 'neither committed') + '): R9, which carries an addendum of 2026-09-20, was written before R6’s addendum of 2026-10-01, and its edge into R6 does not answer it (FORMAT.md 6)', p6.join() === '2026-10-01', JSON.stringify(p6) + '\n' + docket(['status'], { cwd: fxd }).out);
+      fs.rmSync(dr, { recursive: true, force: true });
+    }
+    // and where the dates say nothing — a ruling written first and an addendum after it, one day, one session — the preamble's order
+    const unc = tempRepo(), fxu = path.join(unc, 'test', 'fixture');
+    docket(['append', '--title', 'The toolbar collapses on narrow screens', '--issue', '94', '--principle', 'Zero cognitive tax', '--edge', 'extends R6', '--body', 'Icons below 480px. Reason: the labels do not fit.'], { cwd: fxu });
+    docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses on narrow screens'], { cwd: fxu });
+    const pu = () => JSON.parse(docket(['status', '--json'], { cwd: fxu }).out).pendingAddenda.some(a => a.id === 'R6');
+    const pre = pu(); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'both, the ruling written first'], unc);
+    ok('…and where the dates say nothing, a ruling and an addendum under the entry it names, neither committed, are read in the preamble’s order — answered before the commit and after it (FORMAT.md 6)', pre === false && pu() === false, docket(['status'], { cwd: fxu }).out);
+    fs.rmSync(unc, { recursive: true, force: true });
     const nog = tmpDir('docket-nogit-');
     fs.writeFileSync(path.join(nog, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n### R1. First (issue #1)\nPrinciple: One.\nText. Reason: r.\n> Addendum 2026-09-24: later.\n\n### R2. Second (issue #2; extends R1)\nPrinciple: One.\nText. Reason: r.\n');
     ok('status with no history to read: a later entry’s edge answers the addendum, as before', JSON.parse(docket(['status', '--json'], { cwd: nog, env: { CLAUDE_PROJECT_DIR: '' } }).out).pendingAddenda.length === 0, docket(['status'], { cwd: nog, env: { CLAUDE_PROJECT_DIR: '' } }).out);

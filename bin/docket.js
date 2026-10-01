@@ -1589,7 +1589,10 @@ function withState(root, change, opts) {
 // addendum's line, or in that same commit (the preamble's order: the addendum, then the ruling), or it is not committed
 // yet. An in-edge older than the addendum answered something else: supersession is clause-level (D3), and a ruling that
 // once named an entry has not moved the law past the clause a later addendum is about. With no history to read — no
-// repository, or a ledger never committed — a later entry's edge resolves it, as before.
+// repository, or a ledger never committed — a later entry's edge resolves it, as before. Where history holds no order —
+// one commit, neither line committed, no history — the ledger's own dates are read first: entries are appended, so an
+// entry was written by the earliest date an addendum carries under it or under any entry after it, and an edge from one
+// written by a day before the addendum's is older than it (D21's addendum); where they say nothing, the preamble's order.
 function blameCommits(ledgerPath) {
   // -w: a commit that changes only a line's whitespace or ending — CRLF, a renormalisation — wrote no line, so each keeps the
   // commit that wrote its words, and an addendum is not answered by the commit that re-ended it (FORMAT.md 6, D21)
@@ -1602,11 +1605,16 @@ function blameCommits(ledgerPath) {
 function pendingAddenda(ledger) {
   const pend = [], anc = new Map();
   let blame;                                                          // read once, and only for a ledger that carries an addendum
-  const writtenAfter = (edgeLine, addLine) => {
+  const writtenBy = new Map();                                        // each entry's latest possible day, from the addenda under it and below it
+  { let min = null; const byLine = ledger.rulings.slice().sort((x, y) => x.line - y.line);
+    for (let i = byLine.length - 1; i >= 0; i--) { for (const d of byLine[i].addenda) if (min === null || d.date < min) min = d.date; writtenBy.set(byLine[i].id, min); } }
+  const datesSayOlder = (o, add) => { const w = writtenBy.get(o.id); return typeof w === 'string' && w < add.date; };
+  const writtenAfter = (o, edgeLine, add) => {
     if (blame === undefined) blame = blameCommits(ledger.path);
-    if (!blame) return true;
-    const a = blame.get(addLine), e = blame.get(edgeLine), zero = /^0+$/;
-    if (!a || !e || zero.test(e) || a === e) return true;             // unknown, not committed yet, or one commit
+    if (!blame) return !datesSayOlder(o, add);
+    const a = blame.get(add.line), e = blame.get(edgeLine), zero = /^0+$/;
+    if (!a || !e || a === e) return !datesSayOlder(o, add);           // unknown, one commit, or neither committed: the dates, then the preamble's order
+    if (zero.test(e)) return true;                                    // the edge is not committed and the addendum is: written after it
     if (zero.test(a)) return false;                                   // the addendum is not committed and the edge is: the edge came first
     // the commits after the addendum's, asked once for each addendum's commit and not once per pair: the edge's commit is one
     // of them when the addendum's is its ancestor (blame names only ancestors of HEAD, or none)
@@ -1616,7 +1624,7 @@ function pendingAddenda(ledger) {
   };
   for (const r of ledger.rulings) {
     for (const a of r.addenda) {
-      const resolved = ledger.rulings.some(o => o.line > r.line && o.edges.some(e => e.to === r.id && writtenAfter(e.line, a.line)));
+      const resolved = ledger.rulings.some(o => o.line > r.line && o.edges.some(e => e.to === r.id && writtenAfter(o, e.line, a)));
       if (!resolved) pend.push({ id: r.id, date: a.date, text: a.text });
     }
   }

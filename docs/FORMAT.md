@@ -260,6 +260,14 @@ resolve it: supersession is clause-level (D3), so a ruling that once named an
 entry, superseding one clause or extending it, has not moved the law past the
 clause a later addendum is about. With no history to read — no repository, or a
 ledger never committed — a later entry's edge into the entry resolves it.
+Where history holds no order between the two — one commit holds both, neither
+is committed, or there is no history — the ledger's own dates are read first:
+entries are appended, so an entry was written by the earliest date an addendum
+carries under it or under any entry after it, and an edge from one written by a
+day before the addendum's is older than it and answers nothing. Only where the
+dates say nothing is the preamble's order read, the addendum first: a ruling and
+an addendum written on one day in one session, or squashed into one commit, are
+read in that order.
 
 The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
