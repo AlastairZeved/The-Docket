@@ -1382,9 +1382,10 @@ const SEC = String.fromCharCode(0xa7);
     ok('append --dry-run prints the entry the write then appends, byte for byte, and writes nothing (FORMAT.md 11, D8’s addendum)', dry.code === 0 && l1 === l0 && wet.code === 0 && l2.startsWith(l0) && l2.slice(l0.length).trim() === dry.out.trim() && wet.out.startsWith(dry.out.trimEnd() + '\n'), JSON.stringify(dry.out) + ' | ' + JSON.stringify(l2.slice(l0.length)));
     const ad = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses', '--dry-run'], at), l3 = read(led), aw = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses'], at);
     ok('…and an addendum: the dated line the write then puts under its entry, and nothing written before the word', ad.code === 0 && l3 === l2 && ad.out.trim() === '> Addendum 2026-10-01: the toolbar collapses' && aw.code === 0 && read(led).includes('\n' + ad.out.trim() + '\n'), ad.out + aw.out + aw.err);
+    fs.appendFileSync(path.join(fd, 'app.js'), '// see ' + SEC + '4\n');   // a fourth bare cite: the baseline the write would make is not the one the ledger holds
     const l3w = read(led), bl = docket(['append', '--baseline', '--dry-run'], at), l4 = read(led);
     const rf = docket(['append', '--title', 'No reason', '--issue', '95', '--principle', 'Zero cognitive tax', '--body', 'It just is.', '--dry-run'], at);
-    ok('…and the baseline’s comment printed and not written, and a dry run refuses what the write refuses, exit 2, writing nothing', bl.code === 0 && /^<!-- docket: bare-cites/.test(bl.out) && l4 === l3w && rf.code === 2 && /must state the reason/.test(rf.err) && read(led) === l4, bl.out + rf.err);
+    ok('…and the baseline’s comment printed and not written, a count the ledger does not yet hold, and a dry run refuses what the write refuses, exit 2, writing nothing', bl.code === 0 && /^<!-- docket: bare-cites app\.js=4 -->$/m.test(bl.out) && !l3w.includes('bare-cites app.js=4') && l4 === l3w && rf.code === 2 && /must state the reason/.test(rf.err) && read(led) === l4, bl.out + rf.err);
     fs.rmSync(dd, { recursive: true, force: true });
   }
   { // a code span is a run of backticks closed by the next run of as many, as Markdown reads one (FORMAT.md 3, 5, 8)
@@ -3471,15 +3472,15 @@ const SEC = String.fromCharCode(0xa7);
     const started = () => fs.existsSync(path.join(jd, 'prompt'));
     const forget = () => { for (const f of ['prompt', 'cwd']) fs.rmSync(path.join(jd, f), { force: true }); };
     const block = r => { try { const j = JSON.parse(r.out); return j.decision === 'block' ? j.reason.replace(/'/g, '’') : null; } catch (e) { return null; } };
+    const dockOf = () => { const p = path.join(d, '.docket'); return fs.existsSync(p) ? fs.readdirSync(p).sort().join() : ''; }, dock0 = dockOf();   // before the first allowed stop
     let r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('PASS')]);
     ok('stop: a clean tree is allowed silently, exit 0, and no judge starts (D10)', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out + r.err);
     r = stopIn({ session_id: 'x' }, ['--json', '--judge', judgeCmd('PASS')]);
     ok('stop --json: the allow is {} where it otherwise prints nothing, exit 0, and no judge starts', r.code === 0 && r.out === '{}\n' && r.err === '' && !started(), r.out + r.err);
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q = 1; // R2\n');
-    const dockOf = () => { const p = path.join(d, '.docket'); return fs.existsSync(p) ? fs.readdirSync(p).sort().join() : ''; }, dock0 = dockOf();
     r = stopIn({ stop_hook_active: true, session_id: 'x' }, ['--judge', judgeCmd('PASS')]);
     ok('stop: the host’s re-entry flag allows at once, a governed diff unjudged, and no judge starts (D11: blocked at most once per turn)', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
-    ok('…and writes nothing: the core keeps no mark of its own, and .docket/ holds what it held (D37)', !fs.existsSync(path.join(d, '.docket', 'verdict.json')) && !fs.existsSync(path.join(d, '.docket', 'judge.log')) && dockOf() === dock0, dock0 + ' → ' + dockOf());
+    ok('…and writes nothing: the core keeps no mark of its own, and .docket/ holds what it held before the first of these allowed stops (D37)', !fs.existsSync(path.join(d, '.docket', 'verdict.json')) && !fs.existsSync(path.join(d, '.docket', 'judge.log')) && dockOf() === dock0, dock0 + ' → ' + dockOf());
     r = stopIn({ stop_hook_active: true, session_id: 'x' }, ['--json', '--judge', judgeCmd('PASS')]);
     ok('…and with --json the re-entry allow is {}', r.code === 0 && r.out === '{}\n' && r.err === '' && !started(), r.out);
     r = stopIn({ session_id: 'x' });
@@ -5062,13 +5063,15 @@ const SEC = String.fromCharCode(0xa7);
   ok('at a session’s start the docket reads the tree within its bound: past it the docket still prints the ledger, its last rulings, its pending addenda and the last verdict, and says the cites and the witness were not read and docket status reads them whole (D14’s addendum)', cut.code === 0 && /^Docket — test\/fixture\/DECISIONS\.md \(/.test(L[0]) && L.includes('Last rulings:') && L.includes('Addenda pending:') && L.some(l => /^Last verdict: /.test(l)) && L.includes('Cited nowhere: not read at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole') && L[L.length - 1] === 'Witness: not run at the session\'s start: the tree is more than the hook\'s time reads, and `docket status` reads it whole', cut.out + cut.err);
   ok('…and within it, the whole docket: the cites read and the witness run, as a call by hand prints it', whole.code === 0 && /^Cited nowhere: (?!not read)/m.test(whole.out) && /^Witness: (?:ok|FAIL) \(/m.test(whole.out) && whole.out === docket(['status'], { cwd: fx }).out, whole.out);
   {
-    // a few large files: each read before the bound and scanned past it — the clock is read through the reading, not before
-    // each file's first read alone (D14's addendum)
-    const d = tempRepo(); const big = path.join(d, 'test', 'fixture', 'big.js');
+    // a large file read before the bound and scanned past it, the only file beside its ledger: no later file's first read
+    // cuts the reading, so it is cut only if the clock is read through it, not before each file's first read alone (D14's
+    // addendum)
+    const d = tmpDir('bound-'), big = path.join(d, 'big.js');
+    fs.writeFileSync(path.join(d, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n### R1. One (issue #1)\nPrinciple: One.\nText. Reason: r.\n\n### R2. Two (issue #2)\nPrinciple: One.\nText. Reason: r.\n');
     fs.writeFileSync(big, 'const a = 1; // R2\n'.repeat(600000));
-    sh('git', ['add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'big'], d);
-    const t0 = Date.now(), bc = docket(['status', '--session-start'], { cwd: path.join(d, 'test', 'fixture'), input: '{}', env: { DOCKET_START_MS: '400' } }), ms = Date.now() - t0;
-    ok('…and the bound holds through the reading: a governed file of 600,000 citing lines, read in time and scanned past a bound of 400 ms, prints the docket cut, the cites not read, well inside the hook’s five seconds (D14’s addendum)', bc.code === 0 && /^Cited nowhere: not read at the session's start/m.test(bc.out) && /^Witness: not run at the session's start/m.test(bc.out) && ms < 4000, ms + ' ms\n' + bc.out + bc.err);
+    sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'big'], d);
+    const t0 = Date.now(), bc = docket(['status', '--session-start'], { cwd: d, input: '{}', env: { DOCKET_START_MS: '400' } }), ms = Date.now() - t0;
+    ok('…and the bound holds through the reading: a governed file of 600,000 citing lines, the only file beside its ledger, read in time and scanned past a bound of 400 ms, prints the docket cut, the cites not read, well inside the hook’s five seconds (D14’s addendum)', bc.code === 0 && /^Cited nowhere: not read at the session's start/m.test(bc.out) && /^Witness: not run at the session's start/m.test(bc.out) && ms < 4000, ms + ' ms\n' + bc.out + bc.err);
     fs.rmSync(d, { recursive: true, force: true });
   }
   const bad = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: 'soon' } });
