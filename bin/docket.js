@@ -575,7 +575,7 @@ function noLedgerMessage(cwd, root) {
 // ─── 5. near: the pre-edit window (D1, D2, D7) ──────────────────────────────
 
 // Each match's line, counted forward from the last match: the matches come in order, so the file is read once however
-// many there are — a replace_all over a long file stays inside the hook's 5 s (hooks.json)
+// many there are — a replace_all over a long file stays inside the pre-edit call's five seconds (D14's addendum)
 function findAll(text, needle) {
   const at = [];
   let i = 0, from = 0, line = 1;
@@ -1439,10 +1439,10 @@ function pendingAddenda(ledger) {
   }
   return pend;
 }
-// The SessionStart hook's input on stdin (D40): the session's identifier, why it starts, and the project directory. A session
+// The session-start call's input on stdin (D40): the session's identifier, why it starts, and the project directory. A session
 // that starts afresh — a new one, or one cleared — records HEAD as the base its diff runs from; one resumed or compacted
 // keeps the base it has, and takes HEAD only when it has none. It prints nothing: the docket is the hook's output.
-function sessionStart() {
+function recordSessionBase() {
   let input = {};
   try { input = JSON.parse(readStdin()) || {}; } catch (e) { input = {}; }
   if (typeof input !== 'object' || Array.isArray(input) || typeof input.session_id !== 'string' || !input.session_id) return;
@@ -1456,7 +1456,7 @@ function status(argv) {
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
   const below = lp ? [] : ledgersBelow(cwd, root);                    // a walk goes up: a ledger below is named, not found
   if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
-  if (has(argv, '--session-start') && (lp || below.length)) sessionStart();   // the SessionStart hook: the session's base (D40)
+  if (has(argv, '--session-start') && (lp || below.length)) recordSessionBase();   // the call at a session's start: the session's base (D40)
   if (!lp) {                                                          // no ledger governs the working directory
     const groot = gitRoot(cwd);
     const ls = groot ? sh('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], groot) : null;
@@ -1829,7 +1829,7 @@ function sessionId(argv) {
   if (process.env.DOCKET_SESSION) return process.env.DOCKET_SESSION;
   return 'default';
 }
-// The commit a session's diff runs from (D40): the base its SessionStart recorded — moved to HEAD by a PASS recorded while
+// The commit a session's diff runs from (D40): the base recorded at its start — moved to HEAD by a PASS recorded while
 // nothing governed differs from HEAD — while that commit is an ancestor of HEAD; else HEAD. A maker that commits its work
 // before it stops commits into the range the gate reads, so the stop still judges it; a base the history no longer holds,
 // after a reset or a rebase, is dropped for HEAD.
@@ -2321,7 +2321,7 @@ const USAGE = [
   '  docket                              the witness: check, and spec-check when a UIUX.md sits beside a ledger',
   '  docket near                         stdin: an edit; stdout: what governs the region (silent when nothing does)',
   '  docket status                       the docket: last rulings, uncited rulings, pending addenda, last verdict, witness',
-  '                                      (--session-start, as the SessionStart hook: its input on stdin records the session\'s base)',
+  '                                      (--session-start, the call at a session\'s start: its input on stdin records the session\'s base)',
   '  docket check                        the seven checks (exit 1 on a failure)',
   '  docket spec-check [--all]           token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
   '  docket index                        the whole parse as JSON',

@@ -3215,6 +3215,18 @@ const SEC = String.fromCharCode(0xa7);
     ok('the protocol and the four packs are the bytes the calibration of record measured: a change fails here until a run is recorded beside new pins (D15, D25)', drift.length === 0, 'changed since the calibration of record: ' + drift.join(', '));
   }
 
+  // ── D13: the core and its documents name no host — its events and its files included; the one host spelling the core reads
+  // is the stop's re-entry flag, on one line
+  {
+    const EVENTS = /hooks\.json|PreToolUse|PostToolUse|SessionStart|UserPromptSubmit|PreCompact|SubagentStop|disallowedTools|maxTurns|CLAUDE\.md|stop_hook_active/i;
+    const hits = [];
+    for (const f of ['bin/docket.js', 'docs/FORMAT.md', 'judge/PROTOCOL.md']) read(path.join(ROOT, f)).replace(/CLAUDE_PROJECT_DIR/g, '').split('\n').forEach((l, i) => { if (HOST_NAMES.test(l) || EVENTS.test(l)) hits.push(f + ':' + (i + 1) + ' ' + l.trim().slice(0, 60)); });
+    ok('the core and its two documents name no host, no host event and no host file (D13): one line only, the stop reading the re-entry flag under the host\'s spelling', hits.length === 1 && /^bin\/docket\.js:\d+ .*stop_hook_active/.test(hits[0]), hits.join(' | '));
+    // the prose pack's reader gate over this repository's own governed prose (D6): a Markdown file that cites a ruling states its reader
+    const noReader = sh('git', ['ls-files', '-z', '*.md'], ROOT).stdout.split('\0').filter(Boolean).filter(f => !/(^|\/)DECISIONS[^/]*\.md$/.test(f)).filter(f => { const t = read(path.join(ROOT, f)); return /(^|[^A-Za-z0-9_])D[1-9][0-9]*(?![A-Za-z0-9_])/.test(t) && !/\*\*Reader\.\*\*|\*\*Who this is for\.\*\*/.test(t); });
+    ok('every Markdown file of this repository that cites a ruling states its reader, as the prose pack\'s gate asks of governed prose (D6)', noReader.length === 0, noReader.join(', '));
+  }
+
   // ── the state under load and under a hand (FORMAT.md 16): judges recording at once lose nothing; a hand-edited session
   //    is read as what it holds ──
   {

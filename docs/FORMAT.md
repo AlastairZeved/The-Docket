@@ -543,7 +543,7 @@ cited in the text being replaced are what the edit most needs to know.
 hash is the SHA-256 of `git diff <base>` over every governed file, every ledger
 and the spec documents beside it under the root (D40). The base is the session's:
 the commit `HEAD` was at when the session started — `status --session-start`, the
-SessionStart hook, records it from the hook's input — moved to `HEAD` by a PASS
+binding's call at a session's start, records it from its input — moved to `HEAD` by a PASS
 recorded while nothing governed differs from `HEAD`; a session with none, or whose
 base is no longer an ancestor of `HEAD`, reads from `HEAD`. So a change the maker
 commits before it stops is in the diff. The files are those the working tree
