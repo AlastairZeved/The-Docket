@@ -459,7 +459,10 @@ Each failure prints one line, `<file>:<line>  check <k>: <message>`; the exit
 code is 1 if any check fails, else 0. A failure names the line of the offending
 cite, heading or edge, never only the file. Every line the core prints, here and
 in every subcommand, replaces a control character, or a character that reorders
-what a terminal shows, with U+FFFD: check 2 fails an entry that carries one, and
+what a terminal shows, with U+FFFD, and a name the repository holds — a file, a
+ledger — is printed on its one line with its own line breaks and tabs replaced
+too, so a failure is one line whatever its file is called; the JSON forms carry
+names as they are: check 2 fails an entry that carries one, and
 text no check reads for one — a ledger's preamble, a section heading — still
 prints straight.
 

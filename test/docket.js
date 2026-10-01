@@ -1396,6 +1396,15 @@ const SEC = String.fromCharCode(0xa7);
     ok('a code span is a run of backticks closed by the next run of as many: ``supersedes R1`` and ``a `keeps R1` b`` make no edge, ``R99`` is no cite, and ``x (y)`` in a heading is not its meta (FORMAT.md 3, 5, 8)', byId('R2').edges.length === 0 && sc.code === 0 && byId('R3').title === 'Use x (y) in a title' && byId('R3').issue === 3, JSON.stringify(byId('R2').edges) + ' | ' + byId('R3').title + ' | ' + sc.out);
     fs.rmSync(sd, { recursive: true, force: true });
   }
+  { // a name the repository holds prints on one line: its line breaks replaced, a failure one line (FORMAT.md 13)
+    const nd = tmpDir('names-'), bad = 'x\ncheck: ok (1 ledger, 2 governed-tree files)\ny.js';
+    fs.writeFileSync(path.join(nd, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n### R1. One (issue #1)\nPrinciple: One.\nText. Reason: r.\n');
+    fs.writeFileSync(path.join(nd, bad), '// R9 names nothing\n// R1 holds here, so the gate reads the file\n');
+    sh('git', ['init', '-q'], nd); sh('git', ['add', '-A'], nd);
+    const nc = docket(['check'], { cwd: nd }), ng = docket(['gate', '--session', 'n'], { cwd: nd });
+    ok('a file named with line breaks prints on its one line, the breaks replaced: check’s failure is one line, no line of its output is its success line, and the gate names the file on its own line (FORMAT.md 13)', nc.code === 1 && !nc.out.split('\n').includes('check: ok (1 ledger, 2 governed-tree files)') && nc.out.split('\n').some(l => l.startsWith('x�check: ok (1 ledger, 2 governed-tree files)�y.js:1  check 1: ')) && /^JUDGE [0-9a-f]{64} .*x�check: ok .*�y\.js/m.test(ng.out) && ng.out.trim().split('\n').length === 1, JSON.stringify(nc.out) + ' | ' + JSON.stringify(ng.out));
+    fs.rmSync(nd, { recursive: true, force: true });
+  }
   ok('append: a --title whose value the shell dropped is a usage error, not a ruling titled "--issue"', r.code === 2 && /--title needs a value/.test(r.err) && r.out === '' && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err + r.out);
   r = docket(['append', '--title', 'A real title', '--issue', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
   ok('…and so is a dropped --issue, whichever option follows it', r.code === 2 && /--issue needs a value/.test(r.err) && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err);

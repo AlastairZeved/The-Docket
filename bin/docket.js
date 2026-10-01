@@ -739,7 +739,7 @@ function near(argv) {
     const governed = citesIn(text, ledger).some(c => c.exists);
     if (!governed) return 0;                                            // not governed: silent
     obj.notice = 'no ruling is cited in this window; run docket governs <id> for the one you rely on.';
-    outLines.push('Governed here (' + ledgerRel + ', ' + where + '): ' + obj.notice);   // one line, as D7's addendum and FORMAT.md 15 say
+    outLines.push('Governed here (' + shown(ledgerRel) + ', ' + shown(where) + '): ' + obj.notice);   // one line, as D7's addendum and FORMAT.md 15 say
     return emitNear(input, argv, outLines.join('\n'), obj);
   }
   let list = Array.from(byId.values());
@@ -751,7 +751,7 @@ function near(argv) {
   const total = list.length;
   list = list.slice(0, CAP);
   const listed = new Set(list.map(x => x.id));
-  outLines.push('Governed here (' + ledgerRel + ', ' + where + '):');
+  outLines.push('Governed here (' + shown(ledgerRel) + ', ' + shown(where) + '):');
   for (const x of list) {
     const r = ledger.byId.get(x.id);
     outLines.push('  ' + named(r) + (r.issue !== null ? '  · issue #' + r.issue : ''));
@@ -905,7 +905,7 @@ function governsBlock(root, ledger, r, cites) {
   lines.push('Addenda:');
   if (!r.addenda.length) lines.push('  none'); for (const a of r.addenda) lines.push('  ' + a.date + ': ' + a.text);
   lines.push('Code cites:');
-  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + c.rel + ':' + c.line + '  ' + glance(c.text.trim()));
+  if (!cites.length) lines.push('  none'); for (const c of cites) lines.push('  ' + shown(c.rel) + ':' + c.line + '  ' + glance(c.text.trim()));
   return lines.join('\n');
 }
 function principles(argv) {
@@ -1181,8 +1181,8 @@ function check(argv) {
   const root = enumerationRoot(process.cwd());
   const res = runCheck(root);
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2)); return res.failures.length ? 1 : 0; }
-  for (const f of res.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
-  for (const i of res.info) out('info  ' + i);
+  for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
+  for (const i of res.info) out('info  ' + shown(i));
   if (!res.failures.length) out('check: ok (' + res.ctx.ledgers.size + ' ledger' + (res.ctx.ledgers.size === 1 ? '' : 's') + ', ' + res.ctx.files.length + ' governed-tree file' + (res.ctx.files.length === 1 ? '' : 's') + ')');
   return res.failures.length ? 1 : 0;
 }
@@ -1201,6 +1201,9 @@ function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toS
 // fixed the text still reads straight.
 const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 function plain(t) { return String(t).replace(UNSAFE_OUT_RE_G, '\ufffd'); }
+// A name the repository holds — a file, a ledger — printed within a line: its own line breaks and tabs replaced too, which
+// plain() keeps since they shape the lines it prints, so a failure is one line whatever its file is called (FORMAT.md 13)
+function shown(s) { return String(s).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, '\ufffd'); }
 // An N:1 value (FORMAT.md 13): the 1 ends it — no digit, and no decimal point with a digit, after it — so 4.5:10 is not one
 const CONTRAST_RE = /(\d+(?:\.\d+)?):1(?!\d|\.\d)/;
 const CONTRAST_RE_ALL = /(\d+(?:\.\d+)?):1(?!\d|\.\d)/g;
@@ -1294,8 +1297,8 @@ function specCheck(argv) {
   const s = scope(argv);
   const res = runSpecCheck(s.root, null, has(argv, '--all') ? null : s.ledger);
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, rows: res.rows, info: res.info, failures: res.failures }, null, 2)); return res.failures.length ? 1 : 0; }
-  for (const f of res.failures) out(f.file + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
-  for (const i of res.info) out('info  ' + i);
+  for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
+  for (const i of res.info) out('info  ' + shown(i));
   if (!res.failures.length) out('spec-check: ok (' + res.rows + ' rows)');
   return res.failures.length ? 1 : 0;
 }
@@ -1483,7 +1486,7 @@ function afterWrite(argv, root, ledger, printed) {
   const res = runCheck(root);
   if (argv.json) { out(JSON.stringify({ written: printed, ok: res.failures.length === 0, failures: res.failures }, null, 2)); return res.failures.length ? 1 : 0; }
   out(printed.trimEnd());
-  for (const f of res.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
+  for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   out(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the ledger is written; fix before you rely on it' : 'check: ok');
   return res.failures.length ? 1 : 0;
 }
@@ -1714,7 +1717,7 @@ function status(argv) {
     return 0;
   }
   const L = [];
-  L.push('Docket — ' + rel(root, lp) + ' (' + ledger.rulings.length + ' ruling' + (ledger.rulings.length === 1 ? '' : 's') + (ledger.prefixes.length ? '; prefix' + (ledger.prefixes.length === 1 ? ' ' : 'es ') + ledger.prefixes.join(', ') : '; no prefix') + ')');
+  L.push('Docket — ' + shown(rel(root, lp)) + ' (' + ledger.rulings.length + ' ruling' + (ledger.rulings.length === 1 ? '' : 's') + (ledger.prefixes.length ? '; prefix' + (ledger.prefixes.length === 1 ? ' ' : 'es ') + ledger.prefixes.join(', ') : '; no prefix') + ')');
   L.push('Last rulings:');
   for (const r of ledger.rulings.slice(-3).reverse()) L.push('  ' + named(r) + (r.issue !== null ? '  · issue #' + r.issue : ''));
   L.push('Cited nowhere: ' + (uncited === null ? UNREAD : uncited.length ? uncited.join(', ') + ' (' + uncited.length + ' of ' + ledger.rulings.length + ')' : 'none'));
@@ -1731,7 +1734,7 @@ function status(argv) {
   if (!witness) { L.push('Witness: ' + UNREAD.replace('not read', 'not run')); out(L.join('\n')); return 0; }
   const skipped7 = check_.info.filter(i => /: check 7 skipped/.test(i)).length;
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + (skipped7 ? '; check 7 skipped for ' + skipped7 + ' — docket check says why' : '') + ')' : 'FAIL (' + witness.failures.length + ')'));
-  for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
+  for (const f of witness.failures.slice(0, 5)) L.push('  ' + shown(f.file) + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
   if (witness.failures.length > 5) L.push('  +' + (witness.failures.length - 5) + ' more — docket check lists them all');   // D14's addendum: five, then the pointer
   out(L.join('\n'));
   return 0;
@@ -2019,8 +2022,8 @@ function constitute(argv) {
     '  test/docket.js     the witness (D9) — run it bare: node test/docket.js',
     '', 'The CI step:', CI_STEP,
     '', 'For the repository\'s agent-instructions file — the host names it; add this yourself:', section, ''];
-  for (const f of res.failures) L.push(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
-  for (const i of res.info) L.push('info  ' + i);
+  for (const f of res.failures) L.push(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
+  for (const i of res.info) L.push('info  ' + shown(i));
   const nl = res.ctx.ledgers.size, nf = res.ctx.files.length;
   L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : 'check: ok (' + nl + ' ledger' + (nl === 1 ? '' : 's') + ', ' + nf + ' governed-tree file' + (nf === 1 ? '' : 's') + ')');
   out(L.join('\n'));
@@ -2297,7 +2300,7 @@ function gate(argv) {
     return 0;
   }
   say('JUDGE', has(argv, '--diff') ? { diff: wideDiff(root, d) } : null);   // an option accepted is an option honoured, --json or not
-  if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.join(' ') : '')); if (has(argv, '--diff')) out(wideDiff(root, d)); }
+  if (!argv.json) { out('JUDGE ' + d.hash + (d.touched.length ? ' ' + d.touched.map(shown).join(' ') : '')); if (has(argv, '--diff')) out(wideDiff(root, d)); }
   return 0;
 }
 // A verdict is held to its lines (D23). Each is one located failure in the protocol's form — pack · F<n> · file:line ·
@@ -2507,7 +2510,7 @@ function stop(argv) {
   const id = sessionKey(sessionOpt(argv) || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
-  const files = d.touched.join(', ');
+  const files = d.touched.map(shown).join(', ');
   const tail = ' This stop cannot stand; the stop that follows this block in the same turn is allowed.';
   if (g.decision === 'SURFACE') return blockStop(surfacedReason(g.st, g.sess, tail, id));   // D11: no judge; the residue goes to the maker
   const judge = flag(argv, '--judge');
@@ -2737,10 +2740,10 @@ function witness(argv) {
       failures: c.failures.map(f => Object.assign({ check: 'check' }, f)).concat(s.failures.map(f => Object.assign({ check: 'spec-check' }, f))) }, null, 2));
     return n ? 1 : 0;
   }
-  for (const f of c.failures) out(f.file + ':' + f.line + '  check ' + f.k + ': ' + f.message);
-  for (const f of s.failures) out(f.file + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
-  for (const i of c.info) out('info  ' + i);
-  for (const i of s.info || []) out('info  ' + i);
+  for (const f of c.failures) out(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
+  for (const f of s.failures) out(shown(f.file) + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
+  for (const i of c.info) out('info  ' + shown(i));
+  for (const i of s.info || []) out('info  ' + shown(i));
   out(n ? 'witness: ' + n + ' failure' + (n === 1 ? '' : 's') : 'witness: ok (' + c.ctx.ledgers.size + ' ledger' + (c.ctx.ledgers.size === 1 ? '' : 's') + ', ' + s.rows + ' spec rows)');
   return n ? 1 : 0;
 }
