@@ -243,9 +243,12 @@ An **addendum** is a line under an entry of the form
 It records that something about the entry has changed without amending the
 entry: most often that the entry's stated reason no longer holds. An addendum
 is **pending** until a ruling written after it has an edge into the entry (any
-verb); the docket (`docket status`) lists pending addenda, each on one line with
-its text cut at one hundred characters (D14) — `governs <id>` prints the whole,
-and `status --json` carries it. `docket append --addendum <id>
+verb); the docket (`docket status`) lists every pending addendum, each on one
+line with its text cut at one hundred characters (D14) — `governs <id>` prints
+the whole, and `status --json` carries it. The list has no cap, as the witness
+failures beside it have five: each line is a route no ruling has taken yet, and
+the list is the one place it is kept (D21), where a failure's other lines are
+in `docket check`. `docket append --addendum <id>
 --text <text>` writes one with today's date as the last line of the entry;
 `append` refuses a `--body` that carries an addendum line, so an addendum is
 dated by the tool and never by hand.
