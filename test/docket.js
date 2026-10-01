@@ -39,6 +39,22 @@ function expected(name) { return read(path.join(FIX, 'expected', name)); }
 // A temp repository laid out like this one (test/fixture/…) so paths in outputs match byte for byte.
 const TEMP_DIRS = [];
 process.on('exit', () => { for (const d of TEMP_DIRS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) { /* already gone */ } } });
+// The witness builds its trees in the temporary directory and reads each as a project of its own, so that directory lies
+// outside any repository and beneath no ledger, or a tree's root, its ledger and its state would be another project's, and
+// that project's answers would read as the core's failures: the witness refuses there, exit 2, and says why (D6's addendum)
+{
+  const t = fs.realpathSync(os.tmpdir());
+  const g = cp.spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: t, encoding: 'utf8' });
+  let led = null;
+  for (let d = t; ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, 'DECISIONS.md')) || fs.existsSync(path.join(d, 'docs', 'DECISIONS.md'))) { led = d; break; }
+    if (path.dirname(d) === d) break;
+  }
+  if (g.status === 0 || led) {
+    console.error('witness: refused — the temporary directory ' + t + ' lies ' + (g.status === 0 ? 'inside the git repository at ' + g.stdout.trim() : 'beneath the ledger in ' + led) + '; the witness builds its trees there and reads each as a project of its own, so it needs one outside any repository and beneath no ledger: set TMPDIR to such a directory');
+    process.exit(2);
+  }
+}
 // A temporary directory the suite owns: removed at exit, whatever the tests did with it.
 function tmpDir(prefix) { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); TEMP_DIRS.push(d); return d; }
 // The names D13 keeps out of the core's words — hosts, models, vendors — one list for every check of them; a word's boundary
@@ -4736,6 +4752,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and writes of the hook’s output hookSpecificOutput, with hookEventName and additionalContext, and decision with its reason', /hookSpecificOutput: \{ hookEventName: input\.hook_event_name, additionalContext: text \}/.test(src) && /JSON\.stringify\(\{ decision: 'block', reason \}\)/.test(src), 'the output fields moved');
   const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
   ok('the agent file sends a judge run by hand to .docket/core at the project’s root — the repository’s top, where the core writes it (D28’s addendum, D44)', /`\.docket\/core` at the project's root —\s+the top of the git repository the project directory lies in/.test(A), A);
+}
+
+// ── the witness refuses a temporary directory inside a repository or beneath a ledger (D6's addendum) ──
+{
+  const inRepo = tempRepo(), under = tmpDir('docket-under-');
+  fs.writeFileSync(path.join(under, 'DECISIONS.md'), '# Rulings\n');
+  fs.mkdirSync(path.join(under, 'tmp'));
+  // the witness itself, run with each temporary directory, stops at its first lines: nothing else of it runs
+  const run = t => cp.spawnSync('node', [__filename], { encoding: 'utf8', env: Object.assign({}, outerEnv(), { TMPDIR: t }), timeout: 60000 });
+  const a = run(path.join(inRepo, 'test')), b = run(path.join(under, 'tmp'));
+  ok('the witness refuses, exit 2, a temporary directory inside a repository, naming the repository and TMPDIR, and runs nothing', a.status === 2 && /^witness: refused — the temporary directory .* lies inside the git repository at .*set TMPDIR/.test(a.stderr) && a.stdout === '' && !/FAIL /.test(a.stderr), a.status + ' ' + a.stderr.slice(0, 300));
+  ok('…and one beneath a ledger, naming the directory that holds it', b.status === 2 && /lies beneath the ledger in .*docket-under-/.test(b.stderr) && b.stdout === '', b.status + ' ' + b.stderr.slice(0, 300));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

@@ -79,6 +79,7 @@ A file is governed if it cites a ruling that exists; the ledger is the nearest `
 Principle: One home per value.
 `bin/docket.js` cites D-numbers where it implements them; all three hooks run on this repo through `claude --plugin-dir .`, which `CLAUDE.md` names as the only way to work here; its own CI runs its own witness. There is no `.claude/settings.json`: it would duplicate the plugin's own hooks and fire `near` twice per edit. Reason: a law that does not bind its author is a suggestion, and a hook with two homes fires twice (D5).
 > Addendum 2026-10-01: A command's exit is its own whoever reads its output: a reader that stops reading early, a pipe into head, takes no more lines, and a failing check still exits 1. Measured on a copy, the core had ended at once with exit 0 when its reader went, so a CI step that piped the check with pipefail read a failing ledger as passing.
+> Addendum 2026-10-01: The witness builds its trees in the temporary directory and reads each as a project of its own, so it runs only where that directory lies outside any repository and beneath no ledger, and refuses elsewhere, naming what it lies in and TMPDIR. Measured on a copy with the temporary directory inside the repository under test, twelve to sixteen assertions failed on the other project's answers, one run crashed, and the core wrote its state into that project's root.
 
 ### D7. The four located rules (cases cheap to decide now, expensive to discover in use)
 Principle: A rule carries its reason.
