@@ -2478,14 +2478,15 @@ function transcript(argv) {
   }
   if (plain_ && turns.every(t => t.raw !== undefined)) { out(argv.json ? JSON.stringify(lines.map(raw => ({ raw })), null, 2) : lines.join('\n')); return 0; }
   const aTurns = turns.filter(t => t.role === 'assistant');
-  const start = keep === Infinity ? 0 : Math.max(0, aTurns.length - keep);
+  const whole = keep === Infinity || keep >= aTurns.length;          // the last n turns, n at or past the count, are the whole transcript
+  const start = whole ? 0 : aTurns.length - keep;
   const firstKept = aTurns[start];
   const outL = [], kept = [];
   let seen = 0;
   for (const tn of turns) {
-    if (tn.raw !== undefined) { if (keep === Infinity) { outL.push(tn.raw); kept.push({ raw: tn.raw }); } continue; }
-    if (tn.role === 'assistant') { if (tn === firstKept) seen = 1; if (!seen && keep !== Infinity) continue; }
-    else if (!seen && keep !== Infinity) continue;
+    if (tn.raw !== undefined) { if (whole) { outL.push(tn.raw); kept.push({ raw: tn.raw }); } continue; }
+    if (tn.role === 'assistant') { if (tn === firstKept) seen = 1; if (!seen && !whole) continue; }
+    else if (!seen && !whole) continue;
     outL.push((tn.role === 'assistant' ? '── assistant' : '── user') + '\n' + tn.lines.join('\n'));
     kept.push({ role: tn.role, lines: tn.lines });
   }

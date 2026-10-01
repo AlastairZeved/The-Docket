@@ -459,7 +459,9 @@ tool result, marked `[result]`, or `[result, error]` where the host marks it one
 a call or result over forty lines prints forty in all — its first ten, the count
 between and its last twenty-nine, so the mark stands for two lines or more (D42) —
 and a line of one over four hundred characters is cut, marked (D14), the maker's
-own text printed whole; `stop` prints its answer as
+own text printed whole; `transcript --last <n>` keeps the last n assistant turns
+and what follows the first of them, and n at or past the number of assistant turns
+keeps the whole transcript, as no `--last` does; `stop` prints its answer as
 it always does, and `{}` for a stop it allows, where it otherwise prints nothing.
 `docket check` covers every ledger in the tree; `docket spec-check` covers the
 ledger nearest the working directory (a fixture ledger under `test/` is reached

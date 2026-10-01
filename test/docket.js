@@ -4429,5 +4429,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('status names the last judge’s report where a judge has run: .docket/judge.log, a check it could not run named there (D46)', /^Judge's report: \.docket\/judge\.log — the last judge's own words, a check it could not run named there$/m.test(s.out) && !/Judge's report/.test(docket(['status'], { cwd: path.join(tempRepo(), 'test', 'fixture') }).out), s.out);
 }
 
+// ── this repository's ledger names its edges in its headings; transcript --last n past the count keeps the whole ──
+{
+  const ix = JSON.parse(docket(['index', '--json', '--ledger', path.join(ROOT, 'docs', 'DECISIONS.md')], { cwd: ROOT }).out);
+  const bodyEdges = ix.rulings.flatMap(r => r.edges.filter(e => e.line !== r.line).map(e => r.id + ' ' + e.verb + ' ' + e.to + ' (line ' + e.line + ')'));
+  ok('this repository’s ledger names its edges in its headings: no sentence of a body reads as an edge — a sentence that names a ruling beside a verb it does not mean quotes the id (FORMAT.md 5)', bodyEdges.length === 0, bodyEdges.join(' | '));
+  const d = tmpDir('docket-tr-'), log = path.join(d, 't.jsonl');
+  const turn = (role, text) => JSON.stringify({ type: role, message: { role, content: [{ type: 'text', text }] } });
+  fs.writeFileSync(log, [turn('user', 'the opening ask'), turn('assistant', 'one'), turn('user', 'more'), turn('assistant', 'two'), turn('assistant', 'three')].join('\n') + '\n');
+  const all = docket(['transcript', log]).out, t3 = docket(['transcript', log, '--last', '3']).out, t4 = docket(['transcript', log, '--last', '4']).out, t2 = docket(['transcript', log, '--last', '2']).out;
+  ok('transcript --last n with n at or past the number of assistant turns keeps the whole transcript, the opening user turn with it, as no --last does', t3 === all && t4 === all && all.startsWith('── user\nthe opening ask'), JSON.stringify([all, t3, t4]));
+  ok('…and with n below the count keeps the last n assistant turns and what follows the first of them', t2 === '── assistant\ntwo\n── assistant\nthree\n', JSON.stringify(t2));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
