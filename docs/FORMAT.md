@@ -220,7 +220,9 @@ span describes an edge and creates none, which is how prose talks about an
 edge it does not make. The verbs are recognised in this one form and no other —
 `superseded R3` and `superseding R3` make no edge — save that a verb or adverb
 may open a sentence with a capital, `Supersedes R3` or `In part reverses R6`,
-and is recorded in lowercase; and a sentence that needs a
+and is recorded in lowercase — a sentence as the clause above bounds it, so a
+capitalised verb or adverb anywhere else, `The Lot Keeps R5`, is a word of its
+sentence and makes no edge; and a sentence that needs a
 verb of the list beside an id it does not mean to bind quotes the id. An edge's target must exist and must be defined earlier
 in the ledger than its source (a strictly smaller heading line). An edge from a ruling to itself is a
 failure (13, check 5). No status is ever computed from edges (D3): `governs`
@@ -434,7 +436,9 @@ prints straight.
 
 Check 7's reference point — the first parent when the ledger is unchanged since
 `HEAD` — is a rule of this repository's ledger, stated with its reason in the preamble of
-`docs/DECISIONS.md` beside the append-only law it enforces.
+`docs/DECISIONS.md` beside the append-only law it enforces. `docket status`, whose
+witness line sums the check up, says beside an `ok` for how many ledgers check 7
+was skipped, as the info lines do, so that line is not read as a pass either.
 
 `docket check --json` prints the same findings as JSON. Run with no subcommand,
 `docket` is the witness: `check` over the tree and `spec-check` for the nearest
@@ -577,7 +581,11 @@ a file under a ledger that is gone, and the ledger itself, each read at the base
 the addition it is and a file at the base read as text by its bytes, as 1 reads
 one; an untracked governed file is read as if added — intent to add, in a copy of
 the index, never the repository's own — so its diff is a new file's and the hash
-is the same before `git add` and after. `SKIP` when that text is empty, when its hash
+is the same before `git add` and after. A diff the gate cannot read whole is
+refused, exit 2, with the reason: the copy of the index not made, or the add
+failing, would leave every tracked file read as deleted; and a repository git
+will not read — its ownership, its config — is not a tree with no repository,
+whose governed files all read as new, as they do before a first commit. `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times since its last PASS or
 its located failures have not fallen across the last two verdicts after the

@@ -17,6 +17,11 @@ function ok(name, cond, detail) {
 // CI step checks, and the witness's checks run in scratch repositories that hold none of its commits; a test that wants a base
 // passes one.
 function outerEnv() { const e = Object.assign({}, process.env); delete e.DOCKET_BASE; return e; }
+// The witness's scratch repositories are its own: a signing setting in the person's git config, with a signer that cannot run
+// here, would fail every commit it makes, so every git it starts signs nothing — the settings added after any the caller set
+{ const n = Number(process.env.GIT_CONFIG_COUNT) || 0;
+  [['commit.gpgsign', 'false'], ['tag.gpgsign', 'false']].forEach(([k, v], i) => { process.env['GIT_CONFIG_KEY_' + (n + i)] = k; process.env['GIT_CONFIG_VALUE_' + (n + i)] = v; });
+  process.env.GIT_CONFIG_COUNT = String(n + 2); }
 function docket(args, opts) {
   opts = opts || {};
   const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}), timeout: opts.timeout });
@@ -2635,7 +2640,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('.docket/ is ignored by git where a .gitignore says so', sh('git', ['check-ignore', '.docket/verdict.json'], ROOT).status === 0, 'this repository does not ignore .docket/');
     { const gi = read(path.join(ROOT, '.gitignore')), lic = read(path.join(ROOT, 'LICENSE'));
       ok('.gitignore keeps node_modules/ and package*.json out too: the core runs with no install, and no package file is committed', /^node_modules\/$/m.test(gi) && /^package\*\.json$/m.test(gi), gi);
-      ok('LICENSE is the MIT licence, with its copyright line', /^MIT License\n\nCopyright \(c\) \d{4} \S/.test(lic) && /Permission is hereby granted, free of charge/.test(lic), lic.slice(0, 80)); }
+      ok('LICENSE is the MIT licence, with its copyright line: the year and the holder it names', /^MIT License\n\nCopyright \(c\) 2026 AlastairZeved\n/.test(lic) && /Permission is hereby granted, free of charge/.test(lic), lic.slice(0, 80)); }
     // five blocks with decreasing failures still hit the cap
     const d2 = tempRepo();
     fs.appendFileSync(path.join(d2, 'test', 'fixture', 'app.js'), 'const x = 1; // R2\n');
@@ -4186,6 +4191,43 @@ const SEC = String.fromCharCode(0xa7);
   const RULE = read(path.join(ROOT, 'intake', 'RULE.md')), CONST = read(path.join(ROOT, 'intake', 'CONSTITUTE.md'));
   const holds = t => /Silence\s+is\s+not\s+confirmation\./.test(t) && /A\s+model's\s+own\s+turn\s+is\s+not\s+confirmation\./.test(t) && /A\s+restatement\s+of\s+the\s+(?:ruling|answers)\s+is\s+not\s+confirmation\./.test(t);
   ok('intake/RULE.md and intake/CONSTITUTE.md each say that silence, a model’s own turn and a restatement are not the person’s confirm (D18)', holds(RULE) && holds(CONST), 'RULE: ' + holds(RULE) + ', CONSTITUTE: ' + holds(CONST));
+}
+
+// ── the gate reads its diff whole or refuses; a capital opens a sentence; a skip is said beside an ok; the witness signs nothing
+//    (FORMAT.md 5, 13, 16) ──
+{
+  const LEDGER = '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. One ruling\nPrinciple: One.\nReason: r.\n';
+  {
+    const d = tempRepo(); fs.writeFileSync(path.join(d, 'test', 'fixture', 'brandnew.js'), 'const n = 1; // R2\n');
+    const good = docket(['gate', '--session', 'tz'], { cwd: d });
+    const bad = docket(['gate', '--session', 'tz'], { cwd: d, env: { TMPDIR: path.join(d, 'no-such-dir') } });
+    ok('the gate refuses, exit 2, when it cannot read an untracked governed file as added — its temp directory unusable — where it had judged every tracked file deleted (FORMAT.md 16)', /^JUDGE [0-9a-f]{64} test\/fixture\/brandnew\.js$/m.test(good.out) && bad.code === 2 && /could not read the untracked governed files as added/.test(bad.err) && !/^JUDGE/m.test(bad.out), [good.out, bad.code, bad.out.slice(0, 200), bad.err.slice(0, 200)].join('|'));
+    const e = tempRepo(); fs.appendFileSync(path.join(e, 'test', 'fixture', 'app.js'), 'const q = 6; // R2\n');
+    fs.appendFileSync(path.join(e, '.git', 'config'), '\n[core\n');   // a config git will not read
+    const gr = docket(['gate', '--session', 'gr'], { cwd: e, env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('…and when git will not read the repository it says so, with git’s own line, exit 2, where it had read every governed file as new (FORMAT.md 16)', gr.code === 2 && /git will not read the repository at /.test(gr.err) && /config/.test(gr.err) && !/^JUDGE/m.test(gr.out), [gr.code, gr.out.slice(0, 200), gr.err.slice(0, 300)].join('|'));
+  }
+  {
+    const d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. The Lot Keeps R5 In View (issue #9)\nPrinciple: Capture precedes structure.\nA capital mid-sentence Extends R1 here. Two words: In part reverses R1. Keeps R2 whole. Reason: r.\n'));
+    let r9 = null; try { r9 = JSON.parse(docket(['index', '--json'], { cwd: path.join(d, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9'); } catch (e) { r9 = null; }
+    const es = (r9 ? r9.edges : []).map(x => (x.adverb ? x.adverb + ' ' : '') + x.verb + ' ' + x.to).sort();
+    ok('a capitalised verb is an edge only where it opens a sentence: "The Lot Keeps R5 In View" and "a capital mid-sentence Extends R1" make none, "Two words: In part reverses R1" makes the lowercase edge alone, and "Keeps R2 whole." makes one (FORMAT.md 5)', JSON.stringify(es) === JSON.stringify(['keeps R2', 'reverses R1']), JSON.stringify(es));
+  }
+  {
+    const d = tmpDir('skip7-'); fs.writeFileSync(path.join(d, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(d, 'a.js'), 'x(); // R1\n');
+    sh('git', ['init', '-q', '-b', 'main'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'one'], d);
+    const s = docket(['status'], { cwd: d }), c = docket(['check'], { cwd: d });
+    ok('status names a skipped check 7 beside a passing witness, as check does in its info line: a skip is never read as a pass (FORMAT.md 13)', /check 7 skipped/.test(c.out) && /^Witness: ok \(1 ledger; check 7 skipped for 1 — docket check says why\)$/m.test(s.out), s.out + '|' + c.out);
+  }
+  {
+    const g = tmpDir('gitcfg-'), cfg = path.join(g, 'config');
+    fs.writeFileSync(cfg, '[commit]\n\tgpgsign = true\n[tag]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n');
+    const had = process.env.GIT_CONFIG_GLOBAL; process.env.GIT_CONFIG_GLOBAL = cfg;
+    let committed = false;
+    try { const d = tempRepo(); committed = sh('git', ['rev-parse', '--verify', '-q', 'HEAD'], d).status === 0; }
+    finally { if (had === undefined) delete process.env.GIT_CONFIG_GLOBAL; else process.env.GIT_CONFIG_GLOBAL = had; }
+    ok('the witness’s scratch commits sign nothing under a git config that signs every commit with a signer that cannot run: its repositories are its own', committed, 'no commit was made');
+  }
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

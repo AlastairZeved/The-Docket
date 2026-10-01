@@ -254,6 +254,11 @@ function edgesIn(text, sourceId, line, asMeta) {
     let m;
     const scan = maskCode(unit);                                     // an edge inside a code span is quoted, not made
     while ((m = EDGE_RE.exec(scan)) !== null) {
+      // A capital opens a sentence and nowhere else (FORMAT.md 5): a capitalised verb or adverb is an edge only as its unit's first
+      // word — the meta clause, the title's sentence, the body's — and one inside a sentence ("The Lot Keeps R5") is a word of it.
+      // The scan goes on from the next character, so a lowercase edge after a capitalised adverb is still read, without it.
+      const first = m[1] || m[2];
+      if ((m[1] && /^\p{Lu}/u.test(m[2])) || (/^\p{Lu}/u.test(first) && /[\p{L}\p{N}]/u.test(scan.slice(0, m.index)))) { EDGE_RE.lastIndex = m.index + 1; continue; }
       const targets = [m[3] + m[4]].concat((m[5] || '').split('/').filter(Boolean));
       for (const t of targets) {
         const tm = /^([A-Za-z]+)(\d+)$/.exec(t);
@@ -1590,7 +1595,9 @@ function status(argv) {
   }
   L.push('Last verdict: ' + (st.last ? st.last.verdict + ' at ' + st.last.at + ' (' + st.last.failures + ' located failure' + (st.last.failures === 1 ? '' : 's') + ')' + (surfaced ? '; session ' + st.last.session + ' is SURFACED — its residue waits for the human' : '') : 'none'));
   if (surfacedOthers.length) L.push('Surfaced: ' + surfacedOthers.map(k => { const x = st.sessions[k]; return k + ' (' + x.blocks + ' block' + (x.blocks === 1 ? '' : 's') + ' since its last PASS; located failures per verdict: ' + (x.history && x.history.length ? x.history.join(' → ') : 'none recorded') + ')'; }).join(', ') + ' — each waits for the human, who releases it with a PASS naming it');
-  L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + ')' : 'FAIL (' + witness.failures.length + ')'));
+  // a check 7 the run skipped is said beside an ok, as check's info line says it, so a skip is never read as a pass (FORMAT.md 13)
+  const skipped7 = check_.info.filter(i => /: check 7 skipped/.test(i)).length;
+  L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + (skipped7 ? '; check 7 skipped for ' + skipped7 + ' — docket check says why' : '') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + f.file + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
   if (witness.failures.length > 5) L.push('  +' + (witness.failures.length - 5) + ' more — docket check lists them all');   // D14's addendum: five, then the pointer
   out(L.join('\n'));
@@ -1989,15 +1996,22 @@ function governedAt(root, have, base) {
 // diff is then the one `git add` gives it, and the gate's hash is the same before the add and after it (D40).
 function diffsFrom(root, base, rels, untracked, runs) {
   let env = process.env, tmp = null;
-  if (untracked.length) {
+  // A copy that is not made, or an add that fails, leaves git an index with nothing in it, and every tracked file would read as
+  // deleted: the diff would be another diff, and the stop would start a judge on it, so it is refused (FORMAT.md 16)
+  const refuse = why => { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* never made */ } } throw Object.assign(new Error('the gate could not read the untracked governed files as added, in a copy of the index: ' + why + '; a diff read without them would be another diff, so none is judged (FORMAT.md 16)'), { refusal: true }); };
+  // Where git reads no repository — none at all, or one it will not read — there is no index to copy, and the diff below
+  // fails: governedDiff reads which of the two it is (FORMAT.md 16)
+  const ip = untracked.length ? sh('git', ['rev-parse', '--git-path', 'index'], root) : null;
+  if (ip && ip.status === 0) {
     tmp = path.join(os.tmpdir(), 'docket-index-' + process.pid + '-' + crypto.randomBytes(4).toString('hex'));
-    const ip = sh('git', ['rev-parse', '--git-path', 'index'], root);
-    try { const src = path.resolve(root, ip.stdout.trim()); if (ip.status === 0 && isFile(src)) fs.copyFileSync(src, tmp); } catch (e) { /* no index yet: git starts one */ }
+    const src = path.resolve(root, ip.stdout.trim());
+    if (isFile(src)) { try { fs.copyFileSync(src, tmp); } catch (e) { refuse('the copy could not be written at ' + tmp + ' (' + (e.code || e.message) + ')'); } }   // no index yet: git starts one
     env = Object.assign({}, process.env, { GIT_INDEX_FILE: tmp });
-    cp.spawnSync('git', ['add', '-N', '--'].concat(untracked), { cwd: root, env, encoding: 'utf8' });
+    const add = cp.spawnSync('git', ['add', '-N', '--'].concat(untracked), { cwd: root, env, encoding: 'utf8' });
+    if (add.status !== 0) refuse('git add -N failed — ' + (String(add.stderr || (add.error && add.error.message) || '').trim().split('\n')[0] || 'exit ' + add.status));
   }
   try {
-    return runs.map(extra => { const r = cp.spawnSync('git', ['diff', base, '--no-renames'].concat(extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '' }; });
+    return runs.map(extra => { const r = cp.spawnSync('git', ['diff', base, '--no-renames'].concat(extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
   } finally { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* the copy is the reading's own */ } } }
 }
 // The diff the judge reads and the gate hashes (D40): `git diff <base>` — the session's base, HEAD when it has none — over
@@ -2021,7 +2035,15 @@ function governedDiff(root, base) {
   if (rels.length) {
     const [dr, nr] = diffsFrom(root, base, rels, untracked, [[], ['--name-only', '-z']]);
     if (dr.status === 0) { text = dr.stdout; touched = nr.stdout.split('\0').filter(Boolean); }
-    else {                                                             // no commit yet: everything governed is new
+    else {
+      // no commit yet, or no repository at all: everything governed is new. A repository git will not read — its ownership, its
+      // config — is neither, and read as either its diff would be another diff: refused, with git's own line (FORMAT.md 16). git
+      // is asked in its own words, whatever the locale, so "not a git repository" is read as written
+      const C_ = Object.assign({}, process.env, { LC_ALL: 'C', LANGUAGE: '' });
+      const gd = cp.spawnSync('git', ['rev-parse', '--git-dir'], { cwd: root, encoding: 'utf8', env: C_ });
+      const noRepo = gd.status !== 0 && /not a git repository/i.test(gd.stderr || '');
+      const unborn = gd.status === 0 && cp.spawnSync('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], { cwd: root, encoding: 'utf8', env: C_ }).status !== 0;
+      if (!noRepo && !unborn) throw Object.assign(new Error('git will not read the repository at ' + root + ' — ' + (String(gd.status !== 0 ? gd.stderr : dr.stderr).trim().split('\n')[0] || 'git diff ' + base + ' failed') + '; the gate reads no diff it cannot read whole (FORMAT.md 16)'), { refusal: true });
       fromGit = false;
       for (const f of rels) if (isFile(path.join(root, f))) { text += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
     }
@@ -2582,6 +2604,7 @@ function main() {
   return table[sub](argv);
 }
 // The walk's bound is thrown, so that a command that reads a tree past it as ungoverned can; any other refuses here, exit 2,
-// the bound named (FORMAT.md 1). exitCode, not exit(): a piped stdout must flush first.
-if (require.main === module) { try { process.exitCode = main(); } catch (e) { if (e && e.walkBound) die(e.message, 2); throw e; } }
+// the bound named (FORMAT.md 1), as a diff the gate cannot read whole is refused (FORMAT.md 16). exitCode, not exit(): a
+// piped stdout must flush first.
+if (require.main === module) { try { process.exitCode = main(); } catch (e) { if (e && (e.walkBound || e.refusal)) die(e.message, 2); throw e; } }
 module.exports = { parseLedger, titleOf, findLedger, projectRoot, contrast, luminance, VERBS, ADVERBS };
