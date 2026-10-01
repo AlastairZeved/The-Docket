@@ -220,19 +220,33 @@ function caseHead(words) { return words.map(w => '[' + w[0] + w[0].toUpperCase()
 const EDGE_RE = new RegExp('(?:' + NOT_WORD_BEFORE + '(' + caseHead(ADVERBS).join('|') + ')\\s+)?' + NOT_WORD_BEFORE + '(' + caseHead(VERBS).join('|') + ')\\s+([A-Za-z]+)([1-9]\\d{0,14})((?:/[A-Za-z]+[1-9]\\d{0,14})*)' + NOT_WORD_AFTER + '(?:\\s*\\(([^()]*)\\))?', 'gu');
 
 // The index of the "(" that opens the meta: the first one outside a backtick span that begins the heading or follows
-// a space (FORMAT.md 3, 4). A parenthesis inside inline code is code, not the meta; a heading with an unpaired
-// backtick has no code span; a heading that is only its parenthetical has an empty title and a meta.
+// a space (FORMAT.md 3, 4). A parenthesis inside inline code is code, not the meta, a code span read as maskCode reads it;
+// a heading that is only its parenthetical has an empty title and a meta.
 function metaStart(s) {
-  const noSpans = ((s.match(/`/g) || []).length % 2) === 1;
-  let inCode = false;
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '`' && !noSpans) { inCode = !inCode; continue; }
-    if (!inCode && s[i] === '(' && (i === 0 || s[i - 1] === ' ')) return i;
-  }
+  const m = maskCode(s);                                              // the code spans blanked, positions kept: the one reader of a span
+  for (let i = 0; i < s.length; i++) if (m[i] === '(' && (i === 0 || s[i - 1] === ' ')) return i;
   return -1;
 }
 // Text inside backticks is quoted, not asserted (FORMAT.md 5): blank every code span, keeping positions.
-function maskCode(s) { return s.replace(/`[^`\n]*`/g, m => ' '.repeat(m.length)); }
+// A code span is a run of backticks closed by the next run of as many on its line, as Markdown reads one: `x`, ``a `b` c``,
+// ```x```; a run that finds none is literal text and opens no span (FORMAT.md 3, 5, 8)
+function maskCode(s) {
+  let out = '', i = 0;
+  while (i < s.length) {
+    if (s[i] !== '`') { out += s[i++]; continue; }
+    let j = i; while (j < s.length && s[j] === '`') j++;
+    const run = j - i; let k = j, close = -1;
+    while (k < s.length && s[k] !== '\n') {
+      if (s[k] !== '`') { k++; continue; }
+      let e = k; while (e < s.length && s[e] === '`') e++;
+      if (e - k === run) { close = k; break; }
+      k = e;
+    }
+    if (close < 0) { out += s.slice(i, j); i = j; continue; }
+    out += ' '.repeat(close + run - i); i = close + run;
+  }
+  return out;
+}
 
 // D7 (2): cut at the first " (" outside code, strip marks, then cut at the last word boundary before 72 with "…".
 function titleOf(heading) {

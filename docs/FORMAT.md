@@ -157,10 +157,10 @@ as content of the heading rather than as the end of it.
 The title is the heading text after the id, in three steps and in this order:
 
 1. cut at the first ` (` (a space followed by an opening parenthesis) that lies
-   outside a backtick span, keeping what precedes it — a parenthesis inside
-   inline code is part of the code, not the meta; an unpaired backtick is a
-   literal character and opens no span (as in CommonMark), so a heading with an
-   odd number of backticks has no code span;
+   outside a code span, keeping what precedes it — a parenthesis inside
+   inline code is part of the code, not the meta; a code span, as in CommonMark,
+   is a run of backticks closed by the next run of as many on its line, and a run
+   that finds none is literal characters and opens no span;
 2. strip backticks and `**`;
 3. if what remains is longer than 72 characters (a title of exactly 72 is kept
    whole), keep the first 72, cut back to the last space inside them (the ASCII
@@ -221,7 +221,9 @@ binding less than the first, and each is kept. One verb may name several
 targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with
 the same clause.
 
-Text inside backticks is quoted, not asserted: `supersedes R3` inside a code
+Text inside backticks is quoted, not asserted — a code span is a run of
+backticks and the next run of as many (3), so ``supersedes R3`` is one as
+`supersedes R3` is: `supersedes R3` inside a code
 span describes an edge and creates none, which is how prose talks about an
 edge it does not make. The verbs are recognised in this one form and no other —
 `superseded R3` and `superseding R3` make no edge — save that a verb or adverb
@@ -313,7 +315,8 @@ reference, and check 1, `near`, `governs` and `status` pass over it. Cites insid
 ledger itself are references between rulings, not code cites: check 1 requires
 them to resolve like any other, and `governs` and `status` count code cites in
 every governed file except the ledger. A fenced code block — a line that
-begins with three backticks opens it, the next such line closes it — is quoted
+begins, after any indentation, with three backticks opens it, the next such line
+closes it — is quoted
 like a code span: no id, spec cite or bare cite inside it is counted, so a
 document may quote a ledger's output or another project's rulings. A fence
 quotes cites, not headings: an entry heading inside one still opens an entry, so

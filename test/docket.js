@@ -1387,6 +1387,15 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and the baseline’s comment printed and not written, and a dry run refuses what the write refuses, exit 2, writing nothing', bl.code === 0 && /^<!-- docket: bare-cites/.test(bl.out) && l4 === l3w && rf.code === 2 && /must state the reason/.test(rf.err) && read(led) === l4, bl.out + rf.err);
     fs.rmSync(dd, { recursive: true, force: true });
   }
+  { // a code span is a run of backticks closed by the next run of as many, as Markdown reads one (FORMAT.md 3, 5, 8)
+    const sd = tmpDir('spans-');
+    fs.writeFileSync(path.join(sd, 'DECISIONS.md'), '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n### R1. One (issue #1)\nPrinciple: One.\nText. Reason: r.\n\n### R2. Two (issue #2)\nPrinciple: One.\nDouble: ``supersedes R1`` is an example, and so is ``a `keeps R1` b``. Reason: r.\n\n### R3. Use ``x (y)`` in a title (issue #3)\nPrinciple: One.\nText. Reason: r.\n');
+    fs.writeFileSync(path.join(sd, 'a.js'), '// ``R99`` is quoted, as `R98` is\n// R1 here\n');
+    sh('git', ['init', '-q'], sd); sh('git', ['add', '-A'], sd);
+    const ix = JSON.parse(docket(['index', '--json'], { cwd: sd }).out), sc = docket(['check'], { cwd: sd }), byId = id => ix.rulings.find(r => r.id === id);
+    ok('a code span is a run of backticks closed by the next run of as many: ``supersedes R1`` and ``a `keeps R1` b`` make no edge, ``R99`` is no cite, and ``x (y)`` in a heading is not its meta (FORMAT.md 3, 5, 8)', byId('R2').edges.length === 0 && sc.code === 0 && byId('R3').title === 'Use x (y) in a title' && byId('R3').issue === 3, JSON.stringify(byId('R2').edges) + ' | ' + byId('R3').title + ' | ' + sc.out);
+    fs.rmSync(sd, { recursive: true, force: true });
+  }
   ok('append: a --title whose value the shell dropped is a usage error, not a ruling titled "--issue"', r.code === 2 && /--title needs a value/.test(r.err) && r.out === '' && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err + r.out);
   r = docket(['append', '--title', 'A real title', '--issue', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
   ok('…and so is a dropped --issue, whichever option follows it', r.code === 2 && /--issue needs a value/.test(r.err) && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err);
