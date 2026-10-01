@@ -631,7 +631,10 @@ function near(argv) {
   // holds one is no directory, read as a missing one is
   if (typeof ti.file_path !== 'string' || !ti.file_path || ti.file_path.includes('\0')) return 0;
   const cwd = typeof input.cwd === 'string' && input.cwd && !input.cwd.includes('\0') ? input.cwd : process.cwd();
-  const file = path.resolve(cwd, ti.file_path);
+  // the file's directory as the filesystem resolves it: a path through a symbolic link walks from where the link leads, and
+  // so meets the project root, which git names by its real path (FORMAT.md 1, D44's addendum)
+  const given = path.resolve(cwd, ti.file_path);
+  const file = exists(path.dirname(given)) ? path.join(realOr(path.dirname(given)), path.basename(given)) : given;
   const startDir = exists(path.dirname(file)) ? path.dirname(file) : cwd;
   const pr = projectRoot(startDir);
   const lp = findLedger(file, pr || path.parse(path.resolve(startDir)).root);

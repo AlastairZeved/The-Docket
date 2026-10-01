@@ -4613,5 +4613,22 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and the gate judges an edit to such a file, as it judges any governed file', /^JUDGE [0-9a-f]{64} test\/fixture\/notes\/Decisions\.md\n$/.test(g.out), g.out + g.err);
 }
 
+// ── near walks from the file's directory as the filesystem resolves it (FORMAT.md 1, D44's addendum) ──
+{
+  const x = tmpDir('docket-link-'), real = path.join(x, 'real');
+  const LED = title => '# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n### R1. ' + title + '\nPrinciple: One.\nReason: r.\n';
+  fs.writeFileSync(path.join(x, 'DECISIONS.md'), LED('Decoy above the project'));
+  fs.mkdirSync(real);
+  fs.writeFileSync(path.join(real, 'a.js'), 'const a = 1;\nconst b = 2; // R1\n');
+  sh('git', ['init', '-q', '-b', 'main'], real); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], real); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'a'], real);
+  fs.symlinkSync(real, path.join(x, 'link'));
+  const at = via => docket(['near'], { input: nearInput(path.join(x, via, 'a.js'), 'const b = 2;'), cwd: real }).out;
+  const r1 = at('real'), l1 = at('link');
+  ok('near walks from a file’s directory as the filesystem resolves it: through a symbolic link to the project it stops at the project’s root, and a ledger above the project governs nothing in it, as by the real path (FORMAT.md 1, D44’s addendum)', r1 === '' && l1 === '', JSON.stringify(r1) + ' | ' + JSON.stringify(l1));
+  fs.writeFileSync(path.join(real, 'DECISIONS.md'), LED('Inside the project'));
+  const r2 = at('real'), l2 = at('link');
+  ok('…and with a ledger inside the project, the edit through the link is named as the edit by the real path is, its ledger by its place in the project', /^  R1  Inside the project$/m.test(r2) && l2 === r2 && /^Governed here \(DECISIONS\.md, /.test(l2), r2 + ' | ' + l2);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

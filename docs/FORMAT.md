@@ -13,7 +13,9 @@ implementations parse one ledger identically. **Source.** D1–D7 and D9 in
 ## 1. Discovery (D5)
 
 The **ledger** of a file is the nearest `DECISIONS.md` or `docs/DECISIONS.md`
-found by walking up from the file's own directory to the project root. At each
+found by walking up from the file's own directory, as the filesystem resolves it
+(a path through a symbolic link walks from where the link leads), to the project
+root. At each
 directory `dir`, `dir/DECISIONS.md` is tried first, then `dir/docs/DECISIONS.md`.
 The project root is the git root of the file's directory, whatever directory the
 host names, so that every command reads the tree the stop judges (D44); outside a
