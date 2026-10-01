@@ -1,6 +1,9 @@
-When the five answers are in, print the entry exactly as `docket append` will
-write it — heading, `Principle:` line, body — under the heading
-`RULING — PLEASE CONFIRM`, and stop. Wait for the human. Only the human
+When the five answers are in, run the append the confirm will run, below, with
+`--dry-run` added: it writes nothing, refuses what the write would refuse, and
+prints the entry exactly as the write will append it — heading, `Principle:`
+line, body. Print that output, as printed, under the heading
+`RULING — PLEASE CONFIRM`, and stop; a refusal is no block, and reopens the
+question it bears on. Wait for the human. Only the human
 confirms (D8): the word `confirm`, from the person, in a turn of their own.
 Silence is not confirmation. A model's own turn is not confirmation. A
 restatement of the ruling is not confirmation. Any other reply reopens the
@@ -8,7 +11,7 @@ question it bears on. Nothing is written before the word.
 
 ## On confirmation
 
-Run
+Run the same command without `--dry-run`:
 
     docket append --title "<answer 1, as a phrase>" --issue "<answer 2>" --principle "<answer 3>" [--edge "<verb> <id>"]… --body "<answer 5>"
 
@@ -25,10 +28,12 @@ under it saying why its reason no longer holds. Refused: an id that names no
 ruling (`docket governs <id>` says so), and a why that restates the ruling or
 names nothing the code or the product now does differently; the escalation
 above applies to it. Print the ruling's heading and, beneath it, the line
-exactly as `docket append --addendum` will write it — `> Addendum <today's
-date>: <why>` — under the heading `ADDENDUM — PLEASE CONFIRM`, and stop. The
+`docket append --addendum <id> --text "<why>" --dry-run` prints — `> Addendum
+<today's date>: <why>`, exactly as the write will put it under the entry — under
+the heading `ADDENDUM — PLEASE CONFIRM`, and stop. The
 confirm is the block's own: the word `confirm`, from the person, in a turn of
-their own; nothing is written before it. On the word, run
+their own; nothing is written before it. On the word, run the same command
+without `--dry-run`:
 
     docket append --addendum <id> --text "<why>"
 

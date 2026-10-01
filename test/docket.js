@@ -1375,6 +1375,18 @@ const SEC = String.fromCharCode(0xa7);
   const fp = tempRepo(), fpFix = path.join(fp, 'test', 'fixture');
   const fpBefore = read(path.join(fpFix, 'DECISIONS.md'));
   r = docket(['append', '--title', '--issue', '55', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
+  { // --dry-run prints what the write appends, exactly, and writes nothing; it refuses what the write refuses (FORMAT.md 11, D8's addendum)
+    const dd = tempRepo(), fd = path.join(dd, 'test', 'fixture'), led = path.join(fd, 'DECISIONS.md'), at = { cwd: fd, env: { DOCKET_TODAY: '2026-10-01' } };
+    const args = ['--title', 'The toolbar collapses on narrow screens', '--issue', '94', '--principle', 'Zero cognitive tax', '--edge', 'extends R6', '--body', 'Icons below 480px. Reason: the labels do not fit.'];
+    const l0 = read(led), dry = docket(['append'].concat(args, ['--dry-run']), at), l1 = read(led), wet = docket(['append'].concat(args), at), l2 = read(led);
+    ok('append --dry-run prints the entry the write then appends, byte for byte, and writes nothing (FORMAT.md 11, D8’s addendum)', dry.code === 0 && l1 === l0 && wet.code === 0 && l2.startsWith(l0) && l2.slice(l0.length).trim() === dry.out.trim() && wet.out.startsWith(dry.out.trimEnd() + '\n'), JSON.stringify(dry.out) + ' | ' + JSON.stringify(l2.slice(l0.length)));
+    const ad = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses', '--dry-run'], at), l3 = read(led), aw = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses'], at);
+    ok('…and an addendum: the dated line the write then puts under its entry, and nothing written before the word', ad.code === 0 && l3 === l2 && ad.out.trim() === '> Addendum 2026-10-01: the toolbar collapses' && aw.code === 0 && read(led).includes('\n' + ad.out.trim() + '\n'), ad.out + aw.out + aw.err);
+    const l3w = read(led), bl = docket(['append', '--baseline', '--dry-run'], at), l4 = read(led);
+    const rf = docket(['append', '--title', 'No reason', '--issue', '95', '--principle', 'Zero cognitive tax', '--body', 'It just is.', '--dry-run'], at);
+    ok('…and the baseline’s comment printed and not written, and a dry run refuses what the write refuses, exit 2, writing nothing', bl.code === 0 && /^<!-- docket: bare-cites/.test(bl.out) && l4 === l3w && rf.code === 2 && /must state the reason/.test(rf.err) && read(led) === l4, bl.out + rf.err);
+    fs.rmSync(dd, { recursive: true, force: true });
+  }
   ok('append: a --title whose value the shell dropped is a usage error, not a ruling titled "--issue"', r.code === 2 && /--title needs a value/.test(r.err) && r.out === '' && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err + r.out);
   r = docket(['append', '--title', 'A real title', '--issue', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: fpFix });
   ok('…and so is a dropped --issue, whichever option follows it', r.code === 2 && /--issue needs a value/.test(r.err) && read(path.join(fpFix, 'DECISIONS.md')) === fpBefore, r.code + '|' + r.err);
@@ -4126,7 +4138,9 @@ const SEC = String.fromCharCode(0xa7);
     // the maker's write of the ledger is read from its calls however it is made: the core's append however run, the shell's
     // write, and a write put back; a read of the ledger is none
     for (const [cmd, wrote] of [['sed -i "s/R6/R6/" DECISIONS.md', true], ['printf "%s\\n" "> Addendum 2026-09-30: x" >> DECISIONS.md && git checkout -- DECISIONS.md', true],
-                                ['"$CORE" append --addendum R6 --text "x"', true], ['grep -n R6 DECISIONS.md', false], ['cp DECISIONS.md ../ledger-copy.md', false]]) {
+                                ['"$CORE" append --addendum R6 --text "x"', true], ['grep -n R6 DECISIONS.md', false], ['cp DECISIONS.md ../ledger-copy.md', false],
+                                ['"$CORE" append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y." --dry-run', false],
+                                ['"$CORE" append --addendum R6 --text "x" --dry-run && "$CORE" append --addendum R6 --text "x"', true]]) {
       r = runJudge(
         say([turnText('Reviewed.'), blockTurn(R6), result()], { verdict: 'FAIL', reason: R6 }),
         say([turnText('Renamed.'), result()], { verdict: 'PASS' }),

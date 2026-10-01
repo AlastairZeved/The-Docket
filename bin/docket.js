@@ -1369,6 +1369,7 @@ function appendEntry(argv) {
   entryArgs(argv);                                                     // usage first, outside the lock
   const { root, ledger, release } = lockedLedger(argv);
   const entry = buildEntry(argv, root, ledger);
+  if (has(argv, '--dry-run')) return dryRun(argv, release, entry);
   const text = (ledger.text.trim() ? ensureNl(ledger.text) + '\n' : '') + entry;   // an empty ledger opens with its entry, not with blank lines
   writeLedger(ledger, text);
   release();
@@ -1498,6 +1499,7 @@ function appendAddendum(argv) {
   const why = [];
   for (const f of run(after, parseLedger(after, ledger.path))) { if (f.k === 7) continue; const n = had.get(key(f)) || 0; if (n > 0) had.set(key(f), n - 1); else why.push('check ' + f.k + ', line ' + f.line + ': ' + f.message); }
   if (why.length) die('append: the addendum would fail as written, and the ledger is append only, so nothing is written (FORMAT.md 11):\n  ' + uniq(why).join('\n  '), 2);
+  if (has(argv, '--dry-run')) return dryRun(argv, release, line);
   writeLedger(ledger, after);
   return afterWrite(argv, root, ledger, line);
 }
@@ -1517,8 +1519,18 @@ function rewriteBaseline(argv) {
   let at = -1;
   for (let i = 0; i < pre; i++) if (/<!--\s*docket:\s*bare-cites/.test(lines[i])) at = i;
   if (at >= 0) lines[at] = comment; else lines.splice(pre, 0, comment, '');
+  if (has(argv, '--dry-run')) return dryRun(argv, release, comment);
   writeLedger(ledger, ensureNl(lines.join('\n')));
   return afterWrite(argv, root, ledger, comment);
+}
+// --dry-run, in any of append's three modes: everything the write refuses is refused, and what it would write — the entry, the
+// addendum's line, the baseline's comment — is printed as the write would print it, and nothing is written. The intake's confirm
+// block is this output, so the person confirms the bytes the write appends (FORMAT.md 11, D8's addendum).
+function dryRun(argv, release, text) {
+  release();
+  if (argv.json) { out(JSON.stringify({ wouldWrite: text }, null, 2)); return 0; }
+  out(text.trimEnd());
+  return 0;
 }
 // Each of append's three modes takes its own options, and refuses another's: an option accepted and dropped would let a reader
 // believe it had an effect (FORMAT.md 11).
@@ -2641,6 +2653,7 @@ const USAGE = [
   '  docket governs <id> [<id>…]         edges in and out with their clauses, addenda, code cites',
   '  docket principles                   the principle list',
   '  docket append --title --issue --principle [--edge "<verb> <id>"]... --body   a new entry, checked',
+  '  docket append … --dry-run            what append would write, printed and not written',
   '  docket append --addendum <id> --text "..."   a dated addendum under an entry',
   '  docket append --baseline            rewrite the bare-cite baseline',
   '  docket diff <revA> <revB>           what changed in the law: rulings, edges and addenda added; any existing entry changed, listed first (exit 1)',
@@ -2659,7 +2672,7 @@ const USAGE = [
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
 const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait', '--permission', '--judge']);
-const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start']);
+const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start', '--dry-run']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
 // The arguments each subcommand takes, beside its options: a number, or every one it is given
@@ -2667,7 +2680,7 @@ const POSITIONALS = { near: 0, index: 0, check: 0, 'spec-check': 0, append: 0, q
   constitute: 0, intake: 1, gate: 0, verdict: 1, protocol: 0, pack: Infinity, transcript: 1, stop: 0 };
 const OPTIONS = {
   near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
-  append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline'],
+  append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline', '--dry-run'],
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger', '--session-start'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: ['--json'],
   gate: ['--json', '--session', '--diff'], verdict: ['--json', '--session', '--hash', '--failures', '--reason'], protocol: ['--json'], pack: ['--json', '--list'], transcript: ['--json', '--last'],

@@ -430,6 +430,12 @@ worked. It writes in this form:
     Principle: <principle>.
     <body, which contains Reason:>
 
+With `--dry-run`, in any of its three modes, `append` refuses what the write
+would refuse and prints what it would write — the entry, the addendum's line, the
+baseline's comment — exactly as the write prints it, and writes nothing. The
+intake's confirm block is that output (RULE.md), so the person confirms the bytes
+the write appends; the entry's number is the next free one when the write runs.
+
 ## 12. Prefixes and numbering
 
 The prefixes of a ledger are the distinct `<P>` of its entry headings. Within a

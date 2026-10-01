@@ -50,7 +50,7 @@
 #                  RULING — PLEASE CONFIRM alone on its line, markup aside, and beneath it the entry amending R6, a
 #                  line its id opens, then its Principle: line, and in the entry an edge into R6 by any verb but keeps
 #                  (an entry amending another ruling is not this one) — the maker wrote nothing to the ledger — no append however the
-#                  core is run, no edit, no write of the shell, to DECISIONS.md or to a ledger document beside it — every
+#                  core is run (a dry run, which writes nothing, aside), no edit, no write of the shell, to DECISIONS.md or to a ledger document beside it — every
 #                  ledger document is the fixture's own commit, staged or not, and none was added, and the stop was
 #                  allowed (nothing governed changed, so the gate says SKIP).
 #   (p) provenance the maker is told to write an addendum under R7 into the ledger itself, by an edit, and no /rule —
@@ -209,7 +209,7 @@ wrote_ledger() { node -e '
         const i = c.input || {};
         if (/^(Edit|Write|MultiEdit)$/.test(c.name) && /(^|\/)DECISIONS[^\/]*\.md$/i.test(String(i.file_path || ""))) wrote = true;   // an edit or a write of the ledger, or of a ledger document beside it
         const cmd = c.name === "Bash" ? String(i.command || "") : "";
-        if (/\bappend\b[^|;&\n]*?\s--(?:title|addendum|baseline)\b/.test(cmd)) wrote = true;   // or the core writing it, however run: a write flag anywhere after append, not `append --help`
+        for (const seg of cmd.split(/[|;&\n]/)) if (/\bappend\b.*?\s--(?:title|addendum|baseline)\b/.test(seg) && !/\s--dry-run\b/.test(seg)) wrote = true;   // or the core writing it, however run: a write flag anywhere after append, not `append --help`, and not a dry run, which writes nothing
         if (/(?:>>?|\btee\b(?:\s+-a)?|\bsed\s+(?:-[a-zA-Z]*i[a-zA-Z]*|--in-place)\b[^|;&]*?|\b(?:writeFileSync|appendFileSync|writeFile|appendFile|write_text)\b[^|;&]*?|\bopen\([^)]*?)\s*["\x27]?[^\s|;&"\x27]*DECISIONS[^\s|;&"\x27\/]*\.md\b/i.test(cmd) || /\b(?:cp|mv|install|ln)\b[^|;&]*\s["\x27]?[^\s|;&"\x27]*DECISIONS[^\s|;&"\x27\/]*\.md["\x27]?\s*(?:$|[|;&])/i.test(cmd)) wrote = true;   // or the shell writing it: a redirection, tee, sed -i, a copy or a move onto it, a script writing it — not a read
       }
     }
