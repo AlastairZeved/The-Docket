@@ -3295,16 +3295,29 @@ const SEC = String.fromCharCode(0xa7);
   // the record, kept append only, is the one home of the pins.
   {
     const crypto = require('crypto');
-    const L = require(CORE).parseLedger(read(path.join(ROOT, 'docs', 'DECISIONS.md')), path.join(ROOT, 'docs', 'DECISIONS.md'));
-    const recs = ((L.byId.get('D25') || {}).addenda || []).filter(x => /The bytes measured, by SHA-256: /.test(x.text));
-    const last = recs.length ? recs[recs.length - 1].text : '', PINNED = {};
-    for (const m of last.matchAll(/(judge\/PROTOCOL\.md|packs\/[a-z]+\.md) ([0-9a-f]{64})/g)) PINNED[m[1]] = m[2];
+    const TEXT = read(path.join(ROOT, 'docs', 'DECISIONS.md'));
+    const recordsOf = text => ((require(CORE).parseLedger(text, path.join(ROOT, 'docs', 'DECISIONS.md')).byId.get('D25') || {}).addenda || []).filter(x => /The bytes measured, by SHA-256: /.test(x.text));
+    const pinsOf = text => { const rs = recordsOf(text), P = {}; for (const m of (rs.length ? rs[rs.length - 1].text : '').matchAll(/(judge\/PROTOCOL\.md|packs\/[a-z]+\.md) ([0-9a-f]{64})/g)) P[m[1]] = m[2]; return P; };
+    const recs = recordsOf(TEXT);
+    const last = recs.length ? recs[recs.length - 1].text : '', PINNED = pinsOf(TEXT);
     const files = ['judge/PROTOCOL.md', 'packs/code.md', 'packs/decisions.md', 'packs/design.md', 'packs/prose.md'];
-    const driftOf = rd => files.filter(f => crypto.createHash('sha256').update(rd(f).replace(/\r\n/g, '\n')).digest('hex') !== PINNED[f]);
+    const shaOf = s => crypto.createHash('sha256').update(s.replace(/\r\n/g, '\n')).digest('hex');
+    const driftOf = (rd, P = PINNED) => files.filter(f => shaOf(rd(f)) !== P[f]);
     const drift = driftOf(f => read(path.join(ROOT, f)));
     ok('the protocol and the four packs are the bytes the latest calibration record under D25 names, read from the ledger: a change fails here until a run on the new bytes is recorded (D15, D25, D47)', recs.length > 0 && files.every(f => PINNED[f]) && drift.length === 0, 'records naming bytes: ' + recs.length + '; changed since the latest: ' + drift.join(', '));
     const bumped = files.map(f => driftOf(g => read(path.join(ROOT, g)) + (g === f ? ' ' : '')).join());
     ok('…and the same reading fails on a change to any of the five: one byte added to each in turn names that file, and that file alone', bumped.join('|') === files.join('|'), bumped.join(' | '));
+    // the other side, in memory: a record of the changed bytes, beneath D25's latest, where the core's append writes it, restores
+    // the pass — the changed file read as pinned, its old bytes as changed, and the four others pinned where they were
+    {
+      const f0 = files[0], changed = g => read(path.join(ROOT, g)) + (g === f0 ? ' ' : '');
+      const lines = TEXT.split('\n'), at = recs.length ? recs[recs.length - 1].line : 0;   // the latest record's line, counted from 1
+      const rec = '> Addendum 2026-10-02: Run on the bytes this test changes. The run printed "D15\'s floor, a FAIL or STALE on every planted case and a PASS on the clean one: met", "every outcome: met" and "the halt at /rule: met". The bytes measured, by SHA-256: ' + files.map(f => f + ' ' + shaOf(changed(f))).join(', ') + '.';
+      const P2 = at ? pinsOf(lines.slice(0, at).concat(rec, lines.slice(at)).join('\n')) : {};
+      ok('…and a record of the new bytes, beneath D25’s latest, restores the pass: the changed file’s new bytes read as pinned, its old bytes as changed, the four others as they were (D47)', driftOf(changed, P2).length === 0 && driftOf(g => read(path.join(ROOT, g)), P2).join() === f0 && files.slice(1).every(f => P2[f] === PINNED[f]), JSON.stringify(P2));
+    }
+    // the record states the run that measured the bytes: the three lines the script printed, each met (D34, D47)
+    ok('…and the record that names the bytes states a met run: it quotes D15’s floor, every outcome and the halt at /rule, each met, as the script printed them — bytes no met run measured fail as a change does (D47)', ['"D15\'s floor, a FAIL or STALE on every planted case and a PASS on the clean one: met"', '"every outcome: met"', '"the halt at /rule: met"'].every(x => last.includes(x)), last.slice(0, 300));
     ok('…and the witness holds no pin of its own: no 64-hex constant beside a file name stands in for the record', !/"(?:judge\/PROTOCOL|packs\/[a-z]+)\.md": "[0-9a-f]{64}"/.test(read(path.join(ROOT, 'test', 'docket.js'))), 'a pin constant remains');
   }
 
