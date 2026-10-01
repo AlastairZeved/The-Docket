@@ -614,8 +614,13 @@ deletion git shows, not a new file added again. git is run as the repository
 holds its files, whatever the person's own configuration says: no external diff
 program, no text conversion and no colour, the `a/` and `b/` prefixes, three
 lines of context, `GIT_DIFF_OPTS` and `GIT_EXTERNAL_DIFF` set aside, and every
-path a literal path, so one diff is the same text on every run and every
-machine (D40's addendum). A diff the gate cannot read whole is
+path a literal path; and what changes only how git prints a diff is pinned too —
+the full blob names on the index line, the default algorithm and indent
+heuristic, no hunks joined, git's own order of files, paths quoted as git quotes
+them, a blank context line kept — so one diff is the same text on every run and
+every machine (D40's addendum). How the checkout holds its files — its line
+endings, the filters its attributes name — is read as configured: read past it,
+a clean file would show as changed. A diff the gate cannot read whole is
 refused, exit 2, with the reason: the copy of the index not made, or the add
 failing, would leave every tracked file read as deleted; and a repository git
 will not read — its ownership, its config — is not a tree with no repository,

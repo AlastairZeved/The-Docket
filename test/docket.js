@@ -4632,7 +4632,7 @@ const SEC = String.fromCharCode(0xa7);
   // F: the gate's hash recomputed from git's own diff
   {
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 10; // R2\n');
-    const h = hashOf(d, 'hh'), diff = cp.spawnSync('git', ['diff', 'HEAD', '--no-renames', '--', 'test/fixture/app.js'], { cwd: d, encoding: 'utf8' }).stdout;
+    const h = hashOf(d, 'hh'), diff = cp.spawnSync('git', ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null', 'HEAD', '--no-renames', '-U3', '--', 'test/fixture/app.js'], { cwd: d, encoding: 'utf8' }).stdout;   // git's diff as FORMAT.md 16 pins it, written out here and not read from the core
     ok('the gate’s hash is the SHA-256 of the diff it reads, recomputed here from git’s own diff of the one file the change touched (FORMAT.md 16)', diff.length > 0 && h === require('crypto').createHash('sha256').update(diff).digest('hex'), h);
   }
   // G: the bound in force, with no --wait
@@ -4773,6 +4773,11 @@ const SEC = String.fromCharCode(0xa7);
   const hostile = Object.assign({ GIT_DIFF_OPTS: '--unified=0', GIT_EXTERNAL_DIFF: 'true' }, cfg([['diff.external', 'true'], ['color.ui', 'always'], ['color.diff', 'always'], ['diff.noprefix', 'true'], ['diff.mnemonicPrefix', 'true'], ['diff.context', '0']]));
   const g2 = docket(['gate', '--session', 'g'], { cwd: d, env: hostile });
   ok('the gate reads git as the repository holds its files: an external diff, colour, other prefixes, other context and GIT_DIFF_OPTS leave its answer and its hash as they are (D40’s addendum)', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g1.out) && g2.out === g1.out, JSON.stringify(g1.out) + ' | ' + JSON.stringify(g2.out) + g2.err);
+  // what changes only how git prints a diff: the index line's blob names, the algorithm and its heuristic, joined hunks, the order
+  // of files, the quoting of paths, a blank context line (D40's addendum)
+  const printed = cfg([['core.abbrev', '12'], ['diff.algorithm', 'histogram'], ['diff.indentHeuristic', 'false'], ['diff.interHunkContext', '9'], ['core.quotePath', 'false'], ['diff.suppressBlankEmpty', 'true'], ['diff.orderFile', path.join(d, 'test', 'fixture', 'app.js')]]);
+  const g3 = docket(['gate', '--session', 'g'], { cwd: d, env: printed });
+  ok('…and nor do the settings that change only how git prints a diff — the index line’s abbreviation, the algorithm, the indent heuristic, joined hunks, the quoting of paths, a blank context line, the order of files (D40’s addendum)', g3.out === g1.out, JSON.stringify(g1.out) + ' | ' + JSON.stringify(g3.out));
   const w1 = docket(['gate', '--session', 'g', '--diff'], { cwd: d });
   fs.writeFileSync(path.join(d, '.gitattributes'), '*.js diff=rot\n');
   const w2 = docket(['gate', '--session', 'g', '--diff'], { cwd: d, env: Object.assign({ GIT_DIFF_OPTS: '--unified=0' }, cfg([['diff.rot.textconv', 'tr a-z n-za-m <'], ['color.ui', 'always'], ['diff.external', 'true']])) });

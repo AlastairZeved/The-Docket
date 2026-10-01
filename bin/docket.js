@@ -83,8 +83,13 @@ function today() {
 }
 // git as the repository holds its files, whatever the person's configuration says (D40's addendum): a diff with no external
 // program, no text conversion and no colour, and the a/ b/ prefixes; GIT_DIFF_OPTS, which overrides a diff's -U, and
-// GIT_EXTERNAL_DIFF set aside; every path a literal path, so a file named with a * names itself and no other
-const GIT_DIFF_PIN = ['--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/'];
+// GIT_EXTERNAL_DIFF set aside; every path a literal path, so a file named with a * names itself and no other. What changes
+// only how git prints a diff is pinned as well — the full blob names on the index line (core.abbrev), the default algorithm
+// and indent heuristic, no hunks joined, git's own order of files, paths quoted as git quotes them, a blank context line
+// kept — while how this checkout holds its files, its line endings and the filters its attributes name, is read as set:
+// read past it, a clean file would show as changed
+const GIT_DIFF_PIN = ['--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null'];
+const GIT_DIFF = ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff'].concat(GIT_DIFF_PIN);
 function gitEnv(base) { const e = Object.assign({}, base || process.env, { GIT_LITERAL_PATHSPECS: '1' }); delete e.GIT_DIFF_OPTS; delete e.GIT_EXTERNAL_DIFF; return e; }
 function sh(cmd, args, cwd) {
   const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: cmd === 'git' ? gitEnv() : process.env });   // 256 MiB: past any diff, blame or listing a session makes (D14's addendum)
@@ -2057,7 +2062,7 @@ function headCommit(root) { const r = sh('git', ['rev-parse', '--verify', '-q', 
 // file's text there cites a ruling that its ledger there holds.
 function governedAt(root, have, base) {
   // --no-renames: a rename is the deletion it is, so the old path — governed at the base — is a candidate like any deleted file
-  const ch = sh('git', ['diff'].concat(GIT_DIFF_PIN, [base, '--no-renames', '--relative', '--name-only', '-z']), root);
+  const ch = sh('git', GIT_DIFF.concat([base, '--no-renames', '--relative', '--name-only', '-z']), root);
   if (ch.status !== 0) return [];
   const cand = ch.stdout.split('\0').filter(p => p && !have.has(p) && !p.split('/').includes('.docket'));
   if (!cand.length) return [];
@@ -2111,7 +2116,7 @@ function diffsFrom(root, base, rels, untracked, runs) {
     if (add.status !== 0) refuse('git add -N failed — ' + (String(add.stderr || (add.error && add.error.message) || '').trim().split('\n')[0] || 'exit ' + add.status));
   }
   try {
-    return runs.map(extra => { const r = cp.spawnSync('git', ['diff'].concat(GIT_DIFF_PIN, [base, '--no-renames'], extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
+    return runs.map(extra => { const r = cp.spawnSync('git', GIT_DIFF.concat([base, '--no-renames'], extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
   } finally { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* the copy is the reading's own */ } } }
 }
 // The diff the judge reads and the gate hashes (D40): `git diff <base>` — the session's base, HEAD when it has none — over
@@ -2192,7 +2197,7 @@ function touchedRulings(root, d) {
     const b = cp.spawnSync('git', ['show', d.base + ':' + rf], { cwd: root, maxBuffer: 1 << 28, env: gitEnv() });
     const was = b.status === 0 && !b.stdout.subarray(0, SNIFF_BYTES).includes(0) ? splitLines(normEol(b.stdout.toString('utf8'))) : null;
     if (!now) { if (was) read(ledger, was, [[1, was.length]]); continue; }   // deleted: its base version, whole
-    const h = sh('git', ['diff'].concat(GIT_DIFF_PIN, [d.base, '--no-renames', '-U0', '--', rf]), root);
+    const h = sh('git', GIT_DIFF.concat([d.base, '--no-renames', '-U0', '--', rf]), root);
     const nowR = [], wasR = [];
     for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
       const oc = Number(m[1]), on = m[2] === undefined ? 1 : Number(m[2]), nc = Number(m[3]), nn = m[4] === undefined ? 1 : Number(m[4]);
