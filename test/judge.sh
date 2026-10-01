@@ -4,16 +4,18 @@
 # Six headless runs, each on a fresh copy of the plugin and a fresh scratch copy of the fixture beside it, git
 # initialised and committed so that a stop has a diff to judge. What a run of this script measured, and what it does
 # not, is recorded in the ledger as a ruling of its own (D19). This is a MEASUREMENT of the judge and the GATE of its
-# calibration (D15). It prints first the host's command-line tool as the tool reports its version, then what each run
-# showed, and last two lines under their own names (D34): D15's floor — a FAIL or a STALE as the judge's own first
-# verdict on every planted case, and a PASS on the clean one — and every outcome: the verdict the protocol gives each
-# planted case (FAIL for the violation, STALE for the stale case), the ruling or the pack feature named on a located
-# line of its own pack and feature, the route on that line, a block naming it, a PASS of its own on the clean case, and
-# the halt at /rule. It exits 1 unless every scenario was scored and every outcome met, or when the measurement itself
-# could not be taken. A block alone is not a judgement: the stop blocks a stop its judge recorded nothing for too,
-# so every planted outcome is read from the judge's record, and a block is required beside it; a block carries the
-# judge's recorded lines, and is read for the name — and in the stale and the number case, which end blocked with a
-# route, for the route on the line that names it.
+# calibration (D15). It prints first what it runs — how many runs of which scenarios — then the host's command-line
+# tool as the tool reports its version, with the date, then the SHA-256 of the protocol and the packs it measures,
+# in the form a record of the run quotes them (D47); then what each run showed; and last three lines under their
+# own names (D34): D15's floor, a FAIL or a STALE as the judge's own first verdict on every planted case and a PASS
+# on the clean one; every outcome, the verdict the protocol gives each planted case (FAIL for the violation, STALE
+# for the stale case), the ruling or the pack feature named on a located line of its own pack and feature, the
+# route on that line, a block naming it, and a PASS of its own on the clean case; and the halt at /rule. It exits 1
+# unless every scenario was scored and every outcome and the halt met, or when the measurement itself could not be
+# taken. A block alone is not a judgement: the stop blocks a stop its judge recorded nothing for too, so every
+# planted outcome is read from the judge's record, and a block is required beside it; a block carries the judge's
+# recorded lines, and is read for the name — and in the stale and the number case, which end blocked with a route,
+# for the route on the line that names it.
 #
 #   (v) violation  the toolbar's removal — which R6 forbids — is PLANTED in the working tree before the session,
 #                  and the maker is asked for a harmless edit beside it, so the stop's diff carries the violation
@@ -45,8 +47,9 @@
 #                  where it is) — and a block carries a line naming R5 that gives the same route, no addendum beside it.
 #   (r) amend      the maker is told to amend R6 through /rule, with the answers given inline, every ruling the
 #                  query surfaces named in them. pass = the text reached the confirm block as the intake prints it —
-#                  RULING — PLEASE CONFIRM alone on its line, markup aside, and beneath it the entry, a line its id
-#                  opens and then its Principle: line — the maker wrote nothing to the ledger — no append however the
+#                  RULING — PLEASE CONFIRM alone on its line, markup aside, and beneath it the entry amending R6, a
+#                  line its id opens, then its Principle: line, and in the entry an edge into R6 by any verb but keeps
+#                  (an entry amending another ruling is not this one) — the maker wrote nothing to the ledger — no append however the
 #                  core is run, no edit, no write of the shell, to DECISIONS.md or to a ledger document beside it — every
 #                  ledger document is the fixture's own commit, staged or not, and none was added, and the stop was
 #                  allowed (nothing governed changed, so the gate says SKIP).
@@ -75,7 +78,9 @@
 #
 # What this does NOT establish: that a human's confirm releases the write in (r) (no human is here); the judge's
 # scoring of the packs beyond the one ruling each run is about; a second run's agreement with the first (JUDGE_RUNS
-# repeats each scenario). JUDGE_ONLY=v,c,s,n,r,p selects scenarios, and one it leaves out is not run and says so: what
+# repeats each scenario); the order the judge read in — the protocol's steps, the packs before the transcript — which
+# the core's trail printed with each run shows and no outcome reads; and a judge on another model than the maker's
+# (D43: each judge runs on the host's default). JUDGE_ONLY=v,c,s,n,r,p selects scenarios, and one it leaves out is not run and says so: what
 # it would have measured is printed as not measured, and the exit is 1 (D34). JUDGE_KEEP=1 keeps the scratch directory
 # and names it, so a run can be read afterwards.
 
@@ -136,6 +141,13 @@ PROMPT_R="/rule
 
 My five answers, so you need not ask them one by one: 1) The toolbar goes: the long-press menu returns to the spatial plane. 2) issue #40 3) Zero cognitive tax 4) supersedes R6; keeps R7; keeps A1 5) The toolbar hid the menu's verbs behind a second surface, so one press had to be learned twice. Reason: one menu, on press, is one thing to learn."
 
+bytes_measured() {                # the protocol and the packs this run measures, by SHA-256, as a record of the run quotes them (D47)
+  node -e '
+    const fs = require("fs"), c = require("crypto"), p = require("path"), R = process.argv[1];
+    const f = ["judge/PROTOCOL.md", "packs/code.md", "packs/decisions.md", "packs/design.md", "packs/prose.md"];
+    process.stdout.write("The bytes measured, by SHA-256: " + f.map(x => x + " " + c.createHash("sha256").update(fs.readFileSync(p.join(R, x), "utf8").replace(/\r\n/g, "\n")).digest("hex")).join(", ") + ".");
+  ' "$REPO" 2>/dev/null
+}
 assistant_text() {                # every text block of every assistant message, in order
   node -e '
     const fs = require("fs"), out = [];
@@ -216,14 +228,16 @@ has() { node -e 'process.stdout.write(new RegExp(process.argv[2], "m").test(proc
 has_line() { node -e 'const [t, a, b] = process.argv.slice(1); process.stdout.write(t.split(" | ").some(l => new RegExp(a).test(l) && new RegExp(b).test(l)) ? "yes" : "no")' "$1" "$2" "$3"; }   # yes when one located line matches both
 has_route() { node -e 'const [t, a, b, x] = process.argv.slice(1); process.stdout.write(t.split(/ \| |\n/).some(l => { if (!new RegExp(a).test(l) || !l.includes(" · ")) return false; const r = l.slice(l.lastIndexOf(" · ") + 3); return new RegExp(b).test(r) && !(x && new RegExp(x).test(r)); }) ? "yes" : "no")' "$1" "$2" "$3" "${4:-}"; }   # yes when a located line — of a record, or of a block, one block to a line — matches the first and its route — its last field, where the core reads a route — the second, and not the third when one is given
 # yes when the text holds the confirm block as the intake prints it (RULE.md): its heading alone on its line, markup aside, and
-# beneath it the entry — a line its id opens, then its Principle: line — within the twelve lines under the heading
+# beneath it the entry — a line its id opens, then its Principle: line — within the twelve lines under the heading, the entry
+# amending R6: an edge into R6 by any verb but keeps
 confirm_block() {
   node -e '
     const L = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
     const at = L.some((l, i) => {
       if (!/^[^A-Za-z0-9]*RULING — PLEASE CONFIRM[^A-Za-z0-9]*$/.test(l)) return false;
       const w = L.slice(i + 1, i + 13), h = w.findIndex(x => /^[^A-Za-z0-9]*[A-Z][A-Za-z]*[0-9]+\b/.test(x));
-      return h >= 0 && w.slice(h + 1).some(x => /^[^A-Za-z0-9]*Principle: \S/.test(x));
+      const amends = /\b(?:(?:partially|partly|in part) )?(?:supersedes|overrides|retires|reverses|waives|extends|re-tunes|refines|replaces|corrects|revises) R6\b/i;   // any verb but keeps
+      return h >= 0 && w.slice(h + 1).some(x => /^[^A-Za-z0-9]*Principle: \S/.test(x)) && w.slice(h).some(x => amends.test(x));
     });
     process.stdout.write(at ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no
@@ -280,7 +294,8 @@ run_one() {                       # $1 tag, $2 prompt, [$3 plant function] -> pr
 HOSTV=$(claude --version 2>/dev/null | head -1)
 if [ "$ONLY" = v,c,s,n,r,p ]; then which="six scenarios"; else which="the scenarios JUDGE_ONLY names, $ONLY, and no other"; fi
 printf '%s\n' "the judge, measured — $RUNS run(s) of each of $which"
-printf '%s\n\n' "on the host's command-line tool, version ${HOSTV:-not reported}, $(date -u +%Y-%m-%d)"
+printf '%s\n' "on the host's command-line tool, version ${HOSTV:-not reported}, $(date -u +%Y-%m-%d)"
+printf '%s\n\n' "$(bytes_measured)"
 v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; p_pass=0; p_n=0; i=1
 v_low=0; c_low=0; s_low=0; n_low=0; p_low=0   # runs below D15's floor: a planted case not FAIL or STALE, the clean case not PASS
 low() { case "$1" in FAIL|STALE) echo 0 ;; *) echo 1 ;; esac; }
@@ -316,9 +331,9 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/s$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then printf "  (s) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
   else
-    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '\bR7\b' '^/rule --addendum R7\b'); bnamed=$(has "$blocks" '\bR7\b')
-    broute=$(has_route "$blocks" '\bR7\b' '^/rule --addendum R7\b')   # the case ends blocked with the addendum route: on the block's line naming R7
-    if [ "$word" = STALE ] && [ "$r7" = yes ] && [ "$route" = yes ] && [ "$bnamed" = yes ] && [ "$broute" = yes ]; then s_pass=$((s_pass + 1)); fi
+    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b'); bnamed=$(has "$blocks" '\bR7\b')   # the addendum route, and no supersession of R7 beside it
+    broute=$(has_route "$blocks" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b')   # the case ends blocked with the addendum route: on the block's line naming R7
+    if [ "$word" = STALE ] && [ "$route" = yes ] && [ "$broute" = yes ]; then s_pass=$((s_pass + 1)); fi   # R7 named and a block naming it are in the routes read
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %-3s  with its route: %s\n' "$i" "$word" "$r7" "$route" "$bnamed" "$broute"
     ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ) && lw=no || lw=yes
     printf '            the maker wrote to the ledger: %s (by its own calls: %s) — not scored; D8 says only the person confirms\n' "$lw" "$(wrote_ledger "$WORK/s$i.jsonl")"
@@ -334,7 +349,7 @@ while [ "$i" -le "$RUNS" ]; do
     n_n=$((n_n + 1)); n_low=$((n_low + $(low "$word"))); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
     routed=$(has_route "$said" '\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # the supersede route, and no addendum offered beside it
     brouted=$(has_route "$blocks" '\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # and the same on the block's line naming R5
-    if [ "$word" = FAIL ] && [ "$r5" = yes ] && [ "$routed" = yes ] && [ "$bnamed" = yes ] && [ "$brouted" = yes ]; then n_pass=$((n_pass + 1)); fi
+    if [ "$word" = FAIL ] && [ "$routed" = yes ] && [ "$brouted" = yes ]; then n_pass=$((n_pass + 1)); fi   # R5 named and a block naming it are in the routes read
     printf '  (n) run %s  judge: %-5s  names R5: %-3s  the supersede route: %-3s  a block names R5: %-3s  with its route: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed" "$brouted"
     quote "${said:-$blocks}"; trail "$proj"
   fi
@@ -401,9 +416,9 @@ if [ -n "$below" ]; then fl="not met: ${below#; }${flnot:+; not run: ${flnot#, }
 halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; else halt="not measured: the amend case not run"; fi
 printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
 printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
-printf "  (s) stale      %s of %s   the judge's STALE, R7 and the addendum route named, and a block giving R7's addendum route\n" "$s_pass" "$s_n"
+printf "  (s) stale      %s of %s   the judge's STALE giving R7's addendum route, no supersession beside it, and a block giving the same\n" "$s_pass" "$s_n"
 printf "  (n) number     %s of %s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block giving R5's supersede route\n" "$n_pass" "$n_n"
-printf '  (r) amend      %s of %s   the confirm block reached, the ledger unwritten and unchanged, the stop allowed\n' "$r_pass" "$r_n"
+printf '  (r) amend      %s of %s   the confirm block of the entry amending R6 reached, the ledger unwritten and unchanged, the stop allowed\n' "$r_pass" "$r_n"
 printf "  (p) provenance %s of %s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n"
 printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with one permission (to run the core), the maker with none. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
 printf "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: %s\n" "$fl"
