@@ -1045,16 +1045,26 @@ function runCheck(root, opts) {
       }
     }
   }
-  // A ledger the compared revision has and the working tree lacks is the most complete amendment there is (D4).
+  // A ledger the compared revision has and the working tree lacks is the most complete amendment there is (D4); one git no
+  // longer tracks, struck from the index, is that amendment staged; and with no base named, a ledger HEAD's parent has and HEAD's
+  // own commit removed is that amendment committed — a check judges the commit it was given, as it does an entry (D4's addendum)
   const groot = gitRoot(root);
   if (groot) {
     const base = baseRevision().base;
     const rev = base && sh('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], groot).status === 0 ? base : 'HEAD';
-    const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', rev], groot);   // -z: a name as it is, not quoted
-    if (ls.status === 0) for (const p of ls.stdout.split('\0')) {
-      if (!/(^|\/)DECISIONS\.md$/.test(p)) continue;
+    const ledgersAt = r => { const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', r], groot); return ls.status === 0 ? ls.stdout.split('\0').filter(p => /(^|\/)DECISIONS\.md$/.test(p)) : null; };   // -z: a name as it is, not quoted
+    const trackedNow = new Set(trackedFiles(groot) || []);
+    const atRev = ledgersAt(rev) || [];
+    for (const p of atRev) {
       const full = path.join(groot, p);
-      if (isWithin(full, path.resolve(root)) && !isFile(full)) fail(full, 1, 7, 'the ledger is gone from the working tree (append only); ' + rev + ' has it');
+      if (!isWithin(full, path.resolve(root))) continue;
+      if (!isFile(full)) fail(full, 1, 7, 'the ledger is gone from the working tree (append only); ' + rev + ' has it');
+      else if (!trackedNow.has(full)) fail(full, 1, 7, 'the ledger is struck from the index (append only): git no longer tracks it, and ' + rev + ' has it');
+    }
+    if (rev === 'HEAD' || namesHead(rev, groot)) for (const p of ledgersAt('HEAD~1') || []) {
+      const full = path.join(groot, p);
+      if (atRev.includes(p) || !isWithin(full, path.resolve(root)) || trackedNow.has(full)) continue;
+      fail(full, 1, 7, 'HEAD\'s commit removed the ledger (append only); HEAD\'s parent has it');
     }
   }
   return { failures, info, ctx };

@@ -4576,5 +4576,24 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and names a heading that is only its parenthetical, whose entry every listing names by its id alone', info.some(l => /^info  DECISIONS\.md:25: R2's heading has no title before its parenthetical, so it is named by its id alone \(FORMAT\.md 3\)$/.test(l)) && st.out.split('\n').includes('  R2  · issue #2'), c.out + '\n' + st.out);
 }
 
+// ── a ledger removed in the commit a check is given, or struck from the index, fails check 7 (D4's addendum) ──
+{
+  const d = tempRepo();
+  sh('git', ['rm', '-q', 'test/fixture/DECISIONS.md'], d);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'the ledger removed'], d);
+  const c = docket(['check'], { cwd: d });
+  ok('a check of the commit that removed the ledger fails check 7, as a check before the commit does: HEAD’s parent has it, and a check judges the commit it was given (D4’s addendum)', c.code === 1 && c.out.split('\n').includes("test/fixture/DECISIONS.md:1  check 7: HEAD's commit removed the ledger (append only); HEAD's parent has it"), c.out);
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'next'], d);
+  const c2 = docket(['check'], { cwd: d });
+  const c3 = docket(['check'], { cwd: d, env: { DOCKET_BASE: sh('git', ['rev-parse', 'HEAD~2'], d).stdout.trim() } });
+  ok('…a commit on, the tip rule passes it, as it passes an entry amended a commit before; a check against the push’s base fails it still', c2.code === 0 && c3.code === 1 && /check 7: the ledger is gone from the working tree \(append only\)/.test(c3.out), c2.out + ' | ' + c3.out);
+}
+{
+  const d = tempRepo();
+  sh('git', ['rm', '-q', '--cached', 'test/fixture/DECISIONS.md'], d);
+  const c = docket(['check'], { cwd: d });
+  ok('a ledger struck from the index and left on disk fails check 7: git no longer tracks it, and HEAD has it (D4’s addendum)', c.code === 1 && c.out.split('\n').includes('test/fixture/DECISIONS.md:1  check 7: the ledger is struck from the index (append only): git no longer tracks it, and HEAD has it'), c.out);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
