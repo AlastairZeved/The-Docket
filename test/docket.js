@@ -69,6 +69,9 @@ const HOST_NAMES = /claude|anthropic|openai|\bsonnet|\bopus|haiku|\bfable\b|\bgp
 // A copy of a live tree, by the rule the headless scripts' copy_tree keeps: entry by entry at its top level; an entry that
 // vanishes while it is copied — a scratch directory another command made beside the tree and took away — is left out, and
 // any other failure throws. `skip` names top-level entries left out; `filter` is fs.cpSync's, for the depths below.
+// The plugin as its repository holds it: a path is left out for a .git or node_modules directory inside the root, and never
+// for one the root itself sits beneath — a checkout under node_modules is a checkout like any other
+function inRepo(root) { return src => !/(^|[\\/])(\.git|node_modules)([\\/]|$)/.test(path.relative(root, src)); }
 function copyTree(from, to, skip, filter) {
   const gone = p => { try { fs.lstatSync(p); return false; } catch (e) { return e.code === 'ENOENT'; } };
   fs.mkdirSync(to, { recursive: true });
@@ -2496,8 +2499,10 @@ const SEC = String.fromCharCode(0xa7);
     {
       // A placeholder constitute does not fill is refused before anything ships — done, not read from the source: a copy
       // of the plugin whose PRD template carries {{bogus}} refuses by name and writes nothing.
+      { const f = inRepo('/w/node_modules/x/ci');
+        ok('the witness copies the plugin by the paths inside it: a checkout beneath node_modules keeps its templates, and leaves out its own .git and node_modules', f('/w/node_modules/x/ci/templates/PRD.md') && f('/w/node_modules/x/ci/bin/docket.js') && !f('/w/node_modules/x/ci/.git/HEAD') && !f('/w/node_modules/x/ci/node_modules/a/b.js') && !f('/w/node_modules/x/ci/test/node_modules'), 'the filter'); }
       const plug = tmpDir('plug-');
-      copyTree(ROOT, plug, ['.git', 'node_modules'], src => !/[\\/]\.git(?:[\\/]|$)/.test(src) && !/[\\/]node_modules(?:[\\/]|$)/.test(src));
+      copyTree(ROOT, plug, ['.git', 'node_modules'], inRepo(ROOT));
       fs.appendFileSync(path.join(plug, 'templates', 'PRD.md'), '\n{{bogus}}\n');
       const d = tmpDir('const-'); fs.writeFileSync(path.join(d, 'a.json'), JSON.stringify(ANSWERS));
       const pr = cp.spawnSync('node', [path.join(plug, 'bin', 'docket.js'), 'constitute', '--answers', 'a.json'], { cwd: d, encoding: 'utf8', env: Object.assign({}, outerEnv(), { DOCKET_TODAY: '2026-09-22', CLAUDE_PROJECT_DIR: '' }) });
@@ -4038,7 +4043,7 @@ const SEC = String.fromCharCode(0xa7);
       const ct = ['judge.sh', 'cites.sh', 'constitute.sh'].map(copyOf);
       ok('the three headless scripts copy the repository with one copy_tree, word for word', ct[0].length > 200 && ct[1] === ct[0] && ct[2] === ct[0], ct.map(t => t.length).join(','));
       const rp = tmpDir('judge-repo-');
-      copyTree(ROOT, rp, ['.git', 'node_modules'], s => !/[\\/](\.git|node_modules)$/.test(s));
+      copyTree(ROOT, rp, ['.git', 'node_modules'], inRepo(ROOT));
       fs.mkdirSync(path.join(rp, '.vanish-probe')); fs.writeFileSync(path.join(rp, '.vanish-probe', 'f'), 'x\n');
       const cpDir = tmpDir('cp-');                                       // a cp that takes the probe away mid-copy, as a claim's cleanup would, and fails
       fs.writeFileSync(path.join(cpDir, 'cp'), '#!/bin/sh\nfor a in "$@"; do case "$a" in */.vanish-probe) rm -rf "$a"; echo "cp: cannot stat \'$a\': No such file or directory" >&2; exit 1 ;; */bin) [ -n "${CP_FAIL_BIN:-}" ] && { echo "cp: cannot open \'$a\': Permission denied" >&2; exit 1; } ;; esac; done\nexec /bin/cp "$@"\n');
