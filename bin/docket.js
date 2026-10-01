@@ -71,8 +71,13 @@ function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return f
 function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }
 function isDir(p) { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } }
 function today() { return process.env.DOCKET_TODAY || new Date().toISOString().slice(0, 10); }
+// git as the repository holds its files, whatever the person's configuration says (D40's addendum): a diff with no external
+// program, no text conversion and no colour, and the a/ b/ prefixes; GIT_DIFF_OPTS, which overrides a diff's -U, and
+// GIT_EXTERNAL_DIFF set aside; every path a literal path, so a file named with a * names itself and no other
+const GIT_DIFF_PIN = ['--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/'];
+function gitEnv(base) { const e = Object.assign({}, base || process.env, { GIT_LITERAL_PATHSPECS: '1' }); delete e.GIT_DIFF_OPTS; delete e.GIT_EXTERNAL_DIFF; return e; }
 function sh(cmd, args, cwd) {
-  const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });   // 256 MiB: past any diff, blame or listing a session makes (D14's addendum)
+  const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: cmd === 'git' ? gitEnv() : process.env });   // 256 MiB: past any diff, blame or listing a session makes (D14's addendum)
   return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 function gitRoot(dir) {
@@ -1508,7 +1513,7 @@ function withState(root, change, opts) {
 function blameCommits(ledgerPath) {
   // -w: a commit that changes only a line's whitespace or ending — CRLF, a renormalisation — wrote no line, so each keeps the
   // commit that wrote its words, and an addendum is not answered by the commit that re-ended it (FORMAT.md 6, D21)
-  const r = sh('git', ['blame', '-w', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));
+  const r = sh('git', ['blame', '-w', '--no-textconv', '--porcelain', '--', path.basename(ledgerPath)], path.dirname(ledgerPath));   // the ledger's own lines, never a conversion of them
   if (r.status !== 0) return null;
   const m = new Map();
   for (const line of r.stdout.split('\n')) { const h = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) \d+ (\d+)(?: \d+)?$/.exec(line); if (h) m.set(Number(h[2]), h[1]); }   // SHA-1 or SHA-256 names
@@ -1963,14 +1968,14 @@ function headCommit(root) { const r = sh('git', ['rev-parse', '--verify', '-q', 
 // file's text there cites a ruling that its ledger there holds.
 function governedAt(root, have, base) {
   // --no-renames: a rename is the deletion it is, so the old path — governed at the base — is a candidate like any deleted file
-  const ch = sh('git', ['diff', base, '--no-renames', '--relative', '--name-only', '-z'], root);
+  const ch = sh('git', ['diff'].concat(GIT_DIFF_PIN, [base, '--no-renames', '--relative', '--name-only', '-z']), root);
   if (ch.status !== 0) return [];
   const cand = ch.stdout.split('\0').filter(p => p && !have.has(p) && !p.split('/').includes('.docket'));
   if (!cand.length) return [];
   const ls = sh('git', ['ls-tree', '-r', '--name-only', '-z', base], root);
   const atBase = new Set(ls.status === 0 ? ls.stdout.split('\0').filter(Boolean) : []);
   const show = p => { const r = sh('git', ['show', base + ':./' + p], root); return r.status === 0 ? r.stdout : null; };
-  const showBytes = p => { const r = cp.spawnSync('git', ['show', base + ':./' + p], { cwd: root, maxBuffer: 1 << 28 }); return r.status === 0 && r.stdout ? r.stdout : null; };   // the sniff is over bytes (FORMAT.md 1)
+  const showBytes = p => { const r = cp.spawnSync('git', ['show', base + ':./' + p], { cwd: root, maxBuffer: 1 << 28, env: gitEnv() }); return r.status === 0 && r.stdout ? r.stdout : null; };   // the sniff is over bytes (FORMAT.md 1)
   const ledgers = new Map();
   const ledgerAt = p => {                                             // the nearest DECISIONS.md or docs/DECISIONS.md above p, at the base
     for (let dir = path.posix.dirname(p); ; dir = path.posix.dirname(dir)) {
@@ -2001,7 +2006,7 @@ function governedAt(root, have, base) {
 // as if added — intent to add, in a copy of the index, so the repository's own index is never touched: an untracked file's
 // diff is then the one `git add` gives it, and the gate's hash is the same before the add and after it (D40).
 function diffsFrom(root, base, rels, untracked, runs) {
-  let env = process.env, tmp = null;
+  let env = gitEnv(), tmp = null;
   // A copy that is not made, or an add that fails, leaves git an index with nothing in it, and every tracked file would read as
   // deleted: the diff would be another diff, and the stop would start a judge on it, so it is refused (FORMAT.md 16)
   const refuse = why => { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* never made */ } } throw Object.assign(new Error('the gate could not read the untracked governed files as added, in a copy of the index: ' + why + '; a diff read without them would be another diff, so none is judged (FORMAT.md 16)'), { refusal: true }); };
@@ -2012,12 +2017,12 @@ function diffsFrom(root, base, rels, untracked, runs) {
     tmp = path.join(os.tmpdir(), 'docket-index-' + process.pid + '-' + crypto.randomBytes(4).toString('hex'));
     const src = path.resolve(root, ip.stdout.trim());
     if (isFile(src)) { try { fs.copyFileSync(src, tmp); } catch (e) { refuse('the copy could not be written at ' + tmp + ' (' + (e.code || e.message) + ')'); } }   // no index yet: git starts one
-    env = Object.assign({}, process.env, { GIT_INDEX_FILE: tmp });
+    env = gitEnv(Object.assign({}, process.env, { GIT_INDEX_FILE: tmp }));
     const add = cp.spawnSync('git', ['add', '-N', '--'].concat(untracked), { cwd: root, env, encoding: 'utf8' });
     if (add.status !== 0) refuse('git add -N failed — ' + (String(add.stderr || (add.error && add.error.message) || '').trim().split('\n')[0] || 'exit ' + add.status));
   }
   try {
-    return runs.map(extra => { const r = cp.spawnSync('git', ['diff', base, '--no-renames'].concat(extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
+    return runs.map(extra => { const r = cp.spawnSync('git', ['diff'].concat(GIT_DIFF_PIN, [base, '--no-renames'], extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
   } finally { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* the copy is the reading's own */ } } }
 }
 // The diff the judge reads and the gate hashes (D40): `git diff <base>` — the session's base, HEAD when it has none — over
@@ -2036,16 +2041,19 @@ function governedDiff(root, base) {
   const now = Array.from(files).map(f => rel(root, f));
   const gone = governedAt(root, new Set(now), base);
   const rels = uniq(now.concat(gone)).sort();
-  const untracked = rels.filter(r => !tracked.has(path.join(root, r)) && !gone.includes(r));
+  // an untracked path the base holds was struck from the index: the deletion git shows, not a new file to add again (D40's addendum)
+  const lsBase = sh('git', ['ls-tree', '-r', '--name-only', '-z', base], root);
+  const atBase = new Set(lsBase.status === 0 ? lsBase.stdout.split('\0').filter(Boolean) : []);
+  const untracked = rels.filter(r => !tracked.has(path.join(root, r)) && !gone.includes(r) && !atBase.has(r));
   let text = '', touched = [], fromGit = true;
   if (rels.length) {
-    const [dr, nr] = diffsFrom(root, base, rels, untracked, [[], ['--name-only', '-z']]);
+    const [dr, nr] = diffsFrom(root, base, rels, untracked, [['-U3'], ['--name-only', '-z']]);   // three lines of context, whatever diff.context says
     if (dr.status === 0) { text = dr.stdout; touched = nr.stdout.split('\0').filter(Boolean); }
     else {
       // no commit yet, or no repository at all: everything governed is new. A repository git will not read — its ownership, its
       // config — is neither, and read as either its diff would be another diff: refused, with git's own line (FORMAT.md 16). git
       // is asked in its own words, whatever the locale, so "not a git repository" is read as written
-      const C_ = Object.assign({}, process.env, { LC_ALL: 'C', LANGUAGE: '' });
+      const C_ = gitEnv(Object.assign({}, process.env, { LC_ALL: 'C', LANGUAGE: '' }));
       const gd = cp.spawnSync('git', ['rev-parse', '--git-dir'], { cwd: root, encoding: 'utf8', env: C_ });
       const noRepo = gd.status !== 0 && /not a git repository/i.test(gd.stderr || '');
       const unborn = gd.status === 0 && cp.spawnSync('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], { cwd: root, encoding: 'utf8', env: C_ }).status !== 0;
@@ -2092,10 +2100,10 @@ function touchedRulings(root, d) {
     const ledger = ledgers.get(lp);
     const now = isFile(abs) && isTextFile(abs) ? splitLines(normEol(readText(abs))) : null;
     if (!d.rels.length || untracked.has(rf)) { if (now) read(ledger, now, [[1, now.length]]); continue; }   // a new file whole, as near reads a Write
-    const b = cp.spawnSync('git', ['show', d.base + ':' + rf], { cwd: root, maxBuffer: 1 << 28 });
+    const b = cp.spawnSync('git', ['show', d.base + ':' + rf], { cwd: root, maxBuffer: 1 << 28, env: gitEnv() });
     const was = b.status === 0 && !b.stdout.subarray(0, SNIFF_BYTES).includes(0) ? splitLines(normEol(b.stdout.toString('utf8'))) : null;
     if (!now) { if (was) read(ledger, was, [[1, was.length]]); continue; }   // deleted: its base version, whole
-    const h = sh('git', ['diff', d.base, '--no-renames', '-U0', '--', rf], root);
+    const h = sh('git', ['diff'].concat(GIT_DIFF_PIN, [d.base, '--no-renames', '-U0', '--', rf]), root);
     const nowR = [], wasR = [];
     for (const m of (h.status === 0 ? h.stdout : '').matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
       const oc = Number(m[1]), on = m[2] === undefined ? 1 : Number(m[2]), nc = Number(m[3]), nn = m[4] === undefined ? 1 : Number(m[4]);

@@ -4495,5 +4495,62 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and cuts a refusal’s line and a block’s first line over four hundred characters to four hundred in all, the mark among them, where the block’s had been cut silently at two hundred', Array.from(ref.replace(/^  refused \(exit \d+\): /, '')).length === 400 && ref.endsWith('…') && Array.from(blk.replace(/^  blocked: /, '')).length === 400 && blk.endsWith('…'), [Array.from(ref).length, Array.from(blk).length, blk.slice(0, 80)].join(' | '));
 }
 
+// ── the gate reads git as the repository holds its files, whatever the person's configuration (D40's addendum) ──
+{
+  // settings added to the ones the suite sets, as the person's own configuration would be
+  const cfg = pairs => { const e = {}; let n = Number(process.env.GIT_CONFIG_COUNT) || 0; for (const [k, v] of pairs) { e['GIT_CONFIG_KEY_' + n] = k; e['GIT_CONFIG_VALUE_' + n] = v; n++; } e.GIT_CONFIG_COUNT = String(n); return e; };
+  const d = tempRepo();
+  fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const later = 1; // R2\n');
+  const g1 = docket(['gate', '--session', 'g'], { cwd: d });
+  const hostile = Object.assign({ GIT_DIFF_OPTS: '--unified=0', GIT_EXTERNAL_DIFF: 'true' }, cfg([['diff.external', 'true'], ['color.ui', 'always'], ['color.diff', 'always'], ['diff.noprefix', 'true'], ['diff.mnemonicPrefix', 'true'], ['diff.context', '0']]));
+  const g2 = docket(['gate', '--session', 'g'], { cwd: d, env: hostile });
+  ok('the gate reads git as the repository holds its files: an external diff, colour, other prefixes, other context and GIT_DIFF_OPTS leave its answer and its hash as they are (D40’s addendum)', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g1.out) && g2.out === g1.out, JSON.stringify(g1.out) + ' | ' + JSON.stringify(g2.out) + g2.err);
+  const w1 = docket(['gate', '--session', 'g', '--diff'], { cwd: d });
+  fs.writeFileSync(path.join(d, '.gitattributes'), '*.js diff=rot\n');
+  const w2 = docket(['gate', '--session', 'g', '--diff'], { cwd: d, env: Object.assign({ GIT_DIFF_OPTS: '--unified=0' }, cfg([['diff.rot.textconv', 'tr a-z n-za-m <'], ['color.ui', 'always'], ['diff.external', 'true']])) });
+  fs.rmSync(path.join(d, '.gitattributes'));
+  ok('…and the diff it shows the judge is the code itself, uncoloured and unconverted, with the rulings cited near each hunk beneath it, as under no configuration', w2.out === w1.out && w1.out.includes('+const later = 1; // R2') && /The rulings cited within 20 lines of each hunk/.test(w1.out), firstDiff(w1.out, w2.out));
+  const h = g1.out.split(/\s+/)[1];
+  const v = docket(['verdict', 'PASS', '--hash', h, '--failures', '0', '--session', 'g'], { cwd: d, env: Object.assign({ GIT_EXTERNAL_DIFF: '/bin/echo' }, cfg([['diff.external', '/bin/echo']])) });
+  ok('…so a verdict recorded under an external diff that prints its own temporary names names the diff the gate named, and is recorded', v.code === 0 && /^verdict recorded: PASS/.test(v.out), v.out + v.err);
+}
+{
+  // a governed file named with a * names itself: a change to an ungoverned file its name would match as a pattern is none
+  const d = tempRepo(dir => { fs.writeFileSync(path.join(dir, 'test', 'fixture', 'star*.js'), 'const s = 1; // R2\n'); fs.writeFileSync(path.join(dir, 'test', 'fixture', 'starX.js'), 'const x = 1;\n'); });
+  fs.appendFileSync(path.join(d, 'test', 'fixture', 'starX.js'), 'const y = 2;\n');
+  const g = docket(['gate', '--session', 's'], { cwd: d });
+  ok('a governed file named with a * is a literal path: a change to an ungoverned file its name matches as a pattern is no change the gate judges (D40’s addendum)', g.out === 'SKIP\n', g.out + g.err);
+  fs.appendFileSync(path.join(d, 'test', 'fixture', 'star*.js'), 'const t = 2;\n');
+  const g2 = docket(['gate', '--session', 's'], { cwd: d });
+  ok('…and a change to it is judged, it alone named', /^JUDGE [0-9a-f]{64} test\/fixture\/star\*\.js\n$/.test(g2.out), g2.out + g2.err);
+}
+{
+  // struck from the index, still on disk: the deletion git shows
+  const d = tempRepo();
+  sh('git', ['rm', '-q', '--cached', 'test/fixture/app.js'], d);
+  const g = docket(['gate', '--session', 'r'], { cwd: d });
+  ok('a governed file struck from the index and left on disk is the deletion git shows, and the gate judges it — not a new file added back, which read as unchanged (D22, D40’s addendum)', /^JUDGE [0-9a-f]{64} test\/fixture\/app\.js\n$/.test(g.out), g.out + g.err);
+  sh('git', ['add', 'test/fixture/app.js'], d);
+  const g2 = docket(['gate', '--session', 'r'], { cwd: d });
+  sh('git', ['rm', '-q', '--cached', 'test/fixture/DECISIONS.md'], d);
+  const g3 = docket(['gate', '--session', 'r'], { cwd: d });
+  ok('…added back, nothing governed changed; and the ledger struck from the index is judged as its deletion too', g2.out === 'SKIP\n' && /^JUDGE [0-9a-f]{64} test\/fixture\/DECISIONS\.md\n$/.test(g3.out), g2.out + ' | ' + g3.out + g3.err);
+}
+{
+  // blame reads the ledger's own lines: under a text conversion that drops the first line, every line's commit was read one
+  // line down, and an addendum under R6 — written after R7's edge into R6, so pending — took the commit of R7's heading below
+  // it and read as answered by that edge (D21)
+  const d = tempRepo(), fx = path.join(d, 'test', 'fixture');
+  const a = docket(['append', '--addendum', 'R6', '--text', 'the toolbar note, amended after R7 reversed it'], { cwd: fx, env: { DOCKET_TODAY: '2026-09-30' } });
+  sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'addendum'], d);
+  const pend = env => (JSON.parse(docket(['status', '--json'], { cwd: fx, env }).out).pendingAddenda || []).filter(x => x.id === 'R6').length;
+  const before = pend({});
+  fs.writeFileSync(path.join(d, '.gitattributes'), 'DECISIONS.md diff=cut\n');
+  const n = Number(process.env.GIT_CONFIG_COUNT) || 0;
+  const conv = pend({ ['GIT_CONFIG_KEY_' + n]: 'diff.cut.textconv', ['GIT_CONFIG_VALUE_' + n]: 'sed 1d', GIT_CONFIG_COUNT: String(n + 1) });
+  fs.rmSync(path.join(d, '.gitattributes'));
+  ok('the pending addenda are read from the ledger’s own lines: an addendum written after the edge into its entry is pending under a text conversion of the ledger, as under none (D21, D40’s addendum)', a.code === 0 && before === 1 && conv === 1, [a.code, before, conv].join(' '));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

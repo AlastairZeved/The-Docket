@@ -584,7 +584,14 @@ a file under a ledger that is gone, and the ledger itself, each read at the base
 the addition it is and a file at the base read as text by its bytes, as 1 reads
 one; an untracked governed file is read as if added — intent to add, in a copy of
 the index, never the repository's own — so its diff is a new file's and the hash
-is the same before `git add` and after. A diff the gate cannot read whole is
+is the same before `git add` and after; an untracked path the base holds — a
+governed file or a ledger struck from the index, `git rm --cached` — is the
+deletion git shows, not a new file added again. git is run as the repository
+holds its files, whatever the person's own configuration says: no external diff
+program, no text conversion and no colour, the `a/` and `b/` prefixes, three
+lines of context, `GIT_DIFF_OPTS` and `GIT_EXTERNAL_DIFF` set aside, and every
+path a literal path, so one diff is the same text on every run and every
+machine (D40's addendum). A diff the gate cannot read whole is
 refused, exit 2, with the reason: the copy of the index not made, or the add
 failing, would leave every tracked file read as deleted; and a repository git
 will not read — its ownership, its config — is not a tree with no repository,
