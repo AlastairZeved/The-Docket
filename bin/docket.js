@@ -2413,7 +2413,7 @@ function judgePrompt(core, perm, input) {
   core = /^[\w\/.@:+-]+$/.test(core) ? core : JSON.stringify(core);   // a path the shell would split is written quoted, as the rule allows
   return [
     'You are the docket\'s judge for this stop.',
-    'Run `node ' + core + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix' + (perm ? ': your one permission, ' + perm + ', matches that shape alone' : '') + '.',
+    'Run `node ' + core + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix' + (perm ? ': your one permission, ' + perm + ', matches a command of that shape, and none with a prefix, a variable or a substitution in it' : '') + '.',
     'Follow the protocol to its end: your answer is the record `node ' + core + ' verdict` makes, and the stop reads that record and nothing else you say.',
     'If a command of that shape is denied, record nothing, and say in one line that the judge could not run the core.',
     'Hook input: ' + JSON.stringify(hookFields(input)),

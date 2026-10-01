@@ -3368,7 +3368,7 @@ const SEC = String.fromCharCode(0xa7);
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('PASS'), '--permission', 'Bash(node *docket.js*)']);
     ok('stop: the judge’s PASS allows: exit 0, nothing printed', r.code === 0 && r.out === '', r.out + r.err);
     const pr = read(path.join(jd, 'prompt'));
-    ok('…the judge was given the core’s own path, the one command shape, the permission’s spelling and the hook input, and nothing of the protocol’s own rules (D20, D25)', pr.includes('Run `node ' + qcore + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix: your one permission, Bash(node *docket.js*), matches that shape alone.') && /\nHook input: \{"session_id":"x"\}\n$/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr);
+    ok('…the judge was given the core’s own path, the one command shape, the permission’s spelling and the hook input, and nothing of the protocol’s own rules (D20, D25)', pr.includes('Run `node ' + qcore + ' protocol` with the path written out — no $( ), no variable, no cd or other prefix: your one permission, Bash(node *docket.js*), matches a command of that shape, and none with a prefix, a variable or a substitution in it.') && /\nHook input: \{"session_id":"x"\}\n$/.test(pr) && !/four cases and in no other|never prefixed|verdict recorded: PASS/.test(pr), pr);
     forget();
     r = stopIn({ session_id: 'y' }, ['--judge', judgeCmd('PASS')]);
     ok('stop: the hash of the last PASS allows for every session, and no judge starts (D10)', r.code === 0 && r.out === '' && !started(), r.out);

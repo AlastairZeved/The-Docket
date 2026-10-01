@@ -70,7 +70,11 @@ absolute path to the project's `.docket/core`, and that judge reads it
 protocol, the packs, the diff and the transcript itself (`protocol`, `pack`,
 `gate --diff`, `transcript`), and the one permission the judge needs is to run
 the core — in the host bound here, the rule `Bash(node *docket.js*)`, with no
-space before the closing parenthesis, so that a quoted path matches too; a
+space before the closing parenthesis, so that a quoted path matches too. The rule
+is a pattern the host matches against a command's text, so it admits any node
+command whose text names a docket.js, `node -e '<code>' x/docket.js` among them,
+and the boundary against a session that runs something else under it is the
+call's place in its transcript, as for a forged verdict (D37's addendum). A
 project whose own checks are not the core (the code pack's first feature) grants
 the judge that command as well. A judge that cannot run the core cannot judge,
 and records nothing; and a judge may say anything, so `stop` reads the record
