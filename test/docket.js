@@ -2568,7 +2568,7 @@ const SEC = String.fromCharCode(0xa7);
     const gj = JSON.parse(docket(['governs', 'D18', '--json']).out);
     ok('D18’s body states the escalation and the confirm rule the intakes follow', /one clarification/.test(gj.ruling.body) && /restated as a checklist/.test(gj.ruling.body) && /no third attempt/.test(gj.ruling.body) && /Silence is not confirmation/.test(gj.ruling.body) && /\bReason: /.test(gj.ruling.body), gj.ruling.body.slice(0, 300));
     ok('USAGE lists the three subcommands', ['docket diff <revA> <revB>', 'docket diff --files <a> <b>', 'docket vendor <dir>', 'docket constitute --answers <json>'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
-    ok('USAGE lists gate, verdict, protocol, pack and transcript', ['docket gate --session <id> [--diff]', 'docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]', 'docket protocol', 'docket pack <name>… | --list', 'docket transcript <path> [--last n]'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
+    ok('USAGE lists gate, verdict, protocol, pack and transcript', ['docket gate [--session <id>] [--diff]', 'docket verdict PASS|FAIL|STALE [--hash <h>] [--failures <n>] [--session <id>] [--reason "…"]', 'docket protocol', 'docket pack <name>… | --list', 'docket transcript <path> [--last n]'].every(l => docket(['help']).out.includes(l)), 'USAGE incomplete');
     const g19 = docket(['governs', 'D19']);
     const out19 = (g19.out.match(/^Out-edges[^\n]*\n([\s\S]*?)(?=^In-edges)/m) || [])[1] || '';
     ok('D19 is in the ledger, extends D15 and D8 (in the Out-edges section), and records the five scenarios, the stale rate, the mechanical half’s wait and the measurement’s cap', g19.code === 0 && /^\s+D19 extends D15/m.test(out19) && /^\s+D19 extends D8/m.test(out19) && (() => { const b = JSON.parse(docket(['governs', 'D19', '--json']).out).ruling.body; return /Violation:/.test(b) && /Clean:/.test(b) && /Stale:/.test(b) && /Number:/.test(b) && /Amend:/.test(b) && /two of the four scored runs/.test(b) && /two hundred and seventy seconds/.test(b) && /twelve turns per session/.test(b) && /no verdict of it counts \(D15\)/.test(b); })(), g19.out.slice(0, 300));
@@ -4968,6 +4968,19 @@ const SEC = String.fromCharCode(0xa7);
   const a = run(path.join(inRepo, 'test')), b = run(path.join(under, 'tmp'));
   ok('the witness refuses, exit 2, a temporary directory inside a repository, naming the repository and TMPDIR, and runs nothing', a.status === 2 && /^witness: refused — the temporary directory .* lies inside the git repository at .*set TMPDIR/.test(a.stderr) && a.stdout === '' && !/FAIL /.test(a.stderr), a.status + ' ' + a.stderr.slice(0, 300));
   ok('…and one beneath a ledger, naming the directory that holds it', b.status === 2 && /lies beneath the ledger in .*docket-under-/.test(b.stderr) && b.stdout === '', b.status + ' ' + b.stderr.slice(0, 300));
+}
+
+// ── an empty --session names no session, and verdict's usage says which of its options are optional (FORMAT.md 16, D11's addendum) ──
+{
+  const d = tempRepo();
+  fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const es = 1; // R2\n');
+  const rs = [docket(['gate', '--session', ''], { cwd: d }), docket(['verdict', 'PASS', '--session', ' '], { cwd: d }), docket(['stop', '--session', '', '--judge', 'true'], { cwd: d, input: '{"session_id":"x"}' })];
+  ok('a --session whose value is empty or blank is refused, exit 2, by the gate, the verdict and the stop alike, and nothing is recorded', rs.every(r => r.code === 2 && /^--session names no session: its value is empty or blank;/m.test(r.err)) && !fs.existsSync(path.join(d, '.docket', 'verdicts.jsonl')), rs.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  const hs = [docket(['verdict', 'PASS', '--hash', ''], { cwd: d }), docket(['verdict', 'PASS', '--hash', ' '], { cwd: d })];
+  ok('…and the verdict refuses a --hash so given the same way: an option accepted and ignored is a silence, and nothing is recorded', hs.every(r => r.code === 2 && /^verdict: --hash names no diff: its value is empty or blank;/m.test(r.err)) && !fs.existsSync(path.join(d, '.docket', 'verdicts.jsonl')), hs.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  const u = docket(['verdict'], { cwd: d });
+  ok('…and verdict’s usage brackets --hash and --failures, which it reads as the diff in front of it and as 0 when absent', u.code === 2 && u.err.trim() === 'usage: docket verdict <PASS|FAIL|STALE> [--hash <hash>] [--failures <n>] [--session <id>] [--reason "<the located failures>"]', u.err);
+  fs.rmSync(d, { recursive: true, force: true });
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

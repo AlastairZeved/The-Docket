@@ -675,7 +675,12 @@ lock and the state's alike; the state's held past five seconds is written throug
 with a note, except by the call at a session's start, which waits one second and
 then records no base, so that the session reads from `HEAD` as one with none does.
 `verdict` records the diff in front of the judge: a `--hash` the working tree does
-not hash to is refused, exit 2. `.docket/` is ignored by git: the core makes it with a `.gitignore`
+not hash to is refused, exit 2, and with none it records the diff in front of it;
+with no `--failures` the count is 0, which a FAIL or a STALE refuses. A `--session`
+whose value is empty or blank is refused, exit 2, by the gate, the verdict and the
+stop alike: it names no session, and read as none it would record under another.
+The verdict refuses a `--hash` so given the same way: an option accepted and
+ignored is a silence. `.docket/` is ignored by git: the core makes it with a `.gitignore`
 of `*` inside, whatever the project's own says, and a constituted project is told to ignore it too.
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,

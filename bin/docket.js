@@ -2028,8 +2028,15 @@ function recordCore(root) {
 // \u0000, so the state, the judge's environment, its prompt and the verdict name one session, and none of them throws
 // (FORMAT.md 16)
 function sessionKey(s) { return String(s).replace(/[\u0000-\u001f\u007f]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')); }
-function sessionId(argv) {
+// A session named on the command line is named: a --session whose value is empty or blank names none, and read as absent it
+// would record under the hook's session or the default one (FORMAT.md 16, D11's addendum)
+function sessionOpt(argv) {
   const s = flag(argv, '--session');
+  if (s !== null && !String(s).trim()) die('--session names no session: its value is empty or blank; name one, or leave the option out (FORMAT.md 16)', 2);
+  return s;
+}
+function sessionId(argv) {
+  const s = sessionOpt(argv);
   if (s) return sessionKey(s);
   if (process.env.DOCKET_SESSION) return sessionKey(process.env.DOCKET_SESSION);
   return 'default';
@@ -2352,7 +2359,7 @@ function holdToLines(root, v, failures, lines) {
 }
 function verdict(argv) {
   const v = (argv._[1] || '').toUpperCase();
-  if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> --hash <hash> --failures <n> [--session <id>] [--reason "<the located failures>"]', 2);
+  if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> [--hash <hash>] [--failures <n>] [--session <id>] [--reason "<the located failures>"]', 2);
   const root = stopRoot(process.cwd());                               // D28
   const id = sessionId(argv);
   const fRaw = flag(argv, '--failures'), failures = fRaw === null ? 0 : /^\d+$/.test(String(fRaw)) ? Number(fRaw) : NaN;   // a whole number, written as one
@@ -2368,6 +2375,7 @@ function verdict(argv) {
   // and counted here it would be counted again by the stop, which reads no record for its own, or reset the count at every
   // stop and never surface the session (D11, D38). It is refused, with the way to record it.
   const now = governedDiff(root, sessionBase(root, loadState(root), id)).hash, given = flag(argv, '--hash');
+  if (given !== null && !String(given).trim()) die('verdict: --hash names no diff: its value is empty or blank; give the hash the gate printed, or leave the option out and the diff in front of you is recorded (FORMAT.md 16)', 2);   // an option accepted and ignored is a silence
   if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
   const hash = now;
   const moveTo = v === 'PASS' && governedDiff(root, 'HEAD').empty ? headCommit(root) : null;   // a PASS on a committed tree: the diff since it runs from HEAD (D40)
@@ -2456,7 +2464,7 @@ function stop(argv) {
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
   const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
-  const id = sessionKey(flag(argv, '--session') || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
+  const id = sessionKey(sessionOpt(argv) || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.join(', ');
@@ -2626,8 +2634,8 @@ const USAGE = [
   '  docket vendor <dir>                 copy the witness to <dir>/test/docket.js and print the CI step',
   '  docket constitute --answers <json>  a new project\'s PRD, UIUX and DECISIONS from the four answers, the witness vendored, check run (--target <dir>)',
   '  docket intake rule|constitute       print an intake file, for a skill to splice at load',
-  '  docket gate --session <id> [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the session\'s diff from its base, decided mechanically (D10, D11, D40); --diff prints it',
-  '  docket verdict PASS|FAIL|STALE --hash <h> --failures <n> --session <id> [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
+  '  docket gate [--session <id>] [--diff] SKIP, SURFACE, or JUDGE <hash> <files…> — the session\'s diff from its base, decided mechanically (D10, D11, D40); --diff prints it',
+  '  docket verdict PASS|FAIL|STALE [--hash <h>] [--failures <n>] [--session <id>] [--reason "…"]   record the judge\'s verdict in .docket/verdict.json',
   '  docket stop --judge "<command>" [--permission "<rule>"] [--wait <s>]   stdin: the stop hook\'s input; starts the judge on a governed stop and turns its record into the stop\'s answer',
   '  docket protocol                     print judge/PROTOCOL.md',
   '  docket pack <name>… | --list        print packs, or the packs with their domains',
