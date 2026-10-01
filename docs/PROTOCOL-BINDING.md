@@ -98,7 +98,11 @@ A hook declaration per call — the third carrying the command that starts the
 judge — an agent declaration for a judge run by hand that points at
 `judge/PROTOCOL.md` and denies writing, and a skill or command per intake
 (`intake/RULE.md`, `intake/CONSTITUTE.md`) that says "follow this file, then run
-the subcommand". Each is a few lines. A binding that contains a rule, a
+the subcommand". Each is a few lines. The write an intake makes runs in the turn
+the person confirms in, after the turn the skill was invoked in: a host that
+grants a skill's permission for its own turn asks once more there, and a
+headless session writes only where its binding allows the core outright
+(`Bash(node *docket.js*)` on this host). A binding that contains a rule, a
 threshold, a feature or a template has taken something that belongs to the
 core; move it back.
 

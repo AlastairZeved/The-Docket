@@ -73,6 +73,10 @@ Write the answers to a temporary JSON file:
      "feeling": "…", "refuses": ["…", "…", "…"], "prefix": "R"}
 
 and run `docket constitute --answers <that file>` from the project's root. It
+runs in the turn the person confirms in, which a skill's permission may not
+cover: a host that grants it for the skill's own turn asks once more — the ask is
+the host's, and the confirm stands — and a session with no one to ask writes only
+where its binding allows the core; report what happened as it is. It
 checks each answer's shape and refuses a malformed one by name; fills the
 templates into `docs/PRD.md`, `docs/UIUX.md` and `docs/DECISIONS.md`, the
 first ruling being the constitution itself; vendors the witness to

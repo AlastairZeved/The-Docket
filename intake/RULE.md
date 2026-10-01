@@ -70,7 +70,13 @@ Run the same command without `--dry-run`:
     docket append --title "<answer 1, as a phrase>" --issue "<answer 2>" --principle "<answer 3>" [--edge "<verb> <id>"]… --body "<answer 5>"
 
 and report its output as printed: the entry, any check failures, and the
-`check:` line. Do not restate the entry in other words. A baseline rewrite
+`check:` line. Do not restate the entry in other words. The command runs in the
+turn the person confirms in, which a skill's permission may not cover: a host
+that grants it for the skill's own turn asks once more before the command runs
+— that ask is the host's, and the confirm, the person's word, stands — and a
+session with no one to ask writes only where its binding allows the core
+(`docs/PROTOCOL-BINDING.md`). Report what happened as it is: the entry written,
+or nothing written and why. A baseline rewrite
 (`docket append --baseline`) follows the same path behind the same block; an
 addendum has a block of its own, below.
 
