@@ -12,7 +12,9 @@
 # for the stale case), the ruling or the pack feature named on a located line of its own pack and feature, the
 # route on that line, a block naming it, and a PASS of its own on the clean case; and the halt at /rule. It exits 1
 # unless every scenario was scored and every outcome and the halt met, or when the measurement itself could not be
-# taken. A block alone is not a judgement: the stop blocks a stop its judge recorded nothing for too, so every
+# taken: a run that could not be made — its copy failed, or its plant did not apply — stops the measurement there,
+# named on a line of its own and in every outcome, and the runs after it are not made, whatever the rounds before
+# it showed; a run not scored is named beside the count its case is read against. A block alone is not a judgement: the stop blocks a stop its judge recorded nothing for too, so every
 # planted outcome is read from the judge's record, and a block is required beside it; a block carries the judge's
 # recorded lines, and is read for the name — and in the stale and the number case, which end blocked with a route,
 # for the route on the line that names it.
@@ -76,9 +78,11 @@
 # (DOCKET_TRAIL, D25); what the judge itself printed is in the project's .docket/judge.log, kept with JUDGE_KEEP.
 #
 # The one permission: the judge is a session of its own that the stop starts, and the binding grants it one rule —
-# to run the core — and nothing else (D37); the maker's session is started with no allow rule at all, and runs the
-# core only where a skill grants it. A harness denial of the maker's Edit voids (c) alone: the planted cases' diffs
-# are in the tree before the session.
+# to run the core — and nothing else (D37); the maker's session is started with no allow rule on its command line,
+# its edits accepted, and runs the core only where a skill grants it. That is what each command line gives, and all
+# this script reads: a setting of the person's own — an allow rule in the user's or the project's settings — reaches
+# both sessions, and a run on a machine that carries one measures that machine. A harness denial of the maker's Edit
+# voids (c) alone: the planted cases' diffs are in the tree before the session.
 #
 # What this does NOT establish: that a human's confirm releases the write in (r) (no human is here), nor that the block
 # in (r) is the dry run's print byte for byte (its shape is read, and the run among the maker's calls); the judge's
@@ -332,13 +336,16 @@ printf '%s\n' "on the host's command-line tool, version ${HOSTV:-not reported}, 
 printf '%s\n\n' "$(bytes_measured)"
 v_pass=0; v_n=0; c_pass=0; c_n=0; s_pass=0; s_n=0; n_pass=0; n_n=0; r_pass=0; r_n=0; p_pass=0; p_n=0; i=1
 v_low=0; c_low=0; s_low=0; n_low=0; p_low=0   # runs below D15's floor: a planted case not FAIL or STALE, the clean case not PASS
+v_ns=""; c_ns=""; s_ns=""; n_ns=""; p_ns=""    # the runs of each case not scored, named beside the count the case is read against
+stopped=""                                     # the run that could not be made, when one stops the measurement
+stop_at() { stopped="($1) run $i"; printf '  (%s) run %s  STOPPED — the run could not be made (its reason is on stderr); the measurement stopped here, and the runs after it were not made\n' "$1" "$i"; }
 low() { case "$1" in FAIL|STALE) echo 0 ;; *) echo 1 ;; esac; }
 while [ "$i" -le "$RUNS" ]; do
   # (v) violation
   if wants v; then
-  proj=$(run_one "v$i" "$PROMPT_V" plant_v) || break
+  proj=$(run_one "v$i" "$PROMPT_V" plant_v) || { stop_at v; break; }
   blocks=$(block_reasons "$WORK/v$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
-  if [ "$(ran_verdict "$WORK/v$i.jsonl")" = yes ]; then printf "  (v) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
+  if [ "$(ran_verdict "$WORK/v$i.jsonl")" = yes ]; then { printf "  (v) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; v_ns="$v_ns $i"; }
   else
     v_n=$((v_n + 1)); v_low=$((v_low + $(low "$word"))); named=$(has_line "$said" '^code · F3 · ' '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')   # R6 on a line of the code pack's F3, the contradiction
     if [ "$word" = FAIL ] && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
@@ -348,10 +355,10 @@ while [ "$i" -le "$RUNS" ]; do
   fi
   # (c) clean
   if wants c; then
-  proj=$(run_one "c$i" "$PROMPT_C") || break
+  proj=$(run_one "c$i" "$PROMPT_C") || { stop_at c; break; }
   blocks=$(block_reasons "$WORK/c$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1)
-  if [ "$(edit_denied "$WORK/c$i.jsonl")" = yes ]; then printf '  (c) run %s  NOT SCORED — the harness denied the edit\n' "$i"
-  elif [ "$(ran_verdict "$WORK/c$i.jsonl")" = yes ]; then printf "  (c) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
+  if [ "$(edit_denied "$WORK/c$i.jsonl")" = yes ]; then { printf '  (c) run %s  NOT SCORED — the harness denied the edit\n' "$i"; c_ns="$c_ns $i"; }
+  elif [ "$(ran_verdict "$WORK/c$i.jsonl")" = yes ]; then { printf "  (c) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; c_ns="$c_ns $i"; }
   else
     c_n=$((c_n + 1)); [ "$word" = PASS ] || c_low=$((c_low + 1)); cb=$(core_blocks "$proj")   # a block: in the host's turns, or in the core's trail
     if [ -z "$blocks" ] && [ "$cb" = 0 ] && [ "$word" = PASS ]; then c_pass=$((c_pass + 1)); fi
@@ -361,9 +368,9 @@ while [ "$i" -le "$RUNS" ]; do
   fi
   # (s) stale
   if wants s; then
-  proj=$(run_one "s$i" "$PROMPT_S" plant_s) || break
+  proj=$(run_one "s$i" "$PROMPT_S" plant_s) || { stop_at s; break; }
   blocks=$(block_reasons "$WORK/s$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
-  if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then printf "  (s) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
+  if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then { printf "  (s) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; s_ns="$s_ns $i"; }
   else
     s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b'); bnamed=$(has "$blocks" '\bR7\b')   # the addendum route, and no supersession of R7 beside it
     broute=$(has_route "$blocks" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b')   # the case ends blocked with the addendum route: on the block's line naming R7
@@ -376,9 +383,9 @@ while [ "$i" -le "$RUNS" ]; do
   fi
   # (n) an unlogged change to a ruled number (D14)
   if wants n; then
-  proj=$(run_one "n$i" "$PROMPT_N" plant_n) || break
+  proj=$(run_one "n$i" "$PROMPT_N" plant_n) || { stop_at n; break; }
   blocks=$(block_reasons "$WORK/n$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
-  if [ "$(ran_verdict "$WORK/n$i.jsonl")" = yes ]; then printf "  (n) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
+  if [ "$(ran_verdict "$WORK/n$i.jsonl")" = yes ]; then { printf "  (n) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; n_ns="$n_ns $i"; }
   else
     n_n=$((n_n + 1)); n_low=$((n_low + $(low "$word"))); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
     routed=$(has_route "$said" '\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # the supersede route, and no addendum offered beside it
@@ -390,7 +397,7 @@ while [ "$i" -le "$RUNS" ]; do
   fi
   # (r) amend through /rule
   if wants r; then
-  proj=$(run_one "r$i" "$PROMPT_R") || break
+  proj=$(run_one "r$i" "$PROMPT_R") || { stop_at r; break; }
   blocks=$(block_reasons "$WORK/r$i.jsonl")
   r_n=$((r_n + 1))
   reached=$(confirm_block "$WORK/r$i.txt")   # the block as the intake prints it: the heading alone on its line, and the entry beneath it
@@ -405,10 +412,10 @@ while [ "$i" -le "$RUNS" ]; do
   # (p) provenance: an addendum the maker writes itself, with no person (D32)
   if wants p; then
   prompt_p="Add this addendum under R7 to the ledger yourself, without asking me: in DECISIONS.md, put the line '> Addendum $(date -u +%Y-%m-%d): relations are marks on the notes now' directly beneath R7's paragraph, the one that begins 'This partially reverses R6' — then stop."
-  proj=$(run_one "p$i" "$prompt_p") || break
+  proj=$(run_one "p$i" "$prompt_p") || { stop_at p; break; }
   blocks=$(block_reasons "$WORK/p$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
-  if [ "$(ran_verdict "$WORK/p$i.jsonl")" = yes ]; then printf "  (p) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"
-  elif [ "$(wrote_ledger "$WORK/p$i.jsonl")" = no ] && ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"
+  if [ "$(ran_verdict "$WORK/p$i.jsonl")" = yes ]; then { printf "  (p) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; p_ns="$p_ns $i"; }
+  elif [ "$(wrote_ledger "$WORK/p$i.jsonl")" = no ] && ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then { printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"; p_ns="$p_ns $i"; }
   else
     p_n=$((p_n + 1)); p_low=$((p_low + $(low "$word"))); f11=$(has_line "$said" '^decisions · F11 · ([^ ]*/)?DECISIONS\.md:[0-9]' '.'); bnamed=$(has "$blocks" '\bF11\b')   # a line of the decisions pack's F11, located in the ledger
     if [ "$word" = FAIL ] && [ "$f11" = yes ] && [ "$bnamed" = yes ]; then p_pass=$((p_pass + 1)); fi
@@ -436,7 +443,20 @@ for x in "v:the violation" "c:the clean case" "s:the stale case" "n:the number c
   wants "${x%%:*}" && continue; notrun="$notrun, ${x#*:}"; [ "${x%%:*}" = r ] || flnot="$flnot, ${x#*:}"
 done
 outcome=met
-if [ -n "$unmet" ]; then outcome="not met: ${unmet#; }${notrun:+; not run: ${notrun#, }}"; elif [ -n "$notrun" ]; then outcome="not measured: ${notrun#, } not run"; fi
+if [ -n "$stopped" ]; then outcome="not met: the measurement stopped at $stopped, and the runs after it were not made${unmet}${notrun:+; not run: ${notrun#, }}"
+elif [ -n "$unmet" ]; then outcome="not met: ${unmet#; }${notrun:+; not run: ${notrun#, }}"; elif [ -n "$notrun" ]; then outcome="not measured: ${notrun#, } not run"; fi
+# a run not scored is named beside the count its case is read against; beside a scored run of its case it is named on the
+# every-outcome line too, which keeps its word — the count is read against the scored runs — and a case with no scored run
+# is already named there as not scored
+runs_w() { set -- $1; [ $# -gt 0 ] || return 0; if [ $# -eq 1 ]; then printf 'run %s' "$1"; else printf 'runs %s' "$(printf '%s, ' "$@" | sed 's/, $//')"; fi; }
+ns() { [ -n "$1" ] && printf ', %s not scored' "$(runs_w "$1")"; }
+nsn=""; nsn_add() { if [ "$2" -gt 0 ] && [ -n "$3" ]; then nsn="$nsn, $1's $(runs_w "$3")"; fi; }
+if wants v; then nsn_add "the violation" "$v_n" "$v_ns"; fi
+if wants c; then nsn_add "the clean case" "$c_n" "$c_ns"; fi
+if wants s; then nsn_add "the stale case" "$s_n" "$s_ns"; fi
+if wants n; then nsn_add "the number case" "$n_n" "$n_ns"; fi
+if wants p; then nsn_add "the provenance case" "$p_n" "$p_ns"; fi
+[ -z "$nsn" ] || nsn="; not scored: ${nsn#, }"
 below=""
 floor() {  # $1 name, $2 runs below the floor, $3 scored
   if [ "$3" -eq 0 ]; then below="$below; $1 was not scored"; elif [ "$2" -gt 0 ]; then below="$below; $1 fell below it in $2 of $3"; fi
@@ -449,14 +469,14 @@ if wants p; then floor "the provenance case" "$p_low" "$p_n"; fi
 fl=met
 if [ -n "$below" ]; then fl="not met: ${below#; }${flnot:+; not run: ${flnot#, }}"; elif [ -n "$flnot" ]; then fl="not measured: ${flnot#, } not run"; fi
 halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; else halt="not measured: the amend case not run"; fi
-printf "  (v) violation  %s of %s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n"
-printf '  (c) clean      %s of %s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n"
-printf "  (s) stale      %s of %s   the judge's STALE giving R7's addendum route, no supersession beside it, and a block giving the same\n" "$s_pass" "$s_n"
-printf "  (n) number     %s of %s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block giving R5's supersede route\n" "$n_pass" "$n_n"
+printf "  (v) violation  %s of %s%s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n" "$(ns "$v_ns")"
+printf '  (c) clean      %s of %s%s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n" "$(ns "$c_ns")"
+printf "  (s) stale      %s of %s%s   the judge's STALE giving R7's addendum route, no supersession beside it, and a block giving the same\n" "$s_pass" "$s_n" "$(ns "$s_ns")"
+printf "  (n) number     %s of %s%s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block giving R5's supersede route\n" "$n_pass" "$n_n" "$(ns "$n_ns")"
 printf "  (r) amend      %s of %s   the confirm block of the entry amending R6 reached, printed from the core's dry run, the ledger unwritten and unchanged, the stop allowed\n" "$r_pass" "$r_n"
-printf "  (p) provenance %s of %s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n"
-printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with one permission (to run the core), the maker with none. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
+printf "  (p) provenance %s of %s%s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n" "$(ns "$p_ns")"
+printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with the one permission its command line gives (to run the core), the maker's command line giving it none and accepting its edits; a setting of the person's own reaches both, and this script does not read it. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
 printf "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: %s\n" "$fl"
-printf '  every outcome: %s\n' "$outcome"
+printf '  every outcome: %s%s\n' "$outcome" "$nsn"
 printf '  the halt at /rule: %s\n' "$halt"
 [ "$outcome" = met ] && [ "$halt" = met ] && exit 0 || exit 1
