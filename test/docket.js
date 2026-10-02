@@ -5218,5 +5218,25 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and near, so every edit refreshes it', n.code === 0 && fs.existsSync(p) && read(p) === fs.realpathSync(CORE) + '\n', String(fs.existsSync(p) && read(p)));
 }
 
+// ── the last verdict is read whole: one missing its word, its time or its count holds nothing, and is read as none (FORMAT.md 16) ──
+{
+  const d = tempRepo(), fx = path.join(d, 'test', 'fixture');
+  fs.appendFileSync(path.join(fx, 'app.js'), 'const lw = 1; // R2\n');   // a governed change, so the gate decides
+  const put = o => { fs.mkdirSync(path.join(d, '.docket'), { recursive: true }); fs.writeFileSync(path.join(d, '.docket', 'verdict.json'), JSON.stringify(o)); };
+  const at = '2026-09-30T10:00:00.000Z';
+  const partial = [{ verdict: 'FAIL' }, { verdict: 'FAIL', at }, { verdict: 'FAIL', failures: 2 }, { verdict: 'MAYBE', at, failures: 1 }, { verdict: 'FAIL', at: 7, failures: 1 },
+    { verdict: 'FAIL', at, failures: 1.5 }, { verdict: 'FAIL', at, failures: -1 }, { verdict: 'FAIL', at, failures: 1, session: 3 }, { verdict: 'FAIL', at, failures: 1, reason: ['x'] }];
+  const bad = [];
+  for (const l of partial) {
+    put({ last: l, sessions: { s: { blocks: 5, history: [1, 1], surfaced: false } } });   // five blocks: this gate surfaces it and prints the residue
+    const st = docket(['status'], { cwd: fx }), g = docket(['gate', '--session', 's'], { cwd: d });
+    if (st.code !== 0 || !/^Last verdict: none$/m.test(st.out) || /undefined/.test(st.out + g.out) || !/^SURFACE\b/.test(g.out) || /^last verdict:/m.test(g.out)) bad.push(JSON.stringify(l) + ' → ' + st.out + g.out);
+  }
+  ok('a last verdict whose word, time or count is missing or of another kind is read as none, in status and in the gate’s residue, where its gaps had printed as "undefined" (FORMAT.md 16)', bad.length === 0, bad.join('\n'));
+  put({ last: { verdict: 'FAIL', at, failures: 2, session: 's' }, sessions: { s: { blocks: 5, history: [2, 2], surfaced: true } } });
+  const whole = docket(['status'], { cwd: fx });
+  ok('…and one with its word, its time and its count is read, its hash absent', /^Last verdict: FAIL at 2026-09-30T10:00:00\.000Z \(2 located failures\); session s is SURFACED/m.test(whole.out), whole.out);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

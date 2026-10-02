@@ -1603,7 +1603,11 @@ function loadState(root) {
       typeof s.base === 'string' && /^[0-9a-f]{40,64}$/.test(s.base) ? { base: s.base } : {},   // the commit its diff runs from (D40)
       typeof s.stop === 'string' && /^[0-9a-f]{16}$/.test(s.stop) ? { stop: s.stop, counted: s.counted === true } : {});   // the stop its last record came from, and whether it counted (D38's addendum)
   }
-  const last = st.last && typeof st.last === 'object' && !Array.isArray(st.last) ? st.last : null;
+  // The last verdict is read whole: one whose word, time or count is missing or of another kind holds nothing and is read as
+  // none, where its gaps had printed as "undefined"; its hash, session and reason, when present, are text (FORMAT.md 16)
+  const L = st.last, text_ = v => v === undefined || typeof v === 'string';
+  const last = L && typeof L === 'object' && !Array.isArray(L) && ['PASS', 'FAIL', 'STALE'].includes(L.verdict) && typeof L.at === 'string'
+    && Number.isInteger(L.failures) && L.failures >= 0 && text_(L.hash) && text_(L.session) && text_(L.reason) ? L : null;
   return { last, lastPassHash: typeof st.lastPassHash === 'string' ? st.lastPassHash : null, sessions };
 }
 function saveState(root, st) { const p = statePath(root); docketDir(root); const tmp = p + '.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n'); fs.renameSync(tmp, p); }

@@ -701,7 +701,9 @@ verdict is also appended, one JSON line each and in order, to
 measurement to score the judge's first answer by; nothing in the core reads it.
 A file that is missing, half-written or hand-edited is read as what it holds and
 nothing more: a session's count that is not a whole number, a history that is not
-a list of them, a mark that is not `true`, holds nothing. Each change is made under
+a list of them, a mark that is not `true`, holds nothing; and a last verdict whose
+word, time or count is missing or of another kind holds nothing, and is read as
+none, its hash, session and reason, when present, text. Each change is made under
 a lock beside the file, `verdict.json.lock`, the state re-read inside it and written
 whole to a new file renamed over the old, so judges recording at once lose nothing.
 A lock names its holder, and one whose holder is gone is taken over, the ledger's
