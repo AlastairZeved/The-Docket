@@ -5371,5 +5371,8 @@ const SEC = String.fromCharCode(0xa7);
 }
 ok('FORMAT.md 6 states the cut as the core makes it: ninety-nine and the mark, counted as code points, a space at the end dropped before the mark', /over one hundred, it keeps\nninety-nine and the mark `…`, counted as code points, a space the cut leaves at\nits end dropped before the mark \(D14\)/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 6 does not say');
 
+// ── FORMAT.md 7 gives the spec heading's three levels their reason (D14's addendum) ──
+ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolves to the heading it names, where two levels would read `§2.2.1` as `§2.2` and pass a cite of a subsection that does not exist', /Three levels, so that a cite resolves to the\nheading it names: `UIUX §2\.2\.1` is printed with its own title, and a cite of a\nsubsection that does not exist fails check 3, where a grammar of two would read\nit as `§2\.2`, print the parent's title beside it and pass it \(D14's addendum\)\./.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 7 does not say');
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

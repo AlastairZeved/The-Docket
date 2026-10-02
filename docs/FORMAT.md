@@ -306,7 +306,10 @@ a heading in `UIUX.md` or `PRD.md` of the form
     #… §<x>[.<y>[.<z>]] <title>
 
 and is cited as `UIUX §<x>.<y>` or `PRD §<x>`; a heading numbered four levels
-deep, `§4.5.1.1`, is no spec heading. Both are indexed by
+deep, `§4.5.1.1`, is no spec heading. Three levels, so that a cite resolves to the
+heading it names: `UIUX §2.2.1` is printed with its own title, and a cite of a
+subsection that does not exist fails check 3, where a grammar of two would read
+it as `§2.2`, print the parent's title beside it and pass it (D14's addendum). Both are indexed by
 `docket index`: a section under `sections[]`, a spec heading under `specs{}` — an
 object keyed by its document, `UIUX` or `PRD`; `near` prints a spec cite with
 its title (`UIUX §<x>.<y> <title>`).
