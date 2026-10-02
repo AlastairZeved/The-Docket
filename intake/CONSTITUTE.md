@@ -39,9 +39,10 @@ that `docket check` passes. **Source.** D8, D9, D13 and D18 in
 
 A vague answer gets exactly one clarification, phrased as the question the
 answer left open. A second vague answer to the same question gets the
-requirement restated as a checklist and the question asked once more. There
-is no third attempt: a third vague answer ends the intake, writes nothing, and
-says so. Reason: as for `/rule` — an intake that keeps asking accepts in the
+requirement restated as a checklist and the question asked once more. A
+question is asked three times at most — asked, clarified, restated — and a
+third vague answer ends the intake: it writes nothing, and says so. Reason: as
+for `/rule` — an intake that keeps asking accepts in the
 end what it should have refused, and here the corrupted rule is the
 constitution every later ruling resolves against.
 

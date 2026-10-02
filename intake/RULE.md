@@ -44,9 +44,10 @@ the person gives, and one `docket append`. **Source.** D8, D13 and D18 in
 A vague answer gets exactly one clarification, phrased as the question the
 answer left open. A second vague answer to the same question gets the
 requirement restated as a checklist — each thing an acceptable answer
-contains, on its own line — and the question asked once more. There is no
-third attempt: a third vague answer ends the intake, writes nothing, and says
-so. Reason: a vague answer to the intake silently corrupts every rule written
+contains, on its own line — and the question asked once more. A question is
+asked three times at most — asked, clarified, restated — and a third vague
+answer ends the intake: it writes nothing, and says so. Reason: a vague answer
+to the intake silently corrupts every rule written
 from it, and an intake that keeps asking will in the end accept the answer it
 should have refused.
 
