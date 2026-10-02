@@ -7,6 +7,9 @@ on:
 jobs:
   witness:
     runs-on: ubuntu-latest
+    # the job ends here when a step hangs, not at the host's six hours: the witness ran eight and a half minutes on the
+    # machine that measured it, and thirty is over three times that (D14's addendum)
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:

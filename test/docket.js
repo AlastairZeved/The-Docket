@@ -1301,7 +1301,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('history/DECISIONS.v2.md is the current ledger with R3\'s heading changed, and nothing else', heads(v2).length === heads(cur).length && /^### R3\. Fold similarity, by shape and by size \(issue #4\)$/m.test(v2) && heads(v2).filter((h, i) => h !== heads(cur)[i]).length === 1, JSON.stringify(heads(v2).filter((h, i) => h !== heads(cur)[i])));
   // CI runs the witness and the docket, on a pinned runtime, for a push and a pull request
   const ci = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
-  ok('CI runs the witness and then the docket itself, on both a push and a pull request, with the runtime pinned and no step allowed to pass while failing', /^on:\n  push:\n  pull_request:$/m.test(ci) && /node-version: 20/.test(ci) && /^\s+run: node test\/docket\.js$/m.test(ci) && /^\s+run: node bin\/docket\.js$/m.test(ci) && !/continue-on-error|^\s+if:/m.test(ci), ci);
+  ok('CI runs the witness and then the docket itself, on both a push and a pull request, with the runtime pinned, the job bounded at thirty minutes, and no step allowed to pass while failing', /^on:\n  push:\n  pull_request:$/m.test(ci) && /node-version: 20/.test(ci) && /^\s+run: node test\/docket\.js$/m.test(ci) && /^\s+run: node bin\/docket\.js$/m.test(ci) && /^    timeout-minutes: 30$/m.test(ci) && !/continue-on-error|^\s+if:/m.test(ci), ci);
   // a multi-line edit finds its window whichever newline the file and the host use (FORMAT.md 1)
   const ml = tempRepo(), mlApp = path.join(ml, 'test', 'fixture', 'app.js');
   const mlTwo = read(mlApp).split('\n').slice(40, 42).join('\n');      // lines 41 and 42, joined the way a host writes them
