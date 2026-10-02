@@ -788,8 +788,9 @@ replaces the bound: a hook for a test that must be repeatable.
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and
 `status` only when the binding passes a plugin root (`DOCKET_PLUGIN_ROOT`) that
-contains the running file, and only where a ledger governs; rewritten only when
-it changes. The judge `docket stop`
+contains the running file, both as the filesystem resolves them — a root named
+through a symbolic link contains the file it leads to — and only where a ledger
+governs; rewritten only when it changes. The judge `docket stop`
 starts is given the core's path in its prompt; a judge a person runs by hand is
 given no word of where the plugin is, so it finds the core here, and everything
 else it reads it asks the core to print. One run by hand in a project with a

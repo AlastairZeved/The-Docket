@@ -2074,8 +2074,9 @@ function intake(argv) {
 function recordCore(root) {
   const pr = process.env.DOCKET_PLUGIN_ROOT;
   if (!pr) return;
-  const me = path.resolve(__filename);
-  if (!me.startsWith(path.resolve(pr) + path.sep)) return;
+  // both as the filesystem resolves them: a plugin root named through a symbolic link contains the file it leads to (FORMAT.md 16)
+  const me = realOr(path.resolve(__filename));
+  if (!me.startsWith(realOr(path.resolve(pr)) + path.sep)) return;
   const p = path.join(root, '.docket', 'core');
   try {
     if (isFile(p) && readText(p) === me + '\n') return;

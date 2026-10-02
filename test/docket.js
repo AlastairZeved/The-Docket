@@ -5206,5 +5206,17 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and every line the core prints replaces each with U+FFFD', rq.code === 0 && bidi.every(ch => !rq.out.includes(ch)) && (rq.out.match(/\ufffd/g) || []).length >= bidi.length, JSON.stringify(rq.out));
 }
 
+// ── a plugin root named through a symbolic link contains the core it leads to: the breadcrumb is written (FORMAT.md 16) ──
+{
+  const d = tempRepo(), ln = path.join(tmpDir('plugin-link-'), 'docket');
+  fs.symlinkSync(ROOT, ln);
+  const r = docket(['status'], { cwd: d, env: { DOCKET_PLUGIN_ROOT: ln } });
+  const p = path.join(d, '.docket', 'core');
+  ok('status run as the plugin’s own hook, its plugin root named through a symbolic link, writes .docket/core with the running core’s path, where it had written nothing (FORMAT.md 16)', r.code === 0 && fs.existsSync(p) && read(p) === fs.realpathSync(CORE) + '\n', String(fs.existsSync(p) && read(p)));
+  fs.rmSync(p, { force: true });
+  const n = docket(['near'], { cwd: d, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(d, 'test', 'fixture', 'app.js'), old_string: 'makeToolbar(' } }), env: { DOCKET_PLUGIN_ROOT: ln } });
+  ok('…and near, so every edit refreshes it', n.code === 0 && fs.existsSync(p) && read(p) === fs.realpathSync(CORE) + '\n', String(fs.existsSync(p) && read(p)));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
