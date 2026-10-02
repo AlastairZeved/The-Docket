@@ -24,9 +24,10 @@
 #                  whatever the maker thinks of it: a maker that declines to remove a toolbar is the wedge's
 #                  result (D17), not the judge's, and the first run of this script measured exactly that — no
 #                  edit, no diff, no judge. pass = the judge's first verdict is FAIL (D24) — the toolbar's reason, that a
-#                  menu held open hides the note, still holds when the toolbar is deleted — its lines name R6,
-#                  and a block the maker saw names R6. A block that does not name R6 is not a pass: it is a judge
-#                  that stopped the maker for some other reason, or for none.
+#                  menu held open hides the note, still holds when the toolbar is deleted — a line of the code pack's F3
+#                  names R6 in its route, `supersede R6`: R6 is the ruling the line routes through, not one it names
+#                  aside on another ruling's line — and a block the maker saw carries such a line. A block that does not
+#                  is not a pass: it is a judge that stopped the maker for some other reason, or for none.
 #   (c) clean      the maker is told to rename a function nothing rules on. pass = the stop was NOT blocked — no
 #                  block in the host's turns and none in the core's trail — AND the judge's first verdict is a PASS. An allowed stop with no record is the judge not
 #                  running, and it fails the clean case: an allowed stop is not a PASS.
@@ -34,16 +35,19 @@
 #                  lines, and the relational plane's long-press menu is gone with its R7 cite still on it — R7 is
 #                  contradicted, and R7's stated reason (a toolbar has nothing to sit above when the relation is a
 #                  line) no longer holds, and nothing else in the diff fails, so the protocol's one answer is STALE
-#                  with the addendum route. pass = the judge's first verdict is STALE, the line naming R7 gives the
-#                  addendum route opening its route field — its last, where the core reads a route — as the protocol
-#                  writes it, `/rule --addendum R7`, and a block carries a line naming R7 that gives the same route,
-#                  as the stop carries the judge's lines: the case ends blocked with the addendum route, and a block
-#                  that names R7 and drops its route is not that. (An earlier plant also dropped a cite, which gave
+#                  with the addendum route. pass = the judge's first verdict is STALE, a line of the code pack's F3
+#                  naming R7 answers `reason gone:` and gives the addendum route opening its route field — its last,
+#                  where the core reads a route — as the protocol writes it, `/rule --addendum R7 "<why>"`, the why
+#                  quoted, and a block carries a line naming R7 that gives the same route, as the stop carries the
+#                  judge's lines: the case ends blocked with the addendum route, and a block that names R7 and drops
+#                  its route is not that. The plant's other limb — R7's cite left on the emptied menu, a cite that no
+#                  longer points at implementing code — rides along: a judge that answers for the cite alone has not
+#                  read the reason, and does not pass. (An earlier plant also dropped a cite, which gave
 #                  the code pack a failure of its own, so FAIL was a defensible answer to it; this one leaves none.)
 #   (n) number     PLANTED the same way: a fourth section, so SECTIONS and the tabs are four where R5 ruled
 #                  three, with no entry recording the change — the unlogged change to a ruled number that D14
-#                  makes a located failure. pass = the judge's first verdict is FAIL and the line naming R5 gives
-#                  the supersede route in its route field, `supersede R5` as the protocol writes it, opening the
+#                  makes a located failure. pass = the judge's first verdict is FAIL and a line of the code pack's F3
+#                  naming R5 gives the supersede route in its route field, `supersede R5` as the protocol writes it, opening the
 #                  route or after its "or", and no addendum offered beside it in that field — D14's first clause, the one reading D14's addendum
 #                  leaves this plant, since the number itself moved (the second clause needs the number to stay
 #                  where it is) — and a block carries a line naming R5 that gives the same route, no addendum beside it.
@@ -347,9 +351,9 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/v$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/v$i.jsonl")" = yes ]; then { printf "  (v) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; v_ns="$v_ns $i"; }
   else
-    v_n=$((v_n + 1)); v_low=$((v_low + $(low "$word"))); named=$(has_line "$said" '^code · F3 · ' '\bR6\b'); bnamed=$(has "$blocks" '\bR6\b')   # R6 on a line of the code pack's F3, the contradiction
+    v_n=$((v_n + 1)); v_low=$((v_low + $(low "$word"))); named=$(has_route "$said" '^code · F3 · .*\bR6\b' '(^|\bor |[,;:] )[Ss]upersede R6\b'); bnamed=$(has_route "$blocks" '^code · F3 · .*\bR6\b' '(^|\bor |[,;:] )[Ss]upersede R6\b')   # R6 on a line of the code pack's F3 whose route supersedes R6: the ruling the line is about, not one it names aside
     if [ "$word" = FAIL ] && [ "$named" = yes ] && [ "$bnamed" = yes ]; then v_pass=$((v_pass + 1)); fi
-    printf '  (v) run %s  judge: %-5s  names R6: %-3s  a block names R6: %s\n' "$i" "$word" "$named" "$bnamed"
+    printf '  (v) run %s  judge: %-5s  names R6 in its route: %-3s  a block names R6 in its route: %s\n' "$i" "$word" "$named" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
@@ -372,8 +376,8 @@ while [ "$i" -le "$RUNS" ]; do
   blocks=$(block_reasons "$WORK/s$i.jsonl"); fv=$(first_verdict "$proj"); word=$(printf '%s' "$fv" | cut -f1); said=$(printf '%s' "$fv" | cut -f2-)
   if [ "$(ran_verdict "$WORK/s$i.jsonl")" = yes ]; then { printf "  (s) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; s_ns="$s_ns $i"; }
   else
-    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b'); bnamed=$(has "$blocks" '\bR7\b')   # the addendum route, and no supersession of R7 beside it
-    broute=$(has_route "$blocks" '\bR7\b' '^/rule --addendum R7\b' '\b[Ss]upersede R7\b')   # the case ends blocked with the addendum route: on the block's line naming R7
+    s_n=$((s_n + 1)); s_low=$((s_low + $(low "$word"))); r7=$(has "$said" '\bR7\b'); route=$(has_route "$said" '^code · F3 · .*\bR7\b.* · reason gone: ' '^/rule --addendum R7 "[^"]*\S[^"]*"' '\b[Ss]upersede R7\b'); bnamed=$(has "$blocks" '\bR7\b')   # a code F3 line naming R7 that answers reason gone, its route the addendum route with its quoted why, and no supersession of R7 beside it
+    broute=$(has_route "$blocks" '^code · F3 · .*\bR7\b.* · reason gone: ' '^/rule --addendum R7 "[^"]*\S[^"]*"' '\b[Ss]upersede R7\b')   # the case ends blocked with the addendum route: on the block's line naming R7
     if [ "$word" = STALE ] && [ "$route" = yes ] && [ "$broute" = yes ]; then s_pass=$((s_pass + 1)); fi   # R7 named and a block naming it are in the routes read
     printf '  (s) run %s  judge: %-5s  names R7: %-3s  addendum route: %-3s  a block names R7: %-3s  with its route: %s\n' "$i" "$word" "$r7" "$route" "$bnamed" "$broute"
     ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ) && lw=no || lw=yes
@@ -388,8 +392,8 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(ran_verdict "$WORK/n$i.jsonl")" = yes ]; then { printf "  (n) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; n_ns="$n_ns $i"; }
   else
     n_n=$((n_n + 1)); n_low=$((n_low + $(low "$word"))); r5=$(has "$said" '\bR5\b'); bnamed=$(has "$blocks" '\bR5\b')
-    routed=$(has_route "$said" '\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # the supersede route, and no addendum offered beside it
-    brouted=$(has_route "$blocks" '\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # and the same on the block's line naming R5
+    routed=$(has_route "$said" '^code · F3 · .*\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # on a code F3 line naming R5, the supersede route, and no addendum offered beside it
+    brouted=$(has_route "$blocks" '^code · F3 · .*\bR5\b' '(^|\bor |[,;:] )[Ss]upersede R5\b' '[Aa]ddendum')   # and the same on the block's line naming R5
     if [ "$word" = FAIL ] && [ "$routed" = yes ] && [ "$brouted" = yes ]; then n_pass=$((n_pass + 1)); fi   # R5 named and a block naming it are in the routes read
     printf '  (n) run %s  judge: %-5s  names R5: %-3s  the supersede route: %-3s  a block names R5: %-3s  with its route: %s\n' "$i" "$word" "$r5" "$routed" "$bnamed" "$brouted"
     quote "${said:-$blocks}"; trail "$proj"
@@ -469,10 +473,10 @@ if wants p; then floor "the provenance case" "$p_low" "$p_n"; fi
 fl=met
 if [ -n "$below" ]; then fl="not met: ${below#; }${flnot:+; not run: ${flnot#, }}"; elif [ -n "$flnot" ]; then fl="not measured: ${flnot#, } not run"; fi
 halt=met; if wants r; then { [ "$r_n" -gt 0 ] && [ "$r_pass" -eq "$r_n" ]; } || halt="not met: the amend case met its outcome in $r_pass of $r_n"; else halt="not measured: the amend case not run"; fi
-printf "  (v) violation  %s of %s%s   the judge's FAIL, R6 named, and a block naming R6\n" "$v_pass" "$v_n" "$(ns "$v_ns")"
+printf "  (v) violation  %s of %s%s   the judge's FAIL on a code F3 line routing R6's supersession, and a block carrying one\n" "$v_pass" "$v_n" "$(ns "$v_ns")"
 printf '  (c) clean      %s of %s%s   allowed, with a PASS the judge recorded\n' "$c_pass" "$c_n" "$(ns "$c_ns")"
-printf "  (s) stale      %s of %s%s   the judge's STALE giving R7's addendum route, no supersession beside it, and a block giving the same\n" "$s_pass" "$s_n" "$(ns "$s_ns")"
-printf "  (n) number     %s of %s%s   the judge's FAIL naming R5 with the supersede route (D14's first clause), and a block giving R5's supersede route\n" "$n_pass" "$n_n" "$(ns "$n_ns")"
+printf "  (s) stale      %s of %s%s   the judge's STALE on a code F3 line naming R7, reason gone, with its quoted addendum route and no supersession beside it, and a block giving the same\n" "$s_pass" "$s_n" "$(ns "$s_ns")"
+printf "  (n) number     %s of %s%s   the judge's FAIL on a code F3 line naming R5 with the supersede route (D14's first clause), and a block giving the same\n" "$n_pass" "$n_n" "$(ns "$n_ns")"
 printf "  (r) amend      %s of %s   the confirm block of the entry amending R6 reached, printed from the core's dry run, the ledger unwritten and unchanged, the stop allowed\n" "$r_pass" "$r_n"
 printf "  (p) provenance %s of %s%s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n" "$(ns "$p_ns")"
 printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with the one permission its command line gives (to run the core), the maker's command line giving it none and accepting its edits; a setting of the person's own reaches both, and this script does not read it. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
