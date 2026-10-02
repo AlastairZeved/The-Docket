@@ -5374,5 +5374,17 @@ ok('FORMAT.md 6 states the cut as the core makes it: ninety-nine and the mark, c
 // ── FORMAT.md 7 gives the spec heading's three levels their reason (D14's addendum) ──
 ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolves to the heading it names, where two levels would read `§2.2.1` as `§2.2` and pass a cite of a subsection that does not exist', /Three levels, so that a cite resolves to the\nheading it names: `UIUX §2\.2\.1` is printed with its own title, and a cite of a\nsubsection that does not exist fails check 3, where a grammar of two would read\nit as `§2\.2`, print the parent's title beside it and pass it \(D14's addendum\)\./.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 7 does not say');
 
+// ── near reads its root from the edited file: outside a repository, the host's directory when the file lies under it, whatever
+// the working directory (FORMAT.md 1; D44's addendum) ──
+{
+  const a = tmpDir('host-above-'), h = path.join(a, 'proj'), away = tmpDir('host-away-');
+  fs.writeFileSync(path.join(a, 'DECISIONS.md'), read(path.join(FIX, 'DECISIONS.md')));
+  fs.mkdirSync(h); fs.writeFileSync(path.join(h, 'x.js'), 'const t = 1; // R2\n');
+  const inp = nearInput(path.join(h, 'x.js'), 'const t = 1;');
+  const bound = docket(['near'], { cwd: away, input: inp, env: { CLAUDE_PROJECT_DIR: h } }), open = docket(['near'], { cwd: away, input: inp, env: { CLAUDE_PROJECT_DIR: '' } });
+  ok('near outside a repository roots at the host’s directory when the edited file lies under it, the working directory elsewhere: the ledger above that directory is not read (D44’s addendum)', !sh('git', ['rev-parse', '--git-dir'], a).stdout && bound.code === 0 && bound.out === '', bound.code + ' ' + bound.out + bound.err);
+  ok('…and with no host directory named, the walk goes on to the filesystem root and finds it', open.code === 0 && /R2/.test(open.out), open.out + open.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
