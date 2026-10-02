@@ -420,11 +420,12 @@ function parseLedger(text, ledgerPath) {
       const heading = hm[3];
       const mo = metaOf(heading), meta = mo.meta;
       const titleText = mo.start >= 0 ? heading.slice(0, mo.start) : heading;   // FORMAT.md 5: an edge anywhere in the heading, the title included
+      const afterMeta = mo.start >= 0 ? heading.slice(mo.end + 1) : '';         // neither title nor meta, and still the heading: an edge there is read (FORMAT.md 4)
       const id = hm[1] + hm[2];
       const issueM = /issue #(\d+)/.exec(meta);
       const addenda = [];
       bodyLines.forEach((l, k) => { const am = ADDENDUM_RE.exec(l); if (am) addenda.push({ date: am[1], text: am[2], line: start + 2 + k }); });
-      const rawEdges = edgesIn(meta, id, start + 1, true).concat(edgesIn(titleText, id, start + 1, false));
+      const rawEdges = edgesIn(meta, id, start + 1, true).concat(edgesIn(titleText, id, start + 1, false), edgesIn(afterMeta, id, start + 1, false));
       bodyLines.forEach((l, k) => { if (!ADDENDUM_RE.test(l)) rawEdges.push(...edgesIn(l, id, start + 2 + k, false)); });
       const seenE = new Set(), edges = [];
       for (const e of rawEdges) { const k = edgeKey(e); if (!seenE.has(k)) { seenE.add(k); edges.push(e); } }

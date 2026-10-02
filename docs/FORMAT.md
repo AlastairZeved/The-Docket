@@ -191,8 +191,9 @@ lies outside a backtick span: from the first `(` that begins the heading or
 follows a space to its matching `)`. A heading that is only its parenthetical
 has an empty title and a meta. Text after the meta's closing parenthesis is
 neither title nor meta: a bound entry then fails check 6 (its heading does not
-end with its meta), and a loose entry is held to nothing (D4), so an edge
-written there is not read. Its **clauses** are separated by `;`. The
+end with its meta), and a loose entry is held to nothing (D4); it is still the
+heading's text, so an edge written there is read, as one anywhere in the heading
+is (5). Its **clauses** are separated by `;`. The
 first clause that is not an edge (5) is the entry's **grounding**: `issue #12`,
 or a phrase naming the context the ruling answers. `issue` is the number in the
 first `issue #<n>` found in the meta. `append` refuses, before writing, an
@@ -213,13 +214,13 @@ optional qualifier is a parenthetical immediately after the target id. The
 entry that contains the text is the edge's **source**; the id named is its
 **target**. The edge's **clause** is the sentence that contains it: in the
 heading's meta, the meta clause; in the title — the heading before its meta —
-the title's sentence; in the body, the text between the nearest sentence
-boundaries (`.`, `;`, or a line break).
+the title's sentence; after the meta, that text's sentence; in the body, the
+text between the nearest sentence boundaries (`.`, `;`, or a line break).
 
 An edge renders as `<source> [<adverb> ]<verb> <target>[ (<qualifier>)]`, so
 `R7 partially reverses R6 (relational plane only)` is one edge from R7 to R6.
 The same edge stated twice — in the meta, the title or the body — is one edge,
-and its clause is the first statement in that order: meta, then title, then body. The same edge is
+and its clause is the first statement in that order: meta, then title, then the text after the meta, then body. The same edge is
 the same rendering, qualifier included: `extends R1` and `extends R1 (desktop)` are two edges, the second
 binding less than the first, and each is kept. One verb may name several
 targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with

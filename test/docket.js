@@ -1112,16 +1112,17 @@ const SEC = String.fromCharCode(0xa7);
   const pre = tempRepo(d => { fs.mkdirSync(path.join(d, 'test', 'fixture', 'pre')); fs.writeFileSync(path.join(d, 'test', 'fixture', 'pre', 'DECISIONS.md'), '# L\n\n## Notes\n\nA note in the preamble.\n\n<!-- docket: contract from Q1 -->\n\nPrinciples\n- **Only principle.** x.\n\n### Q1. One (issue #1)\nPrinciple: Only principle.\nReason: r.\n'); });
   const prej = JSON.parse(docket(['index'], { cwd: path.join(pre, 'test', 'fixture', 'pre') }).out);
   ok('a `## Notes` line in the preamble does not end it: the contract comment and the principles list after it are read', prej.contractFrom.Q === 1 && prej.sections.length === 0 && prej.rulings.length === 1 && docket(['check'], { cwd: pre }).code === 0, JSON.stringify([prej.contractFrom, prej.sections]));
-  // an unpaired backtick is a literal character, not a span; text after the meta is neither title nor meta (FORMAT.md 3, 4; D4)
+  // an unpaired backtick is a literal character, not a span; text after the meta is neither title nor meta, and an edge there is read (FORMAT.md 3, 4, 5)
   const upb = '### R9. Notes fold by shape only, not by `size (context) (supersedes R1)\nPrinciple: Capture precedes structure.\nReason: r.\n';
   const bound = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n' + upb));
   const bj = JSON.parse(docket(['index'], { cwd: path.join(bound, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9');
-  ok('an unpaired backtick opens no span: the first " (" is the meta, the title is what precedes it with the backtick stripped, and no edge is read from the text after the meta', bj.title === 'Notes fold by shape only, not by size' && bj.meta === 'context' && bj.edges.length === 0, JSON.stringify([bj.title, bj.meta, bj.edges]));
+  ok('an unpaired backtick opens no span: the first " (" is the meta, the title is what precedes it with the backtick stripped, and the edge in the text after the meta is read, its clause that text', bj.title === 'Notes fold by shape only, not by size' && bj.meta === 'context' && bj.edges.length === 1 && bj.edges[0].verb === 'supersedes' && bj.edges[0].to === 'R1' && bj.edges[0].clause === '(supersedes R1)', JSON.stringify([bj.title, bj.meta, bj.edges]));
   r = docket(['check'], { cwd: bound });
   ok('…a bound entry whose heading goes on after its meta fails check 6', r.code === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 6: R9: heading does not end with a parenthetical meta$/m.test(r.out), r.out);
   const loose = tempRepo(d => { fs.mkdirSync(path.join(d, 'test', 'fixture', 'loose')); fs.writeFileSync(path.join(d, 'test', 'fixture', 'loose', 'DECISIONS.md'), '# Loose\n\n### R1. Notes fold by shape\nReason: r.\n' + upb.replace('R9', 'R2')); });
   r = docket(['check'], { cwd: loose });
-  ok('…a loose entry (no contract line) is held to nothing: check passes and the edge stays unread — D4\'s cost, stated in FORMAT.md 4', r.code === 0 && JSON.parse(docket(['index'], { cwd: path.join(loose, 'test', 'fixture', 'loose') }).out).rulings.find(x => x.id === 'R2').edges.length === 0, r.out);
+  { const le = JSON.parse(docket(['index'], { cwd: path.join(loose, 'test', 'fixture', 'loose') }).out).rulings.find(x => x.id === 'R2').edges;
+    ok('…a loose entry (no contract line) is held to nothing, and check passes; the edge after its meta is read, as one anywhere in the heading is, where it had been dropped with no line saying so (FORMAT.md 4, 5; D4)', r.code === 0 && le.length === 1 && le[0].from === 'R2' && le[0].to === 'R1', r.out + JSON.stringify(le)); }
   // usage errors for a bare query or governs, and append's other required flags
   r = docket(['query'], { cwd: FIX });
   ok('query without a term is a usage error, exit 2', r.code === 2 && r.err.trim() === 'usage: docket query <term>…', r.err);
@@ -5282,6 +5283,20 @@ const SEC = String.fromCharCode(0xa7);
   ok('verdict: a failure located on a line of a governed file the session deleted in a commit is recorded, the file read at the session’s base, where it had been refused as no line before or after the diff (FORMAT.md 16, D40)', /^JUDGE [0-9a-f]{64} .*test\/fixture\/gone\.js/.test(j.out) && r1.code === 0 && recorded(d, 'FAIL', 'code · F2 · test/fixture/gone.js:2 · the check fails on the deleted file · run it'), j.out + r1.code + ' ' + r1.err);
   const r2 = rec('test/fixture/gone.js:3');
   ok('…and a line past the end it had at the base is refused, as before', r2.code === 2 && /which is not a line of a file in this repository, before or after the diff/.test(r2.err), r2.code + ' ' + r2.err);
+}
+
+// ── an edge after the meta ranks after the title's statement of it and before the body's (FORMAT.md 5) ──
+{
+  const d = tempRepo();
+  const lp = path.join(d, 'test', 'fixture', 'tail');
+  fs.mkdirSync(lp);
+  fs.writeFileSync(path.join(lp, 'DECISIONS.md'), '# Tail\n\n### R1. One\nReason: r.\n\n### R2. Two (context) extends R1 here\nThe body extends R1 too. Reason: r.\n\n### R3. Three (context) refines R1 after\nReason: r.\n');
+  const ix = JSON.parse(docket(['index'], { cwd: lp }).out).rulings;
+  const r2 = ix.find(x => x.id === 'R2').edges, r3 = ix.find(x => x.id === 'R3').edges;
+  ok('an edge stated after the meta and again in the body is one edge, its clause the heading’s statement, which comes first', r2.length === 1 && r2[0].clause === 'extends R1 here', JSON.stringify(r2));
+  ok('…and one stated only after the meta is read with its sentence there', r3.length === 1 && r3[0].verb === 'refines' && r3[0].clause === 'refines R1 after', JSON.stringify(r3));
+  const g = docket(['governs', 'R1'], { cwd: lp });
+  ok('…and governs shows both edges into R1, with their clauses', g.code === 0 && /R2 extends R1/.test(g.out) && /R3 refines R1/.test(g.out), g.out);
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
