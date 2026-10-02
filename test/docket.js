@@ -5386,5 +5386,16 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('…and with no host directory named, the walk goes on to the filesystem root and finds it', open.code === 0 && /R2/.test(open.out), open.out + open.err);
 }
 
+// ── the gate leaves one thing in the repository: the empty file's object, which git writes as it records the intent to add (FORMAT.md 16) ──
+{
+  const d = tempRepo();
+  const objs = () => { const o = path.join(d, '.git', 'objects'), out = []; for (const x of fs.readdirSync(o)) if (/^[0-9a-f]{2}$/.test(x)) for (const y of fs.readdirSync(path.join(o, x))) out.push(x + y); return out; };
+  const before = objs();
+  fs.writeFileSync(path.join(d, 'test', 'fixture', 'new.js'), 'const n = 1; // R2\n');
+  const g = docket(['gate'], { cwd: d }), added = objs().filter(o => !before.includes(o));
+  ok('gate on an untracked governed file leaves one object in the repository, the empty file’s, and the file untracked (FORMAT.md 16)', /^JUDGE [0-9a-f]{64} test\/fixture\/new\.js$/m.test(g.out) && JSON.stringify(added) === JSON.stringify(['e69de29bb2d1d6434b8b29ae775ad8c2e48c5391']) && sh('git', ['status', '--porcelain'], d).stdout === '?? test/fixture/new.js\n', JSON.stringify(added) + ' ' + g.out.split('\n')[0]);
+  ok('…and FORMAT.md 16 names it: the empty file’s object, e69de29…, the one thing the gate leaves there, which no ref and no index names', /git writes the empty file's object,\n`e69de29…`, to the repository's object store as it records the intent, the one\nthing the gate leaves there, which no ref and no index names/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 16 does not say');
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -656,8 +656,10 @@ a file under a ledger that is gone, and the ledger itself, each read at the base
 (D22), a spec document gone as a ledger gone, a rename read as the deletion and
 the addition it is and a file at the base read as text by its bytes, as 1 reads
 one; an untracked governed file is read as if added — intent to add, in a copy of
-the index, never the repository's own — so its diff is a new file's and the hash
-is the same before `git add` and after; an untracked path the base holds — a
+the index, never the repository's own; git writes the empty file's object,
+`e69de29…`, to the repository's object store as it records the intent, the one
+thing the gate leaves there, which no ref and no index names — so its diff is a
+new file's and the hash is the same before `git add` and after; an untracked path the base holds — a
 governed file or a ledger struck from the index, `git rm --cached` — is the
 deletion git shows, not a new file added again. git is run as the repository
 holds its files, whatever the person's own configuration says: no external diff
