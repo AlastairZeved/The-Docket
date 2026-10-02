@@ -72,13 +72,21 @@ function readText(p) { return fs.readFileSync(p, 'utf8'); }
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
 function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }
 function isDir(p) { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } }
+// A day of the calendar, written YYYY-MM-DD: a month and a day the year has (FORMAT.md 6)
+function calendarDay(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]), t = new Date(0);
+  t.setUTCFullYear(y, mo, d);                                          // a year below 100 is that year, not 1900 and more
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo && t.getUTCDate() === d;
+}
 // The day an addendum is dated (FORMAT.md 6): the clock's, or DOCKET_TODAY's when the environment names one — a day the
-// calendar has, written YYYY-MM-DD, or refused before anything is written: another value is no addendum line (D4's addendum)
+// calendar has, from the year 1000 on, or refused before anything is written: a value not of the form is no addendum line, and
+// one of it that names no day would order the ledger by its digits alone (D4's addendum)
 function today() {
   const v = process.env.DOCKET_TODAY;
   if (v === undefined || v === '') return new Date().toISOString().slice(0, 10);
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), t = m && Number(m[1]) >= 1000 ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
-  if (!t || t.toISOString().slice(0, 10) !== v) die('DOCKET_TODAY is ' + JSON.stringify(v) + ', which names no day it takes: an addendum is dated YYYY-MM-DD, a day the calendar has, from the year 1000 on; nothing is written (FORMAT.md 6)', 2);
+  if (!calendarDay(v) || Number(v.slice(0, 4)) < 1000) die('DOCKET_TODAY is ' + JSON.stringify(v) + ', which names no day it takes: an addendum is dated YYYY-MM-DD, a day the calendar has, from the year 1000 on; nothing is written (FORMAT.md 6)', 2);
   return v;
 }
 // git as the repository holds its files, whatever the person's configuration says (D40's addendum): a diff with no external
@@ -958,6 +966,7 @@ function runCheck(root, opts) {
     for (const r of ledger.rulings) {
       if (fencedAll[r.line - 1]) info.push(rel(root, lp) + ':' + r.line + ': ' + r.id + '\'s heading lies inside a fenced block and opens an entry all the same — a fence quotes cites, not headings; a heading shown as an example is indented four spaces (FORMAT.md 8)');
       if (!r.title && !(ledger.contractFrom[r.prefix] !== undefined && r.n >= ledger.contractFrom[r.prefix])) info.push(rel(root, lp) + ':' + r.line + ': ' + r.id + '\'s heading has no title before its parenthetical, so it is named by its id alone (FORMAT.md 3)');
+      for (const a of r.addenda) if (!calendarDay(a.date)) info.push(rel(root, lp) + ':' + a.line + ': ' + r.id + '\'s addendum is dated ' + a.date + ', which names no day of the calendar; it is read as written, its place among the ledger\'s dates that of its digits (FORMAT.md 6)');
       r.bodyLines.forEach((l, k) => { if (!fencedAll[r.line + k] && /^#{2,3} /.test(l)) info.push(rel(root, lp) + ':' + (r.line + 1 + k) + ': "' + glance(plain(l.trim())) + '" is no section and no entry heading, so it ends nothing: it and the lines below it, to the next entry heading or section, are ' + r.id + '\'s body (FORMAT.md 2, 7)'); });
     }
     // 1. every cite names a ruling that exists

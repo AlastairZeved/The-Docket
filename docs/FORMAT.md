@@ -283,8 +283,13 @@ The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
 not a way to write a ruling into the past. A value that is not a day of the
 calendar from the year 1000 on, written `YYYY-MM-DD`, is refused, exit 2, before
-anything is written:
-written, it would be a line the grammar does not read as an addendum. An addendum
+anything is written: a value not of that form would be a line the grammar does
+not read as an addendum, which check 7 then fails as a changed entry, and one of
+that form that names no day — `2026-02-30` — would be read as an addendum dated
+no day, its place among the ledger's dates, which say what was written when, that
+of its digits alone. Such a line written by hand is read as written, and `check`
+names it in an info line, never a failure: a committed ledger could not mend it
+(D3's addendum). An addendum
 that would add a failure to `check` is refused before it is written, as an entry
 is (11).
 

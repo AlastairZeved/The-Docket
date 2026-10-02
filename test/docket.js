@@ -5316,5 +5316,16 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and ten digits make no item, as they make none for a renderer: the list ends before it', JSON.stringify((tp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Positions are permanent']), JSON.stringify(tp));
 }
 
+// ── an addendum dated by hand with no day of the calendar is read as written and named in an info line, never failed (FORMAT.md 6) ──
+{
+  const d = tempRepo(x => edit(x, 'test/fixture/DECISIONS.md', 'loses the thought.\n', 'loses the thought.\n> Addendum 2026-13-45: written by hand.\n> Addendum 2026-02-30: written by hand.\n> Addendum 2024-02-29: written by hand.\n'));
+  const r = docket(['check'], { cwd: d }), g = docket(['governs', 'R1', '--json'], { cwd: path.join(d, 'test', 'fixture') });
+  const dates = ((JSON.parse(g.out || '{}')).addenda || []).map(a => a.date);
+  ok('check: an addendum dated by hand with a day no calendar has is named in an info line at its line, and fails nothing (FORMAT.md 6)', r.code === 0 && /^info  test\/fixture\/DECISIONS\.md:34: R1's addendum is dated 2026-13-45, which names no day of the calendar/m.test(r.out) && /^info  test\/fixture\/DECISIONS\.md:35: R1's addendum is dated 2026-02-30, which names no day/m.test(r.out) && !/2024-02-29, which names/.test(r.out), r.out);
+  ok('…and every one is read as written: governs lists all three', JSON.stringify(dates) === JSON.stringify(['2026-13-45', '2026-02-30', '2024-02-29']), JSON.stringify(dates) + g.err);
+  const FM = read(path.join(ROOT, 'docs', 'FORMAT.md')).replace(/\s+/g, ' ');
+  ok('FORMAT.md gives both reasons a DOCKET_TODAY that names no day is refused, and says such a date written by hand is read as written', /a value not of that form would be a line the grammar does not read as an addendum/.test(FM) && /would be read as an addendum dated no day/.test(FM) && /Such a line written by hand is read as written/.test(FM), 'FORMAT.md 6');
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
