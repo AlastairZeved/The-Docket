@@ -317,17 +317,20 @@ function isEdgeClause(clause) {
 function renderEdge(e) { return e.from + ' ' + (e.adverb ? e.adverb + ' ' : '') + e.verb + ' ' + e.to + (e.qualifier ? ' (' + e.qualifier + ')' : ''); }
 function edgeKey(e) { return e.from + '|' + e.adverb + '|' + e.verb + '|' + e.to + '|' + e.qualifier; }
 
-// The principles list: the bulleted list under the first section of PRD.md when it exists, else the
+// The principles list: the list, bulleted or numbered, under the first section of PRD.md when it exists, else the
 // preamble's list after a line containing "Principles". Items begin with a bold phrase.
+// A list item as Markdown reads its marker — `-`, `*` or `+`, or one to nine digits and `.` or `)` — that opens with a bold
+// phrase, the principle's name (FORMAT.md 10): a list written numbered is the same list, and ten digits make no item (D14's addendum)
+const LIST_ITEM_RE = /^\s*(?:[-*+]|\d{1,9}[.)])\s+\*\*([^*]+?)\*\*/;
 function principlesFromList(lines, startIdx) {
   const names = [], skipped = [];
   let started = false;
   for (let i = startIdx; i < lines.length; i++) {
-    const m = /^\s*[-*]\s+\*\*([^*]+?)\*\*/.exec(lines[i]);
+    const m = LIST_ITEM_RE.exec(lines[i]);
     if (m) { names.push({ name: m[1].trim().replace(/\.$/, ''), text: lines[i].trim(), line: i + 1 }); started = true; }
     else if (started && lines[i].trim() === '') break;
     else if (started && /^\s+\S/.test(lines[i])) names[names.length - 1].text += ' ' + lines[i].trim();   // a wrapped bullet: the indented line continues it
-    else if (started && /^\s*[-*]\s/.test(lines[i])) skipped.push(i + 1);   // a bullet with no bolded name: no principle to cite, and the list goes on
+    else if (started && /^\s*(?:[-*+]|\d{1,9}[.)])\s/.test(lines[i])) skipped.push(i + 1);   // an item with no bolded name: no principle to cite, and the list goes on
     else if (started) break;
   }
   names.skipped = skipped;
@@ -925,7 +928,7 @@ function principles(argv) {
   if (argv.json) { out(JSON.stringify({ source: p.source ? rel(root, p.source) : null, list: p.list, skipped: p.skipped || [] }, null, 2)); return p.list.length ? 0 : 1; }   // one exit code for both branches (FORMAT.md 10)   // paths in JSON are root-relative, as everywhere else
   if (!p.list.length) { out('no principles list found (the first section of PRD.md, or the ledger preamble)'); return 1; }
   out(p.list.map(x => x.text).join('\n'));
-  for (const li of (p.skipped || [])) out('info  ' + (p.source ? rel(root, p.source) : 'the preamble') + ':' + li + ': a bullet with no bolded name — no principle to cite (FORMAT.md 10)');
+  for (const li of (p.skipped || [])) out('info  ' + (p.source ? rel(root, p.source) : 'the preamble') + ':' + li + ': an item with no bolded name — no principle to cite (FORMAT.md 10)');
   return 0;
 }
 
@@ -1051,7 +1054,7 @@ function runCheck(root, opts) {
       if (!ledger.prefixes.includes(pfx)) fail(lp, ledger.contractFromLine[pfx] || 1, 6, 'the contract line names prefix ' + pfx + ', which no entry uses' + (ledger.prefixes.length ? ' — this ledger\'s prefixes are ' + ledger.prefixes.join(', ') : '') + '; it binds nothing');
     }
     const prin = principlesOf(ledger);
-    for (const li of (prin.skipped || [])) info.push(rel(root, prin.source || lp) + ':' + li + ': a bullet with no bolded name in the principles list — no principle to cite (FORMAT.md 10)');
+    for (const li of (prin.skipped || [])) info.push(rel(root, prin.source || lp) + ':' + li + ': an item with no bolded name in the principles list — no principle to cite (FORMAT.md 10)');
     if (prin.ambiguous) fail(lp, prin.ambiguous[1], 6, 'two lines name Principles and each is followed by a list (lines ' + prin.ambiguous.join(' and ') + '); the preamble carries one principles list (FORMAT.md 10)');
     for (const r of ledger.rulings) {
       const from = ledger.contractFrom[r.prefix];

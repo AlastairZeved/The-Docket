@@ -393,10 +393,12 @@ ratchet is loosened on the record, with its reason, or not at all (13, D41).
 
 ## 10. Principles
 
-The **principles** are the list `docket principles` prints: the bulleted list
-under the first section of `PRD.md` when a `PRD.md` sits beside the ledger, else
-the bulleted list in the ledger preamble that follows a line containing the
-word `Principles`. When neither exists, `principles` prints that it found none
+The **principles** are the list `docket principles` prints: the list under the
+first section of `PRD.md` when a `PRD.md` sits beside the ledger, else the list
+in the ledger preamble that follows a line containing the word `Principles` —
+bulleted or numbered, its items marked as Markdown marks them, `-`, `*` or `+`,
+or one to nine digits and `.` or `)`; ten digits make no item, as they make none
+for a renderer, so the list read is the list a reader sees. When neither exists, `principles` prints that it found none
 and exits 1, and `append` refuses every entry until one exists. Each item
 begins with a bold phrase, which is the principle's name:
 

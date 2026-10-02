@@ -1528,9 +1528,9 @@ const SEC = String.fromCharCode(0xa7);
   // a bullet the principles grammar cannot read is said, not swallowed
   const b3Pb = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace('- **Zero cognitive tax.**', '- Forgot to bold this one\n- **Zero cognitive tax.**')); });
   r = docket(['principles'], { cwd: path.join(b3Pb, 'test', 'fixture') });
-  ok('principles: a bullet with no bolded name is reported, not silently dropped', r.code === 0 && /info  .*PRD\.md:\d+: a bullet with no bolded name/.test(r.out) && /Zero cognitive tax/.test(r.out), r.out);
+  ok('principles: a bullet with no bolded name is reported, not silently dropped', r.code === 0 && /info  .*PRD\.md:\d+: an item with no bolded name/.test(r.out) && /Zero cognitive tax/.test(r.out), r.out);
   r = docket(['check'], { cwd: b3Pb });
-  ok('…and check says it too, where the ledger is read', r.code === 0 && /a bullet with no bolded name in the principles list/.test(r.out), r.out);
+  ok('…and check says it too, where the ledger is read', r.code === 0 && /an item with no bolded name in the principles list/.test(r.out), r.out);
   // b3One row, b3One ratio
   const b3TwoR = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', 'AA needs 4.5:1; measured 15.04:1')); });
   r = docket(['spec-check'], { cwd: path.join(b3TwoR, 'test', 'fixture') });
@@ -5297,6 +5297,23 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and one stated only after the meta is read with its sentence there', r3.length === 1 && r3[0].verb === 'refines' && r3[0].clause === 'refines R1 after', JSON.stringify(r3));
   const g = docket(['governs', 'R1'], { cwd: lp });
   ok('…and governs shows both edges into R1, with their clauses', g.code === 0 && /R2 extends R1/.test(g.out) && /R3 refines R1/.test(g.out), g.out);
+}
+
+// ── the principles list is read bulleted or numbered, as Markdown reads a list (FORMAT.md 10) ──
+{
+  const num = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); let i = 0; fs.writeFileSync(q, read(q).replace(/^- \*\*/gm, () => (++i) + (i === 2 ? ') ' : '. ') + '**').replace('3. **Zero cognitive tax.**', '3. Forgot to bold this one\n4. **Zero cognitive tax.**')); });
+  const nCwd = path.join(num, 'test', 'fixture');
+  const np = docket(['principles'], { cwd: nCwd }), npj = JSON.parse(docket(['principles', '--json'], { cwd: nCwd }).out);
+  const names = (npj.list || []).map(p => p.name);
+  ok('principles: a numbered list is the list, its items marked 1. or 2), each name read, and a numbered item with no bolded name reported', np.code === 0 && JSON.stringify(names) === JSON.stringify(['Capture precedes structure', 'Positions are permanent', 'Zero cognitive tax']) && /info  .*PRD\.md:\d+: an item with no bolded name/.test(np.out), np.out + JSON.stringify(npj));
+  let r = docket(['append', '--title', 'Numbered principles are read', '--issue', '22', '--principle', 'Zero cognitive tax', '--body', 'Reason: a list written numbered is the same list.'], { cwd: nCwd });
+  ok('…and append accepts a principle of it, and check passes', r.code === 0 && /check: ok/.test(r.out), r.out + r.err);
+  const plus = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace(/^- \*\*/gm, '+ **')); });
+  const pp = JSON.parse(docket(['principles', '--json'], { cwd: path.join(plus, 'test', 'fixture') }).out);
+  ok('…and a list marked with + is the list too', (pp.list || []).length === 3, JSON.stringify(pp));
+  const ten = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace('- **Zero cognitive tax.**', '1234567890. **Zero cognitive tax.**')); });
+  const tp = JSON.parse(docket(['principles', '--json'], { cwd: path.join(ten, 'test', 'fixture') }).out);
+  ok('…and ten digits make no item, as they make none for a renderer: the list ends before it', JSON.stringify((tp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Positions are permanent']), JSON.stringify(tp));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
