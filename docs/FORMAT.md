@@ -305,7 +305,8 @@ a heading in `UIUX.md` or `PRD.md` of the form
 
 and is cited as `UIUX §<x>.<y>` or `PRD §<x>`; a heading numbered four levels
 deep, `§4.5.1.1`, is no spec heading. Both are indexed by
-`docket index` under `sections[]` and `specs[]`; `near` prints a spec cite with
+`docket index`: a section under `sections[]`, a spec heading under `specs{}` — an
+object keyed by its document, `UIUX` or `PRD`; `near` prints a spec cite with
 its title (`UIUX §<x>.<y> <title>`).
 
 ## 8. Cites

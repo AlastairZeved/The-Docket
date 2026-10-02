@@ -5351,5 +5351,11 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and --json carries every edge, every date and every spec cite', E === 11 && j.edges.filter(e => / extends R2$/.test(e)).length === 10 && j.addenda && j.addenda[0].dates.length === 11 && j.specCites && j.specCites.length === 10, JSON.stringify([j.edges, j.addenda, j.specCites && j.specCites.length]));
 }
 
+// ── FORMAT.md names the index's spec headings as the object the index prints, wherever it names them (FORMAT.md 6, 7) ──
+{
+  const FM = read(path.join(ROOT, 'docs', 'FORMAT.md')), ix = JSON.parse(docket(['index'], { cwd: FIX }).out);
+  ok('index.specs is an object keyed by its document, and FORMAT.md calls it specs{} wherever it names it, never specs[]', ix.specs && typeof ix.specs === 'object' && !Array.isArray(ix.specs) && Array.isArray(ix.specs.UIUX) && (FM.match(/specs\{\}/g) || []).length >= 2 && !/specs\[\]/.test(FM), JSON.stringify(Object.keys(ix.specs || {})) + ' ' + (FM.match(/specs[\[{][\]}]/g) || []).join(' '));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
