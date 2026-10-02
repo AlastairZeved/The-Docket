@@ -175,19 +175,24 @@ function stopRoot(cwd) {
 }
 
 // The nearest DECISIONS.md or docs/DECISIONS.md walking up from `filePath`'s
-// directory to `root` inclusive; null when there is none (the file is ungoverned).
-function findLedger(filePath, root) {
-  let dir = path.resolve(path.dirname(filePath));
-  const stop = path.resolve(root);
+// directory to `root` inclusive; null when there is none (the file is ungoverned). With `memo`, a map kept for one root, every
+// directory the walk passes is given its answer, which depends on the directory and the root alone: a walk over many files
+// looks at each directory once (D14's addendum).
+function findLedger(filePath, root, memo) {
+  let dir = path.resolve(path.dirname(filePath)), found = null;
+  const stop = path.resolve(root), passed = [];
   for (;;) {
-    for (const cand of [path.join(dir, 'DECISIONS.md'), path.join(dir, 'docs', 'DECISIONS.md')]) {
-      if (isFile(cand)) return cand;
-    }
-    if (dir === stop || dir === path.parse(dir).root) return null;
+    if (memo && memo.has(dir)) { found = memo.get(dir); break; }
+    passed.push(dir);
+    const cand = [path.join(dir, 'DECISIONS.md'), path.join(dir, 'docs', 'DECISIONS.md')].find(isFile);
+    if (cand) { found = cand; break; }
+    if (dir === stop || dir === path.parse(dir).root) break;
     const up = path.dirname(dir);
-    if (up === dir) return null;
+    if (up === dir) break;
     dir = up;
   }
+  if (memo) for (const d of passed) memo.set(d, found);
+  return found;
 }
 
 // The ledger's home: the directory that holds it, or that holds the docs/ holding it. Paths in the
@@ -538,14 +543,19 @@ function loadContext(root, opts) {
   const ledgers = new Map();
   const entries = [];
   const vendored = [];
+  const ledgerOf = new Map();                                         // directory -> its ledger, looked at once (findLedger)
   for (const f of uniq(files)) {
     inTime();                                                         // a session's start reads within its bound (D14's addendum)
+    const lp = findLedger(f, root, ledgerOf);
+    // A file under no ledger is skipped by every subcommand (1), and so before it is opened: a tree the docket does not govern
+    // costs the listing of its names, not a read of each file (D14's addendum). One named docket.js is read wherever it lies,
+    // to tell the vendored witness (D9).
+    if (!lp && path.basename(f) !== 'docket.js') continue;
     if (!isFile(f)) continue;
     // A ledger saved as UTF-16, or holding a NUL byte, is no text file, and alone in its tree no text file leads to it: it is
     // read as a ledger where it stands, so that check 2 names it and the tree does not read as governed by none (D45's addendum)
-    if (!isTextFile(f)) { if (findLedger(f, root) === path.resolve(f) && !ledgers.has(path.resolve(f))) ledgers.set(path.resolve(f), loadLedger(path.resolve(f))); continue; }
+    if (!isTextFile(f)) { if (lp === path.resolve(f) && !ledgers.has(lp)) ledgers.set(lp, loadLedger(lp)); continue; }
     if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
-    const lp = findLedger(f, root);
     if (!lp) continue;
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
     entries.push({ path: f, ledger: lp, rel: rel(root, f) });
@@ -1676,7 +1686,10 @@ function recordSessionBase() {
 function status(argv) {
   if (has(argv, '--session-start')) readBy = startReadMs();          // the hook's time is the docket's to print in (D14's addendum)
   const s = scope(argv), cwd = s.cwd, root = s.root, lp = s.ledger;
-  const below = lp ? [] : ledgersBelow(cwd, root);                    // a walk goes up: a ledger below is named, not found
+  // A walk goes up: a ledger below is named, not found. The look below is read within the session start's bound, and past it the
+  // tree is read as the ungoverned tree it would be — nothing printed, no base recorded — as past the walk's bound (FORMAT.md 1)
+  let below = [];
+  if (!lp) try { below = ledgersBelow(cwd, root); } catch (e) { if (!e || !e.startBound) throw e; }
   if (lp || below.length) recordCore(root);                            // the judge finds the core through this file (16): the tree is governed somewhere
   if (has(argv, '--session-start') && (lp || below.length)) recordSessionBase();   // the call at a session's start: the session's base (D40)
   if (!lp) {                                                          // no ledger governs the working directory

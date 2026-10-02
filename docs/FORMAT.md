@@ -39,7 +39,11 @@ them, bold, or the id alone at a line's start (`## R1.`, `###R1.`, `**R1.**`,
 text: one that a UTF-16 byte order mark opens reads as no entries at all, and
 one that holds a NUL byte is not text (1), so check 2 fails either at its first
 line (D45). A file
-with no ledger above it is **ungoverned** and is skipped by every subcommand.
+with no ledger above it is **ungoverned** and is skipped by every subcommand,
+before it is read: the walk looks at each directory's ledger once, and a file
+under none is not opened, so a tree the docket does not govern costs the listing
+of its names (D14's addendum) — save a file named `docket.js`, read wherever it
+lies to tell the vendored witness (D9).
 
 The stop's commands take the same root: `gate`, `verdict` and `stop`, and the
 state, verdict log and trail they keep under `.docket/`, root at the git root of
@@ -773,7 +777,10 @@ tree within three and a half seconds of the core's start — the hook's five, le
 the time to start, the base's lock wait and the time to print (D14's addendum);
 past that it prints the last rulings, the pending addenda and the last verdict,
 and its lines for the uncited rulings and the witness say they were not read at
-the session's start and that `docket status` reads them whole. `DOCKET_START_MS`,
+the session's start and that `docket status` reads them whole. Where no ledger
+governs the working directory, the look below it is read within the same bound,
+and past it the tree is read as the ungoverned tree it would be: nothing is
+printed and no base is recorded, as past the walk's bound (1). `DOCKET_START_MS`,
 when the environment names a whole number of milliseconds, seven digits at most,
 replaces the bound: a hook for a test that must be repeatable.
 

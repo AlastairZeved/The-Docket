@@ -5169,5 +5169,25 @@ const SEC = String.fromCharCode(0xa7);
   fs.rmSync(d, { recursive: true, force: true });
 }
 
+// ── past the session start's bound with no ledger above the working directory, the tree reads as the ungoverned tree it would be;
+// a file under no ledger is skipped before it is read, save one named docket.js (FORMAT.md 1, 16; D9) ──
+{
+  const u = tmpDir('ungov-');
+  fs.writeFileSync(path.join(u, 'a.js'), 'const a = 1;\n');
+  sh('git', ['init', '-q'], u); sh('git', ['add', '-A'], u); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'a'], u);
+  const r0 = docket(['status', '--session-start'], { cwd: u, input: '{"session_id":"s"}', env: { DOCKET_START_MS: '0' } });
+  ok('past the session start’s bound in a repository with no ledger, the call at a session’s start prints nothing on either stream and exits 0, where it had ended on an uncaught error (FORMAT.md 16)', r0.code === 0 && r0.out === '' && r0.err === '' && !fs.existsSync(path.join(u, '.docket')), r0.code + ' ' + r0.out + r0.err);
+  fs.mkdirSync(path.join(u, 'sub'));
+  fs.writeFileSync(path.join(u, 'sub', 'DECISIONS.md'), '# Rulings\n\n### R1. One (issue #1)\nText. Reason: r.\n');
+  sh('git', ['add', '-A'], u); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'b'], u);
+  const r1 = docket(['status', '--session-start'], { cwd: u, input: '{"session_id":"s"}', env: { DOCKET_START_MS: '0' } });
+  ok('…and with a ledger below the working directory, the look below is read within the same bound: past it, nothing printed and no base recorded, as past the walk’s bound (FORMAT.md 1)', r1.code === 0 && r1.out === '' && r1.err === '' && !fs.existsSync(path.join(u, '.docket', 'verdict.json')), r1.code + ' ' + r1.out + r1.err);
+  const r2 = docket(['status', '--session-start'], { cwd: u, input: '{"session_id":"s"}' });
+  ok('…and within it, the ledger below is named, as it was', r2.code === 0 && /below it: sub\/DECISIONS\.md — pass --ledger/.test(r2.out), r2.code + ' ' + r2.out + r2.err);
+  const v = tempRepo(d => { fs.mkdirSync(path.join(d, 'other', 'test'), { recursive: true }); fs.copyFileSync(CORE, path.join(d, 'other', 'test', 'docket.js')); });
+  const rv = docket(['check'], { cwd: v });
+  ok('…and a copy of the core under no ledger is still read and named the vendored witness, as one under a ledger is: the walk skips a file under none before it opens it, save one named docket.js (D9)', rv.code === 0 && /^info  other\/test\/docket\.js: the vendored witness, a copy of this program — not read as a governed file \(D9\)$/m.test(rv.out), rv.out);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
