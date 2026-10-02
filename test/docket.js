@@ -132,10 +132,10 @@ const SEC = String.fromCharCode(0xa7);
   ok('discovery: the repository root resolves to docs/DECISIONS.md', root.code === 0 && JSON.parse(root.out).ledger === 'docs/DECISIONS.md');
   ok('index carries the spec headings beside the ledger', j.specs.UIUX.map(h => h.num).join(',') === '2,4.5' && j.specs.PRD.map(h => h.num).join(',') === '1,2', JSON.stringify(j.specs));
   ok('index carries the contract line and the baseline', j.contractFrom.R === 8 && j.baseline['app.js'] === 3, JSON.stringify([j.contractFrom, j.baseline]));
-  // ── the title rule (FORMAT.md 3; D7): 28-character and 900-character headings ──
+  // ── the title rule (FORMAT.md 3; D7): heading lines of 28 and 900 characters, `### R1. ` and the title ──
   const r1 = j.rulings.find(r => r.id === 'R1'), r8 = j.rulings.find(r => r.id === 'R8'), r4 = j.rulings.find(r => r.id === 'R4'), r6 = j.rulings.find(r => r.id === 'R6');
-  ok('the 28-character heading keeps its whole title', ('### R1. ' + r1.heading).length === 28 && r1.title === 'Capture before shape', r1.title);
-  ok('the 900-character heading is cut at the last word boundary before 72, with …: 66 code points, the word before the cut whole', ('### R8. ' + r8.heading).length === 900 && r8.title.endsWith('…') && Array.from(r8.title).length === 66 && r8.title === 'The frame that was never typed into is discarded on blur, and the…' && !r8.title.includes(' ('), r8.title);
+  ok('the 28-character heading line keeps its whole title', ('### R1. ' + r1.heading).length === 28 && r1.title === 'Capture before shape', r1.title);
+  ok('the 900-character heading line is cut at the last word boundary before 72, with …: 66 code points, the word before the cut whole', ('### R8. ' + r8.heading).length === 900 && r8.title.endsWith('…') && Array.from(r8.title).length === 66 && r8.title === 'The frame that was never typed into is discarded on blur, and the…' && !r8.title.includes(' ('), r8.title);
   ok('the title is cut at the first " (" before the 72-character rule', r4.title === 'Fold similarity: shape held, size uniform' && r4.meta === 'supersedes R3', r4.title + ' | ' + r4.meta);
   ok('issue is read from the meta', r6.issue === 12 && r4.issue === null);
   // ── edges (FORMAT.md 5) ──
@@ -5356,6 +5356,20 @@ const SEC = String.fromCharCode(0xa7);
   const FM = read(path.join(ROOT, 'docs', 'FORMAT.md')), ix = JSON.parse(docket(['index'], { cwd: FIX }).out);
   ok('index.specs is an object keyed by its document, and FORMAT.md calls it specs{} wherever it names it, never specs[]', ix.specs && typeof ix.specs === 'object' && !Array.isArray(ix.specs) && Array.isArray(ix.specs.UIUX) && (FM.match(/specs\{\}/g) || []).length >= 2 && !/specs\[\]/.test(FM), JSON.stringify(Object.keys(ix.specs || {})) + ' ' + (FM.match(/specs[\[{][\]}]/g) || []).join(' '));
 }
+
+// ── a pending addendum's text over one hundred characters keeps ninety-nine and the mark, a space the cut leaves at its end
+// dropped before it (FORMAT.md 6, D14) ──
+{
+  const d = tempRepo(), fx = path.join(d, 'test', 'fixture');
+  const t100 = 'c'.repeat(100), t101 = 'd'.repeat(101), tsp = 'e'.repeat(98) + ' ' + 'ff';
+  for (const t of [t100, t101, tsp]) docket(['append', '--addendum', 'R1', '--text', t], { cwd: fx });
+  const lines = docket(['status'], { cwd: fx }).out.split('\n').filter(l => l.startsWith('  R1 ('));
+  const text = c => (lines.find(l => l.includes(': ' + c)) || '').replace(/^  R1 \(\d{4}-\d{2}-\d{2}\): /, '');
+  ok('status: a pending addendum of one hundred characters is printed whole', text('c') === t100, JSON.stringify(lines));
+  ok('…one of a hundred and one keeps ninety-nine and the mark, a hundred in all', text('d') === 'd'.repeat(99) + '…', text('d'));
+  ok('…and a space the cut leaves at its end goes before the mark: ninety-eight and the mark', text('e') === 'e'.repeat(98) + '…', text('e'));
+}
+ok('FORMAT.md 6 states the cut as the core makes it: ninety-nine and the mark, counted as code points, a space at the end dropped before the mark', /over one hundred, it keeps\nninety-nine and the mark `…`, counted as code points, a space the cut leaves at\nits end dropped before the mark \(D14\)/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 6 does not say');
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

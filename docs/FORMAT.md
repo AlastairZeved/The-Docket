@@ -251,7 +251,9 @@ It records that something about the entry has changed without amending the
 entry: most often that the entry's stated reason no longer holds. An addendum
 is **pending** until a ruling written after it has an edge into the entry (any
 verb); the docket (`docket status`) lists every pending addendum, each on one
-line with its text cut at one hundred characters (D14) — `governs <id>` prints
+line with its text cut at one hundred characters — over one hundred, it keeps
+ninety-nine and the mark `…`, counted as code points, a space the cut leaves at
+its end dropped before the mark (D14) — `governs <id>` prints
 the whole, and `status --json` carries it. The list has no cap, as the witness
 failures beside it have five: each line is a route no ruling has taken yet, and
 the list is the one place it is kept (D21), where a failure's other lines are
