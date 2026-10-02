@@ -14,18 +14,18 @@ how it is scored. **Source.** D4, D8, D14 and D32 in `docs/DECISIONS.md`.
 
 ## Features
 
-**F1 — the entry satisfies the header contract.** How scored: `docket check`,
-check 6; exit code and the located lines decide.
+**F1 — the entry satisfies the header contract.** How scored: `docket check
+--untracked`, check 6; exit code and the located lines decide.
 
 **F2 — it names the principle it resolves against, and that principle exists.**
 How scored: `docket principles` against the entry's `Principle:` line.
 
 **F3 — every ruling it touches is named with a verb from the list; each exists
-and is earlier.** How scored: `docket check`, checks 5 and 6, and the entry's
-meta read against `docket governs <id>` for each id it names.
+and is earlier.** How scored: `docket check --untracked`, checks 5 and 6, and
+the entry's meta read against `docket governs <id>` for each id it names.
 
 **F4 — no existing entry's heading or body changed.** How scored: `docket
-check`, check 7.
+check --untracked`, check 7.
 
 **F5 — grounding.** The entry names the issue or observed failure it answers:
 yes or no. How scored: a reading of the meta and the body for an issue number, a

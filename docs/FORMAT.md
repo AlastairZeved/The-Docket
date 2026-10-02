@@ -71,7 +71,9 @@ listed in the bare-cite baseline (9) are relative to the home.
 
 A **text file** is a file whose first 8000 bytes contain no NUL byte — git's
 own sniff for a binary, so the two agree on what is text, which is the property
-the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files;
+the number preserves (D14); a text file is then read in full. `check`, `governs` and `status` walk the git-tracked text files,
+as CI reads them; `check`, `spec-check` and the witness given `--untracked` read the untracked text files git does not ignore
+too — the set the gate reads (16), so that a judge scores a change on the files its diff holds (D40's addendum);
 Where the root is not a git repository there is no tracked set, so the walk of
 the tree stands in for one: it reads at most twenty thousand entries, refuses
 past that rather than reading a whole disk, and follows a symlink to a file
@@ -488,7 +490,7 @@ prints straight.
 
 | k | Check | Fails when |
 |---|---|---|
-| 1 | Cites resolve | a cite in a git-tracked text file names a number that does not exist in that file's ledger |
+| 1 | Cites resolve | a cite in a git-tracked text file — or, given `--untracked`, an untracked one git does not ignore (1) — names a number that does not exist in that file's ledger |
 | 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows; or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39); or the ledger has no entries and a line of it reads as an entry heading in another form (1, D45); or the ledger is not UTF-8 text — a UTF-16 byte order mark opens it, or it holds a NUL byte (1, D45) |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
@@ -504,7 +506,9 @@ was skipped, as the info lines do, so that line is not read as a pass either.
 
 `docket check --json` prints the same findings as JSON. Run with no subcommand,
 `docket` is the witness: `check` over the tree and `spec-check` for the nearest
-ledger, exit 1 on any failure (D9); `docket vendor <dir>` copies the core to
+ledger, exit 1 on any failure (D9), both reading the untracked files git does not
+ignore too when it is given `--untracked`, and an option it does not read refused
+as a subcommand refuses one; `docket vendor <dir>` copies the core to
 `<dir>/test/docket.js`, so a repository runs that witness without the plugin.
 `docket intake rule|constitute` prints an intake file for a skill to splice at
 load — a host runs a splice under the skill's own allow-list, which names the
@@ -528,7 +532,9 @@ keeps the whole transcript, as no `--last` does; `stop` prints its answer as
 it always does, and `{}` for a stop it allows, where it otherwise prints nothing.
 `docket check` covers every ledger in the tree; `docket spec-check` covers the
 ledger nearest the working directory (a fixture ledger under `test/` is reached
-from inside it, or with `--all`). It reads two kinds of row in `UIUX.md`: a
+from inside it, or with `--all`); each reads the git-tracked files, and given
+`--untracked` the untracked ones git does not ignore too (1), so a style sheet
+not yet added declares its tokens. It reads two kinds of row in `UIUX.md`: a
 **token row**, whose first two cells are a `--token` and a hex colour of 3, 4,
 6 or 8 digits, matched by one CSS declaration of that token (a) — as a colour,
 not a spelling: `#fff`, `#FFFFFF` and `#ffffffff` are one value; a second

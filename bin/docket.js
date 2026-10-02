@@ -1203,10 +1203,13 @@ function committedText(root, filePath, workingText, note) {
   if (parent.status !== 0) return none('HEAD\'s parent');
   said('HEAD\'s parent'); return parent.stdout;
 }
+// --untracked: the tracked files and the untracked ones git does not ignore — the set the gate reads (FORMAT.md 1, D40), so a
+// judge scores a change on the files its diff holds; without it, the tracked files, which is what CI reads
+function readSet(root, argv) { return has(argv, '--untracked') ? { ctx: loadContext(root, { includeUntracked: true }) } : {}; }
 function check(argv) {
   if (has(argv, '--ledger')) die('check: no --ledger option — check covers every ledger under the root (index, query, governs, principles, status, spec-check and append take --ledger)', 2);
   const root = enumerationRoot(process.cwd());
-  const res = runCheck(root);
+  const res = runCheck(root, readSet(root, argv));
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2)); return res.failures.length ? 1 : 0; }
   for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const i of res.info) out('info  ' + shown(i));
@@ -1324,7 +1327,7 @@ function runSpecCheck(root, ctx, onlyLedger) {
 }
 function specCheck(argv) {
   const s = scope(argv);
-  const res = runSpecCheck(s.root, null, has(argv, '--all') ? null : s.ledger);
+  const res = runSpecCheck(s.root, readSet(s.root, argv).ctx || null, has(argv, '--all') ? null : s.ledger);
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, rows: res.rows, info: res.info, failures: res.failures }, null, 2)); return res.failures.length ? 1 : 0; }
   for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  spec-check ' + f.k + ': ' + f.message);
   for (const i of res.info) out('info  ' + shown(i));
@@ -2712,12 +2715,12 @@ function transcript(argv) {
 const USAGE = [
   'docket — the ledger of rulings that governs a codebase',
   '',
-  '  docket                              the witness: check, and spec-check when a UIUX.md sits beside a ledger',
+  '  docket [--untracked]                the witness: check, and spec-check when a UIUX.md sits beside a ledger',
   '  docket near                         stdin: an edit; stdout: what governs the region (silent when nothing does)',
   '  docket status                       the docket: last rulings, uncited rulings, pending addenda, last verdict, witness',
   '                                      (--session-start, the call at a session\'s start: its input on stdin records the session\'s base)',
-  '  docket check                        the seven checks (exit 1 on a failure)',
-  '  docket spec-check [--all]           token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
+  '  docket check [--untracked]          the seven checks (exit 1 on a failure)',
+  '  docket spec-check [--all] [--untracked]   token rows and contrast rows of UIUX.md against the CSS (the nearest ledger; --all for every ledger)',
   '  docket index                        the whole parse as JSON',
   '  docket query <term>…                rulings whose heading or body match any term, with edges and addenda',
   '  docket governs <id> [<id>…]         edges in and out with their clauses, addenda, code cites',
@@ -2739,17 +2742,19 @@ const USAGE = [
   '  docket transcript <path> [--last n] the assistant text and tool calls of a JSON-lines message log',
   '',
   'Options: --json on every subcommand; --ledger <path> where a ledger is read.',
+  '--untracked: the untracked files git does not ignore are read with the tracked ones, the set the gate reads; without it, the tracked files, as CI reads them.',
   'Exit codes: 0 success · 1 a failed check · 2 usage error.',
 ].join('\n');
 const TAKES_VALUE = new Set(['--ledger', '--session', '--hash', '--failures', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--answers', '--target', '--reason', '--last', '--wait', '--permission', '--judge']);
-const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start', '--dry-run']);
+const BARE_FLAGS = new Set(['--json', '--baseline', '--files', '--text-only', '--all', '--help', '--diff', '--list', '--session-start', '--dry-run', '--untracked']);
 // The options each subcommand reads. One it does not read is a usage error, not a silence: an option accepted and
 // ignored would let a reader believe it had an effect.
 // The arguments each subcommand takes, beside its options: a number, or every one it is given
 const POSITIONALS = { near: 0, index: 0, check: 0, 'spec-check': 0, append: 0, query: Infinity, governs: Infinity, principles: 0, status: 0, diff: 2, vendor: 1,
   constitute: 0, intake: 1, gate: 0, verdict: 1, protocol: 0, pack: Infinity, transcript: 1, stop: 0 };
 const OPTIONS = {
-  near: ['--json'], index: ['--json', '--ledger'], check: ['--json'], 'spec-check': ['--json', '--all', '--ledger'],
+  '': ['--json', '--untracked'],                                     // the witness: docket with no subcommand
+  near: ['--json'], index: ['--json', '--ledger'], check: ['--json', '--untracked'], 'spec-check': ['--json', '--all', '--ledger', '--untracked'],
   append: ['--json', '--ledger', '--title', '--issue', '--principle', '--edge', '--body', '--prefix', '--addendum', '--text', '--baseline', '--dry-run'],
   query: ['--json', '--ledger'], governs: ['--json', '--ledger'], principles: ['--json', '--ledger'], status: ['--json', '--ledger', '--session-start'],
   diff: ['--json', '--ledger', '--files'], vendor: ['--json'], constitute: ['--json', '--answers', '--target'], intake: ['--json'],
@@ -2785,7 +2790,7 @@ function parseArgv(args) {
 function witness(argv) {
   if (has(argv, '--ledger')) die('docket: the witness takes no --ledger — it covers every ledger under the root (index, query, governs, principles, status, spec-check and append take --ledger)', 2);
   const root = enumerationRoot(process.cwd());
-  const c = runCheck(root);
+  const c = runCheck(root, readSet(root, argv));
   const s = runSpecCheck(root, c.ctx, findLedger(path.join(process.cwd(), 'x'), root));
   const n = c.failures.length + s.failures.length;
   if (argv.json) {                                                    // --json on every subcommand, the witness included
@@ -2816,16 +2821,18 @@ function main() {
   if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
   const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript, stop };
-  if (!sub) return witness(argv);
   if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
-  if (!Object.prototype.hasOwnProperty.call(table, sub)) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);   // `constructor` is no subcommand
-  const allowed = OPTIONS[sub] || [];
+  if (sub && !Object.prototype.hasOwnProperty.call(table, sub)) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);   // `constructor` is no subcommand
+  // the witness is the subcommand with no name, its options read as every other's are: one it does not read is refused, so a
+  // misspelt --untracked is never taken for the set it names
+  const allowed = OPTIONS[sub || ''] || [], who = sub || 'the witness';
   for (let i = 0; i < argv.raw.length; i++) {
     const a = argv.raw[i];
-    if (sub === 'check' && a === '--ledger') { i++; continue; }          // check refuses --ledger itself, naming the subcommands that take it
-    if (a.startsWith('--') && a !== '--help' && !allowed.includes(a)) die(sub + ': ' + a + ' is not an option of ' + sub + '; its options are ' + (allowed.join(', ') || 'none'), 2);
+    if ((sub === 'check' || !sub) && a === '--ledger') { i++; continue; }   // check and the witness refuse --ledger themselves, naming the subcommands that take it
+    if (a.startsWith('--') && a !== '--help' && !allowed.includes(a)) die((sub || 'docket') + ': ' + a + ' is not an option of ' + who + '; its options are ' + (allowed.join(', ') || 'none'), 2);
     if (TAKES_VALUE.has(a)) i++;                                        // the value after a flag is a value, whatever it looks like
   }
+  if (!sub) return witness(argv);
   // An argument it does not take is a usage error, as an option it does not read is: accepted and ignored, a second word would
   // let a reader believe it had narrowed what ran (FORMAT.md 13, D4's addendum)
   const most = POSITIONALS[sub], extra = argv._.slice(1 + most);

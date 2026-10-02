@@ -17,9 +17,9 @@ README's test section names; failing that, where the witness is vendored,
 judge may not run the one that does, F1 is not scored, and the judge's report
 says so and names the command (`.docket/judge.log` keeps it).
 
-**F2 — `docket check` passes.**
-How scored: `docket check`; exit code decides. Its failures are located already;
-copy them.
+**F2 — `docket check --untracked` passes.**
+How scored: `docket check --untracked`; exit code decides. Its failures are
+located already; copy them.
 
 **F3 — no ruling cited in the touched regions is contradicted by the diff.**
 How scored: a reading. For every ruling cited within twenty lines of a hunk (the

@@ -2490,7 +2490,7 @@ const SEC = String.fromCharCode(0xa7);
     // options: one a subcommand does not read is a usage error, exit 2, naming the ones it does
     {
       let r = docket(['check', '--text-only']);
-      ok('an option the subcommand does not read is a usage error naming its options, exit 2', r.code === 2 && /^check: --text-only is not an option of check; its options are --json$/m.test(r.err) && r.out === '', r.code + ' ' + r.err);
+      ok('an option the subcommand does not read is a usage error naming its options, exit 2', r.code === 2 && /^check: --text-only is not an option of check; its options are --json, --untracked$/m.test(r.err) && r.out === '', r.code + ' ' + r.err);
       r = docket(['status', '--session', 'abc']);
       ok('…for a flag that takes a value too', r.code === 2 && /^status: --session is not an option of status; its options are --json, --ledger, --session-start$/m.test(r.err), r.err);
       r = docket(['governs', 'D8', '--ledger', 'docs/DECISIONS.md']);
@@ -3756,7 +3756,8 @@ const SEC = String.fromCharCode(0xa7);
       const core = read(CORE), at = core.indexOf('const OPTIONS = {'), table = new Function('return ' + core.slice(core.indexOf('{', at), core.indexOf('};', at) + 1))();
       const help = docket(['help']).out.split('\n'), unnamed = [];
       for (const [sub, opts] of Object.entries(table)) {
-        const own = help.filter(l => l.startsWith('  docket ' + sub + ' ') || l === '  docket ' + sub || (sub === 'status' && /^\s+\(--session-start/.test(l))).join('\n');
+        // the witness is the subcommand with no name: its lines are the bare `docket` line and one that opens with an option
+        const own = help.filter(l => (sub ? l.startsWith('  docket ' + sub + ' ') || l === '  docket ' + sub : /^  docket(?: \[| {2})/.test(l)) || (sub === 'status' && /^\s+\(--session-start/.test(l))).join('\n');
         for (const o of opts) if (o !== '--json' && o !== '--ledger' && !own.includes(o)) unnamed.push(sub + ' ' + o);
       }
       ok('every option a subcommand takes is named on its usage lines, read from the core’s own table — --json and --ledger aside, which the usage states once beneath', Object.keys(table).length >= 19 && unnamed.length === 0 && /^Options: --json on every subcommand; --ledger <path> where a ledger is read\.$/m.test(help.join('\n')), unnamed.join(', '));
@@ -5501,6 +5502,36 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   const s = docket(['stop', '--judge', 'sh ' + jsh], { cwd: d, input: JSON.stringify({ session_id: 'js1' }), env: { CLAUDE_PROJECT_DIR: '' } });
   ok('the stop names its judge to the core: a stand-in judge the stop started ran append and was refused, exit 2, under DOCKET_JUDGE set to the stop’s session, the ledger unchanged, and the stop blocked for the record the judge did not make', read(path.join(outd, 'code')).trim() === '2' && /^append: refused — this session is the judge of session js1, and the judge cites and writes nothing/.test(read(path.join(outd, 'err'))) && read(path.join(outd, 'env')) === 'js1' && read(ledger) === before && s.code === 0 && /^\{"decision":"block","reason":"The docket's judge recorded no verdict for this stop's diff \(test\/fixture\/app\.js\): it /.test(s.out) && s.err === '', JSON.stringify([read(path.join(outd, 'code')), read(path.join(outd, 'err')), read(path.join(outd, 'env')), s.code, s.out.slice(0, 300), s.err.slice(0, 300)]));
   ok('…and FORMAT.md 16 says so', /environment carries `DOCKET_JUDGE` too, the session it judges: under it `append`, `constitute`\nand `vendor` refuse, exit 2/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md is silent');
+}
+
+// ── check, spec-check and the witness given --untracked read what the gate reads, the untracked files git does not ignore with
+// the tracked ones; without it, the tracked files, which is what CI reads (FORMAT.md 1, 13; D40) ──
+{
+  const d = tempRepo(x => {
+    edit(x, 'test/fixture/styles.css', '--line: #7a8fa7;', '--line: #7a8fa6;');
+    edit(x, 'test/fixture/UIUX.md', '| `--line` | `#7a8fa6` | frames and rules |', '| `--line` | `#7a8fa6` | frames and rules |\n| `--wash` | `#eeeeee` | a wash behind a note |');
+  });
+  const fx = path.join(d, 'test', 'fixture');
+  fs.writeFileSync(path.join(fx, 'wash.css'), ':root { --wash: #eeeeee; }\n');
+  let r = docket(['spec-check'], { cwd: fx });
+  ok('spec-check reads the tracked files: a token only an untracked style sheet declares is declared nowhere it reads, exit 1', r.code === 1 && /spec-check a: --wash is #eeeeee in the spec but is declared in no CSS file/.test(r.out), r.out);
+  r = docket(['spec-check', '--untracked'], { cwd: fx });
+  ok('…and given --untracked it reads the untracked files git does not ignore too, the set the gate reads: the token is declared, exit 0', r.code === 0 && /^spec-check: ok \(\d+ rows\)$/m.test(r.out), r.out);
+  fs.writeFileSync(path.join(fx, 'stray.js'), 'const s = 1; // R99\n');
+  fs.writeFileSync(path.join(fx, '.gitignore'), 'ignored.js\n');
+  fs.writeFileSync(path.join(fx, 'ignored.js'), 'const i = 1; // R98\n');
+  r = docket(['check'], { cwd: d });
+  const r2 = docket(['check', '--untracked'], { cwd: d });
+  ok('check given --untracked fails an untracked file’s dangling cite, check 1, which check without it does not read', r.code === 0 && r2.code === 1 && /^test\/fixture\/stray\.js:1  check 1: cite R99 names no ruling/m.test(r2.out), r.out + r2.out);
+  ok('…and a file git ignores is read by neither', !/ignored\.js|R98/.test(r.out + r2.out), r2.out);
+  const w = docket([], { cwd: d }), w2 = docket(['--untracked'], { cwd: d });
+  ok('the witness reads the tracked files, as CI does — the token declared only untracked fails, the untracked cite is not read — and given --untracked it reads what the gate reads', w.code === 1 && /--wash/.test(w.out) && !/stray\.js/.test(w.out) && w2.code === 1 && /stray\.js:1  check 1/.test(w2.out) && !/--wash/.test(w2.out), w.out + '|' + w2.out);
+  r = docket(['--all'], { cwd: d });
+  ok('…and an option the witness does not read is a usage error naming the ones it does, exit 2, where it had been passed over', r.code === 2 && /^docket: --all is not an option of the witness; its options are --json, --untracked$/m.test(r.err) && r.out === '', r.code + ' ' + r.err);
+  r = docket(['--ledger', 'x'], { cwd: d });
+  ok('…while --ledger keeps the witness’s own refusal, naming the subcommands that take it', r.code === 2 && /the witness takes no --ledger/.test(r.err), r.err);
+  const packs = ['decisions', 'design', 'code'].map(n => read(path.join(ROOT, 'packs', n + '.md')).replace(/\s+/g, ' '));
+  ok('the packs that score a change with check and spec-check run them given --untracked: decisions F1, F3 and F4, design F1 and F2, code F2', (packs[0].match(/How scored: `docket check --untracked`/g) || []).length === 3 && (packs[1].match(/How scored: `docket spec-check --untracked` \([ab]\)/g) || []).length === 2 && /How scored: `docket check --untracked`; exit code decides/.test(packs[2]) && !/How scored: `docket (spec-)?check`/.test(packs.join(' ')), packs.map(p => (p.match(/How scored: `docket [^`]*`/g) || []).join(' / ')).join(' | '));
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);

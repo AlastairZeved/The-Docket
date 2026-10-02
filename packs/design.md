@@ -9,10 +9,11 @@ location. Each feature says how it is scored.
 ## Features
 
 **F1 — every token value in a spec table appears in the shipped CSS with the
-same value.** How scored: `docket spec-check` (a); exit code decides.
+same value.** How scored: `docket spec-check --untracked` (a); exit code
+decides.
 
 **F2 — every contrast ratio the spec states is reproduced from the shipped
-hexes.** How scored: `docket spec-check` (b); exit code decides.
+hexes.** How scored: `docket spec-check --untracked` (b); exit code decides.
 
 **F3 — every floor the spec states is not undercut.** How scored: a reading. A
 floor is a minimum the spec states in numbers — a touch target, a minimum width,
