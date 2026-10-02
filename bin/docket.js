@@ -1203,13 +1203,15 @@ const HEX = '#(?:[0-9A-Fa-f]{8}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{3})(?!
 const TOKEN_ROW_RE = new RegExp('^\\|\\s*`(--[A-Za-z0-9_-]+)`\\s*\\|\\s*`(' + HEX + ')`\\s*\\|');
 const HEXISH_ROW_RE = /^\|\s*`(--[A-Za-z0-9_-]+)`\s*\|\s*`(#[^`]*)`\s*\|/;                                // a row shaped like a token row whose value opens with #
 // C0 and C1 controls except tab, and the characters that reorder what a terminal shows.
-const UNSAFE_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+// The C0 and C1 controls, and Unicode's bidi controls whole — U+061C, U+200E-U+200F, U+202A-U+202E, U+2066-U+2069 — the
+// characters that reorder what a terminal shows (FORMAT.md 13)
+const UNSAFE_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
 const UNSAFE_RE_G = new RegExp(UNSAFE_RE.source, 'g');
-const UNSAFE_NAME = { '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b': 'RLE', '\u202c': 'PDF', '\u202d': 'LRO', '\u202e': 'RLO', '\u2066': 'LRI', '\u2067': 'RLI', '\u2068': 'FSI', '\u2069': 'PDI' };
+const UNSAFE_NAME = { '\u061c': 'ALM', '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b': 'RLE', '\u202c': 'PDF', '\u202d': 'LRO', '\u202e': 'RLO', '\u2066': 'LRI', '\u2067': 'RLI', '\u2068': 'FSI', '\u2069': 'PDI' };
 function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'); }
 // What a reader is shown never carries them, whatever a ledger holds: check says so, and until it is
 // fixed the text still reads straight.
-const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 function plain(t) { return String(t).replace(UNSAFE_OUT_RE_G, '\ufffd'); }
 // A name the repository holds — a file, a ledger — printed within a line: its own line breaks and tabs replaced too, which
 // plain() keeps since they shape the lines it prints, so a failure is one line whatever its file is called (FORMAT.md 13)

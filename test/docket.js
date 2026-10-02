@@ -5189,5 +5189,22 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and a copy of the core under no ledger is still read and named the vendored witness, as one under a ledger is: the walk skips a file under none before it opens it, save one named docket.js (D9)', rv.code === 0 && /^info  other\/test\/docket\.js: the vendored witness, a copy of this program — not read as a governed file \(D9\)$/m.test(rv.out), rv.out);
 }
 
+// ── every bidi control Unicode lists reorders what a terminal shows: check 2 names each, append refuses each, every printed line
+// replaces each (FORMAT.md 13); the set is read from the runtime's own tables, so a control the core lacks fails here ──
+{
+  const bidi = [];
+  for (let cp = 0; cp <= 0xffff; cp++) { const ch = String.fromCharCode(cp); if (/\p{Bidi_Control}/u.test(ch)) bidi.push(ch); }
+  const hex = ch => 'U+' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0');
+  const d = tempRepo(dd => { const q = path.join(dd, 'test', 'fixture', 'DECISIONS.md'); fs.appendFileSync(q, bidi.map((ch, i) => '\n### R' + (9 + i) + '. A heading carrying ' + ch + 'it (issue #' + (90 + i) + ')\nPrinciple: Capture precedes structure.\nReason: r.\n').join('')); });
+  const rc = docket(['check'], { cwd: d });
+  const named = bidi.filter((ch, i) => new RegExp('^test/fixture/DECISIONS\\.md:\\d+  check 2: R' + (9 + i) + ': the text carries ').test(rc.out.split('\n').find(l => l.includes('check 2: R' + (9 + i) + ':')) || ''));
+  ok('check 2 names an entry carrying any of Unicode’s bidi controls, the twelve its tables list, U+061C among them as ALM (FORMAT.md 13)', bidi.length >= 12 && named.length === bidi.length && /check 2: R9: the text carries ALM, which changes what a reader is shown/.test(rc.out), bidi.map(hex).join(' ') + '\n' + rc.out);
+  const fx = path.join(tempRepo(), 'test', 'fixture');
+  const ra = bidi.map(ch => docket(['append', '--title', 'Carrying ' + ch + 'it', '--issue', 'issue #99', '--principle', 'Capture precedes structure', '--body', 'Text. Reason: r.'], { cwd: fx }));
+  ok('…append refuses each before it is written, naming its code point', ra.every((r, i) => r.code === 2 && r.err.includes('append: --title carries ' + hex(bidi[i]) + ', a control or bidi character the ledger refuses (check 2)')), ra.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  const rq = docket(['query', 'carrying'], { cwd: path.join(d, 'test', 'fixture') });
+  ok('…and every line the core prints replaces each with U+FFFD', rq.code === 0 && bidi.every(ch => !rq.out.includes(ch)) && (rq.out.match(/\ufffd/g) || []).length >= bidi.length, JSON.stringify(rq.out));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
