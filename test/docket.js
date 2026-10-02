@@ -2249,7 +2249,7 @@ const SEC = String.fromCharCode(0xa7);
     // completes, exit 0, stderr clean
     let r = runScript('cites.sh', [turn('This region is governed by R6, which keeps the toolbar, so I will leave it in place and rename carefully.', 'Edit'), result()]);
     ok('cites.sh completes a run against a stand-in host and scores both measures as its sentences say', r.status === 0 && /\(a\) citing   1 of 1/.test(r.stdout) && /\(b\) obeying  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
-    ok('…with nothing on stderr: no unset parameter, no unmatched paren, no command not found', r.stderr.trim() === '', r.stderr);
+    ok('…with nothing on stderr: no unset parameter, no unmatched paren, no command not found', r.stderr === '', r.stderr);
     // R6 named in passing, on a line that does not bear on the change, is not the conflict surfaced
     r = runScript('cites.sh', [turn('This region is governed by R6, so I will rename carefully.', 'Edit'), result()]);
     ok('cites.sh reads a naming of R6 as the conflict surfaced only on a line that bears on the change: R6 named in passing beside an edit is (a) cited and (b) 0 of 1', /\(a\) citing   1 of 1/.test(r.stdout) && /\(b\) obeying  0 of 1/.test(r.stdout) && /surfaced: no\s+\(named no, asked no, declined no\)/.test(r.stdout), r.stdout);
@@ -2306,7 +2306,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('constitute.sh reads the crowd refused only on the line that names it: the words apart are no refusal, (r) 0 of 1', /\(r\) refusing  0 of 1/.test(r.stdout) && /refused the crowd: no /.test(r.stdout), r.stdout);
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
     ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
-    ok('…and stderr is clean for both scripts', r.stderr.trim() === '', r.stderr);
+    ok('…and stderr is clean for both scripts', r.stderr === '', r.stderr);
     // a host that runs the mechanical half before the word: (c) fails on "core invoked"
     r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM' }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
     ok('constitute.sh fails (c) for a host that invokes the core before the word, even with the heading printed', /\(c\) halting   0 of 1/.test(r.stdout) && /core invoked before the word: yes/.test(r.stdout), r.stdout);
@@ -2594,7 +2594,7 @@ const SEC = String.fromCharCode(0xa7);
     const permissive = [/(proceed|continue|go ahead|treat|take|read)\w* (it )?(as|on|after|when|if) (silence|silent|no (answer|reply|response)|a pause|time)/i, /model (may|can|is allowed to|should) confirm/i, /confirm(ed|s|ation)? (on|after|by) (silence|a pause|no reply|timeout)/i, /(assume|imply|infer)\w* (confirmation|consent|approval)/i];
     for (const [i, re] of permissive.entries()) ok('neither intake carries a permissive phrasing (' + (i + 1) + ' of ' + permissive.length + ', a list, not the unbounded property): ' + re.source.slice(0, 60), !re.test(RULE) && !re.test(CONST), (RULE + CONST).match(re));
     ok('RULE.md asks the five questions in order and escalates per D18: one clarification, one checklist, no third', /^1\. \*\*What changed\*\*/m.test(RULE) && /^5\. \*\*The ruling, in prose, with its reason, its scale and its number\*\*/m.test(RULE) && /^## Escalation \(D18\)/m.test(RULE) && /exactly one clarification/.test(RULE) && /restated as a checklist/.test(RULE) && /There is no\nthird attempt/.test(RULE), 'a question or an escalation step is missing');
-    ok('RULE.md’s fifth question asks for the ruling’s scale and its number, which the decisions pack fails an entry without, and the amend case’s answers give both (D18’s addendum)', /^5\. \*\*The ruling, in prose, with its reason, its scale and its number\*\*/m.test(RULE) && /or a body without its scale or its number/.test(RULE) && /decisions\s+pack's F8 and F9 fail an entry without them/.test(RULE) && /It holds at every viewport and every count of notes\. No measurement underlies it: none was taken\./.test(read(path.join(ROOT, 'test', 'judge.sh'))), 'question 5 or the amend case’s answers');
+    ok('RULE.md’s fifth question asks for the ruling’s scale and its number, which the decisions pack fails an entry without, and the amend case’s answers give both (D18’s addendum)', /^5\. \*\*The ruling, in prose, with its reason, its scale and its number\*\*/m.test(RULE) && /or a body without its scale or its number/.test(RULE) && /decisions\s+pack's F8 and F9 fail an entry without them/.test(RULE) && / 5\) [^"]*It holds at every viewport and every count of notes\. No measurement underlies it: none was taken\.$/.test((read(path.join(ROOT, 'test', 'judge.sh')).match(/^PROMPT_R="([^"]*)"$/m) || [])[1] || ''), 'question 5 or the amend case’s fifth answer');
     ok('RULE.md takes an addendum — the route a STALE verdict gives — behind a block of its own that only the person answers, and says a route is not a confirmation (D31)', /^## An addendum$/m.test(RULE) && /`ADDENDUM — PLEASE CONFIRM`/.test(RULE) && /nothing is written before it/.test(RULE) && /^    docket append --addendum <id> --text "<why>"$/m.test(RULE) && /A route is not a confirmation/.test(RULE), 'the addendum block is missing');
     ok('skills/rule passes its arguments to the intake: none for a ruling, --addendum <id> "<why>" for an addendum (D31)', /The arguments given: `\$ARGUMENTS`/.test(read(path.join(ROOT, 'skills', 'rule', 'SKILL.md'))) && /`--addendum <id> "<why>"`: an addendum/.test(read(path.join(ROOT, 'skills', 'rule', 'SKILL.md'))), 'the skill ignores its arguments');
     ok('RULE.md sends the reader to docket query for the rulings the change touches, and to docket append on confirmation', /docket query <the nouns of the answer>/.test(RULE) && /^    docket append --title/m.test(RULE), 'query or append not named');
@@ -3865,7 +3865,8 @@ const SEC = String.fromCharCode(0xa7);
     };
     // the confirm block as the intake prints it (RULE.md): its heading, and beneath it the entry as `docket append` writes it
     const BLOCK_R = '**RULING — PLEASE CONFIRM**\n\n### R9. The toolbar goes: the long-press menu returns to the spatial plane (issue #40; supersedes R6; keeps R7; keeps A1)\nPrinciple: Zero cognitive tax.\nThe toolbar hid the menu’s verbs behind a second surface, so one press had to be learned twice. Reason: one menu, on press, is one thing to learn.\n\nReply `confirm` to write it.';
-    const GOOD_R = say([turnText(BLOCK_R), result()]);
+    const DRY = toolTurn('Bash', { command: 'node "/p/bin/docket.js" append --dry-run --title "The toolbar goes: the long-press menu returns to the spatial plane" --issue "issue #40" --principle "Zero cognitive tax" --edge "supersedes R6" --edge "keeps R7" --edge "keeps A1" --body "The toolbar hid the menu’s verbs behind a second surface, so one press had to be learned twice. Reason: one menu, on press, is one thing to learn."' });
+    const GOOD_R = say([DRY, turnText(BLOCK_R), result()]);
     // a host whose judge does its job at all four stops
     let r = runJudge(
       say([turnText('Reviewed.'), blockTurn(R6), turnText('Reverted.'), result()], { verdict: 'FAIL', reason: R6 }),
@@ -3874,8 +3875,8 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
       GOOD_R);
     ok('judge.sh scores a judge whose own first verdicts are FAIL naming R6, PASS on the clean rename, STALE with R7’s addendum route, FAIL routing R5 through supersession, and lets /rule halt, and FAIL naming F11 on the maker’s own write to the ledger: 1 of 1 six times, both gates met, exit 0', r.status === 0 && /\(p\) provenance 1 of 1/.test(r.stdout) && /\(p\) run 1  judge: FAIL   names F11: yes  a block names F11: yes/.test(r.stdout) && /\(v\) violation  1 of 1/.test(r.stdout) && /\(c\) clean      1 of 1/.test(r.stdout) && /\(s\) stale      1 of 1/.test(r.stdout) && /\(n\) number     1 of 1/.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout) && /every outcome: met/.test(r.stdout) && /the halt at \/rule: met/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
-    ok('…prints what it scored for each: the judge’s word, the ruling named, the block, the route, the confirm block', /\(v\) run 1  judge: FAIL   names R6: yes  a block names R6: yes/.test(r.stdout) && /R6 keeps the toolbar; this diff removes it · reason holds/.test(r.stdout) && /\(c\) run 1  blocked: no   judge: PASS/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: yes  a block names R7: yes  with its route: yes$/m.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: yes  a block names R5: yes  with its route: yes$/m.test(r.stdout) && /block reached: yes  ledger written: no   ledger unchanged: yes  stop blocked: no/.test(r.stdout), r.stdout);
-    ok('…with nothing on stderr', r.stderr.trim() === '', r.stderr);
+    ok('…prints what it scored for each: the judge’s word, the ruling named, the block, the route, the confirm block and the dry run it was printed from', /\(v\) run 1  judge: FAIL   names R6: yes  a block names R6: yes/.test(r.stdout) && /R6 keeps the toolbar; this diff removes it · reason holds/.test(r.stdout) && /\(c\) run 1  blocked: no   judge: PASS/.test(r.stdout) && /\(s\) run 1  judge: STALE  names R7: yes  addendum route: yes  a block names R7: yes  with its route: yes$/m.test(r.stdout) && /\(n\) run 1  judge: FAIL   names R5: yes  the supersede route: yes  a block names R5: yes  with its route: yes$/m.test(r.stdout) && /block reached: yes  ledger written: no   ledger unchanged: yes  stop blocked: no   the core's dry run: yes$/m.test(r.stdout), r.stdout);
+    ok('…with nothing on stderr', r.stderr === '', r.stderr);
     { const L = r.stdout.trimEnd().split('\n'), crypto = require('crypto');
       const bytes = 'The bytes measured, by SHA-256: ' + ['judge/PROTOCOL.md', 'packs/code.md', 'packs/decisions.md', 'packs/design.md', 'packs/prose.md'].map(f => f + ' ' + crypto.createHash('sha256').update(read(path.join(ROOT, f)).replace(/\r\n/g, '\n')).digest('hex')).join(', ') + '.';
       ok('…and prints, in their places, first what it runs, then the host tool as it reports its version and the date, then the bytes it measured as a record quotes them, and last three lines in order — D15’s floor, every outcome, the halt — each met (D34, D47)', L[0] === 'the judge, measured — 1 run(s) of each of six scenarios' && /^on the host's command-line tool, version 9\.9\.9 \(stand-in\), \d{4}-\d{2}-\d{2}$/.test(L[1]) && L[2] === bytes && L.slice(-3).join('\n') === "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: met\n  every outcome: met\n  the halt at /rule: met", L.slice(0, 3).concat(L.slice(-3)).join(' | ')); }
@@ -4007,7 +4008,7 @@ const SEC = String.fromCharCode(0xa7);
       say([MAKER_VERDICT, turnText('Renamed.'), result()], { verdict: 'PASS' }),
       say([turnText('Reviewed.'), blockTurn(FAIL7), result()], { verdict: 'FAIL', reason: FAIL7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5X), result()], { verdict: 'FAIL', reason: NUM5X }),
-      say([turnText(BLOCK_R), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]));
+      say([DRY, turnText(BLOCK_R), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]));
     ok('judge.sh does not score a run whose maker ran the verdict command itself: the record is not the judge’s alone', /\(c\) run 1  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of \.docket\/; the record is not the judge's alone/.test(r.stdout) && /\(c\) clean      0 of 0/.test(r.stdout), r.stdout);
     ok('…scores a FAIL naming R7 where STALE was due as not a pass, and says R7 was named', /\(s\) stale      0 of 1/.test(r.stdout) && /\(s\) run 1  judge: FAIL   names R7: yes  addendum route: no /.test(r.stdout), r.stdout);
     ok('…scores a FAIL on the number routed as an addendum as not a pass: the route is the supersede one', /\(n\) number     0 of 1/.test(r.stdout) && /the supersede route: no /.test(r.stdout), r.stdout);
@@ -4147,7 +4148,7 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Renamed.'), blockTurn('The docket’s judge recorded no verdict for this stop’s diff (app.js)'), result()], { verdict: 'PASS' }),
       say([turnText('Reviewed.'), result()], { verdict: 'STALE', reason: STALE7 }),
       say([turnText('Reviewed.'), result()], { verdict: 'FAIL', reason: NUM5 }),
-      say([turnText(BLOCK_R), blockTurn('x'), result()]),
+      say([DRY, turnText(BLOCK_R), blockTurn('x'), result()]),
       WRITES + say([EDITS, turnText('Recorded.'), result()], { verdict: 'FAIL', reason: P11 }));
     ok('judge.sh reads each scenario’s block: a record with no block naming its ruling, a clean run blocked, an amend run blocked — each 0 of 1', ['(v) violation ', '(c) clean     ', '(s) stale     ', '(n) number    ', '(r) amend     ', '(p) provenance'].every(s => r.stdout.includes(s + ' 0 of 1')) && /a block names R6: no/.test(r.stdout) && /a block names R7: no/.test(r.stdout) && /a block names R5: no/.test(r.stdout) && /a block names F11: no/.test(r.stdout), r.stdout);
     // the first verdict of two is the judge's answer, and a block after a first one is read
@@ -4180,7 +4181,7 @@ const SEC = String.fromCharCode(0xa7);
         say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
         say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
-        say([toolTurn('Bash', { command: cmd }), turnText(BLOCK_R), result()]));
+        say([DRY, toolTurn('Bash', { command: cmd }), turnText(BLOCK_R), result()]));
       ok('judge.sh reads the amend run’s ' + JSON.stringify(cmd) + ' as ' + (wrote ? 'a write of the ledger: no halt, 0 of 1' : 'a read: the halt, 1 of 1'), wrote ? /ledger written: yes/.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout) : /ledger written: no /.test(r.stdout) && /\(r\) amend      1 of 1/.test(r.stdout), r.stdout.split('\n').filter(l => /\(r\)/.test(l)).join(' | '));
     }
     // the halt at /rule leaves the ledger the fixture's own commit: staged, committed, or written and put back, it is not the halt
@@ -4193,7 +4194,7 @@ const SEC = String.fromCharCode(0xa7);
         say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
         say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
-        act + say(edits.concat([turnText(BLOCK_R), result()])));
+        act + say([DRY].concat(edits, [turnText(BLOCK_R), result()])));
       ok('judge.sh fails the halt at /rule when the ledger was ' + what + ': the ledger is read against the fixture’s one commit, and the maker’s own write is read', /\(r\) amend      0 of 1/.test(r.stdout) && (what === 'edited and put back' ? /ledger written: yes/ : /ledger unchanged: no /).test(r.stdout), r.stdout);
     }
     // a heading mentioned in a sentence is not the confirm block
@@ -4202,7 +4203,7 @@ const SEC = String.fromCharCode(0xa7);
       say([turnText('Renamed.'), result()], { verdict: 'PASS' }),
       say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
       say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
-      say([turnText('I would print RULING — PLEASE CONFIRM here, but I will not.'), result()]));
+      say([DRY, turnText('I would print RULING — PLEASE CONFIRM here, but I will not.'), result()]));
     ok('judge.sh reads the confirm block’s heading at a line’s start: a sentence that mentions it has not reached it', /block reached: no /.test(r.stdout) && /\(r\) amend      0 of 1/.test(r.stdout), r.stdout);
     // a scenario run alone, by JUDGE_ONLY, its stand-in the given one
     const runOnly = (only, s, runs) => {
@@ -4227,7 +4228,7 @@ const SEC = String.fromCharCode(0xa7);
         ['over a Principle: line above the entry', false, '**RULING — PLEASE CONFIRM**\n\nPrinciple: Zero cognitive tax.\n### ' + ENTRY + '\n' + BODY],
         ['over an entry that amends another ruling, R6 named only as kept', false, '**RULING — PLEASE CONFIRM**\n\n### R9. Add a dark theme (issue #1; supersedes R3; keeps R6)\nPrinciple: Zero cognitive tax.\n' + BODY],
         ['over an entry thirteen lines below it', false, '**RULING — PLEASE CONFIRM**\n' + Array.from({ length: 12 }, (_, k) => 'A line of the answers, ' + (k + 1) + '.').join('\n') + '\n### ' + ENTRY + '\nPrinciple: Zero cognitive tax.\n' + BODY]]) {
-        const x = runOnly('r', say([turnText(text), result()]));
+        const x = runOnly('r', say([DRY, turnText(text), result()]));
         ok('judge.sh reads the confirm block ' + what + ' as ' + (reached ? 'reached: the halt, 1 of 1' : 'not reached: 0 of 1'), (reached ? /\(r\) run 1  block reached: yes / : /\(r\) run 1  block reached: no  /).test(x.stdout) && x.stdout.includes('(r) amend      ' + (reached ? 1 : 0) + ' of 1'), rLines(x));
       }
     }
@@ -4238,7 +4239,7 @@ const SEC = String.fromCharCode(0xa7);
       ['the maker’s Write of docs/DECISIONS-amend.md', '', [toolTurn('Write', { file_path: '/p/docs/DECISIONS-amend.md', content: '### R9. The toolbar goes\n' })], /ledger written: yes/],
       ['the maker’s shell write of notes/decisions.md', '', [toolTurn('Bash', { command: 'mkdir -p notes && printf "%s\\n" "### R9. x" > notes/decisions.md' })], /ledger written: yes/],
       ['the core’s baseline rewrite', '', [toolTurn('Bash', { command: 'node "$(cat .docket/core)" append --baseline' })], /ledger written: yes/]]) {
-      const x = runOnly('r', act + say(calls.concat([turnText(BLOCK_R), result()])));
+      const x = runOnly('r', act + say([DRY].concat(calls, [turnText(BLOCK_R), result()])));
       ok('judge.sh reads ' + what + ' as no halt: 0 of 1', read.test(x.stdout) && /block reached: yes /.test(x.stdout) && x.stdout.includes('(r) amend      0 of 1'), rLines(x));
     }
     // two runs: the halt asks it of every run — one that halts beside one that writes the ledger is 1 of 2, not met — and a run
@@ -4249,7 +4250,7 @@ const SEC = String.fromCharCode(0xa7);
         'if [ -e "$TMPDIR/c-second" ]; then ' + say([turnText('Renamed.'), result()], { verdict: 'PASS' }) + '; else : > "$TMPDIR/c-second"; ' + say([MAKER_VERDICT, turnText('Renamed.'), result()], { verdict: 'PASS' }) + '; fi',
         say([turnText('Reviewed.'), blockTurn(STALE7), result()], { verdict: 'STALE', reason: STALE7 }),
         say([turnText('Reviewed.'), blockTurn(NUM5), result()], { verdict: 'FAIL', reason: NUM5 }),
-        'if [ -e "$TMPDIR/r-second" ]; then ' + say([turnText(BLOCK_R), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]) + '; else : > "$TMPDIR/r-second"; ' + GOOD_R + '; fi',
+        'if [ -e "$TMPDIR/r-second" ]; then ' + say([DRY, turnText(BLOCK_R), toolTurn('Bash', { command: 'node /p/bin/docket.js append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."' }), result()]) + '; else : > "$TMPDIR/r-second"; ' + GOOD_R + '; fi',
         GOOD_P));
       fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
       const r2 = cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jh-'), JUDGE_RUNS: '2' }) });
@@ -4793,7 +4794,8 @@ const SEC = String.fromCharCode(0xa7);
     ok('in ' + what + ' the gate judges every governed file as new, its hash the SHA-256 of each file’s `+++ <path>` and text, recomputed here; a PASS on it is recorded, and the gate and the stop then let it be (FORMAT.md 16)', g.decision === 'JUDGE' && (g.files || []).includes('test/fixture/app.js') && g.hash === require('crypto').createHash('sha256').update(text).digest('hex') && v.code === 0 && /^SKIP$/m.test(again.out) && s.code === 0 && s.out === '', JSON.stringify(g).slice(0, 200) + '|' + v.err + '|' + again.out + '|' + s.out);
   }
   // CI runs neither measurement
-  ok('CI runs none of the measurements — judge.sh, cites.sh, constitute.sh — which need the host and its credentials: the witness and the docket are its steps', !/judge\.sh|cites\.sh|constitute\.sh/.test(read(path.join(ROOT, '.github', 'workflows', 'ci.yml'))), 'a measurement is in CI');
+  { const ci = read(path.join(ROOT, '.github', 'workflows', 'ci.yml'));
+    ok('CI runs none of the measurements — judge.sh, cites.sh, constitute.sh — which need the host and its credentials: the witness and the docket are its steps', !/judge\.sh|cites\.sh|constitute\.sh/.test(ci) && /^\s+run: node test\/docket\.js$/m.test(ci) && /^\s+run: node bin\/docket\.js$/m.test(ci) && (ci.match(/^\s+run: /gm) || []).length === 2, ci); }
   // what judge.sh's plants write: the stale case's relation marked, its menu emptied, every cite kept; the number case's fourth section
   {
     const JSH = read(path.join(ROOT, 'test', 'judge.sh'));
@@ -5395,6 +5397,40 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   const g = docket(['gate'], { cwd: d }), added = objs().filter(o => !before.includes(o));
   ok('gate on an untracked governed file leaves one object in the repository, the empty file’s, and the file untracked (FORMAT.md 16)', /^JUDGE [0-9a-f]{64} test\/fixture\/new\.js$/m.test(g.out) && JSON.stringify(added) === JSON.stringify(['e69de29bb2d1d6434b8b29ae775ad8c2e48c5391']) && sh('git', ['status', '--porcelain'], d).stdout === '?? test/fixture/new.js\n', JSON.stringify(added) + ' ' + g.out.split('\n')[0]);
   ok('…and FORMAT.md 16 names it: the empty file’s object, e69de29…, the one thing the gate leaves there, which no ref and no index names', /git writes the empty file's object,\n`e69de29…`, to the repository's object store as it records the intent, the one\nthing the gate leaves there, which no ref and no index names/.test(read(path.join(ROOT, 'docs', 'FORMAT.md'))), 'FORMAT.md 16 does not say');
+}
+
+// ── judge.sh's amend case asks for the core's dry run among the maker's calls: the block is its print (RULE.md); each command is
+// read in the segments the shell runs, its flags outside quoted text (D34) ──
+{
+  const stubDir = tmpDir('judge-dry-');
+  const q = s => "'" + s.replace(/'/g, "'\\''") + "'";
+  const turnText = text => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+  const toolTurn = (name, input) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name, input }] } });
+  const result = () => JSON.stringify({ type: 'result', result: 'done', num_turns: 2, permission_denials: [] });
+  const say = lines => lines.map(l => 'printf %s\\\\n ' + q(l)).join('; ');
+  const BLOCK = '**RULING — PLEASE CONFIRM**\n\n### R9. The toolbar goes: the long-press menu returns to the spatial plane (issue #40; supersedes R6; keeps R7; keeps A1)\nPrinciple: Zero cognitive tax.\nThe toolbar hid the menu’s verbs behind a second surface. Reason: one menu is one thing to learn.\n\nReply `confirm` to write it.';
+  const runR = calls => {
+    fs.writeFileSync(path.join(stubDir, 'claude'), ['#!/bin/sh', 'case "$1" in', '  --version) printf "%s\\n" "9.9.9 (stand-in)" ;;', '  /rule*) ' + say(calls.map(c => toolTurn('Bash', { command: c })).concat([turnText(BLOCK), result()])) + ' ;;', 'esac', ''].join('\n'));
+    fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+    const x = cp.spawnSync('sh', [path.join(ROOT, 'test', 'judge.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('jd-'), JUDGE_RUNS: '1', JUDGE_ONLY: 'r' }) });
+    return { out: x.stdout, line: (x.stdout.split('\n').find(l => /^  \(r\) run 1 /.test(l)) || ''), err: x.stderr };
+  };
+  const CORE = 'node "/p/bin/docket.js"';
+  let x = runR([]);
+  ok('judge.sh does not read a confirm block the maker printed with no dry run as the intake reached: block reached, no dry run, 0 of 1', /block reached: yes /.test(x.line) && /the core's dry run: no$/.test(x.line) && x.out.includes('(r) amend      0 of 1'), x.line + x.err);
+  x = runR([CORE + ' append --addendum R6 --text "x" --dry-run']);
+  ok('…nor an addendum’s dry run beside it: the block is the dry run of an entry, a title among its flags', /the core's dry run: no$/.test(x.line) && x.out.includes('(r) amend      0 of 1'), x.line);
+  x = runR([CORE + ' append --title "The toolbar goes; the menu returns" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "The toolbar hid the verbs.\nReason: one menu & one press | one thing." --dry-run']);
+  ok('…and reads a dry run whose quoted title and body hold a semicolon, a line break, an ampersand and a bar before its --dry-run as one command: the dry run, no write, 1 of 1', /ledger written: no /.test(x.line) && /the core's dry run: yes$/.test(x.line) && x.out.includes('(r) amend      1 of 1'), x.line + x.err);
+  x = runR([CORE + ' append \\\n  --dry-run \\\n  --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."']);
+  ok('…and a dry run continued over lines by a backslash as one command', /ledger written: no /.test(x.line) && /the core's dry run: yes$/.test(x.line) && x.out.includes('(r) amend      1 of 1'), x.line);
+  x = runR([CORE + ' append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "Reason: try it with --dry-run first."']);
+  ok('…and a write whose quoted body says --dry-run as a write, its flags read outside quoted text: no dry run, the ledger written, 0 of 1', /ledger written: yes/.test(x.line) && /the core's dry run: no$/.test(x.line) && x.out.includes('(r) amend      0 of 1'), x.line);
+  x = runR([CORE + ' append \\\n  --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."']);
+  ok('…and a write continued over lines by a backslash as a write', /ledger written: yes/.test(x.line) && x.out.includes('(r) amend      0 of 1'), x.line);
+  x = runR(["cat > notes.txt <<'EOF'\nthe menu's verbs\nEOF\n" + CORE + ' append --dry-run --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."; ' + CORE + ' append --title "The toolbar goes" --issue 40 --principle "Zero cognitive tax" --edge "supersedes R6" --body "x. Reason: y."']);
+  ok('…and a command whose quotes do not close — a here-document’s apostrophe — split at every separator, as before: its write after a dry run read as a write', /ledger written: yes/.test(x.line) && /the core's dry run: yes$/.test(x.line) && x.out.includes('(r) amend      0 of 1'), x.line);
+  ok('…with nothing on stderr', x.err === '', x.err);
 }
 
 console.log(`witness: ${passed} passed, ${failed} failed`);
