@@ -22,7 +22,7 @@ D12, D15, D22, D23, D24, D37 and D46 in `docs/DECISIONS.md`.
 | the session's diff from its base (D40), and the files it touches | `docket gate --session <id> --diff` |
 | the maker's transcript | a path the host passes in; `docket transcript <path>` prints its text and its tool calls, because the path is outside the project |
 | the session identifier | the host passes it in |
-| whether this stop was already blocked once in this turn | the host passes it in; if so, allow the stop at once |
+| whether this stop was already blocked once in this turn | the host passes it to `docket stop`, which allows such a stop before any judge starts (D11, D37): a judge the stop started was not started on one; a judge started by hand on one is told so by whoever started it, and allows the stop at once |
 | a shell | confined to what the session allows, of which the protocol uses two things: the core, through the one permission its binding grants — the core prints the protocol, the packs, the diff and the transcript, so running it is all the protocol needs — and the repository's own check commands where the session allows those too; what else a host lets through unasked, such as a command that only reads, the protocol does not use. A check command the judge may not run leaves the code pack's first feature unscored, and the judge's report says so and names the command: the stop keeps the report in `.docket/judge.log`, which `docket status` names, since a PASS carries no line (D46) |
 
 `docket.js` is `bin/docket.js` in this repository, or `test/docket.js` where the
@@ -85,8 +85,10 @@ touched function whole, and beneath it the rulings its regions cite, as
 `governs` prints them; and `pack` and `governs` each take every name at once.
 Read a file only for what they leave out (D30).
 
-1. **`docket gate --session <id> --diff`** — after one look at the host's re-entry flag:
-   a stop already blocked once in this turn is allowed before anything else.
+1. **`docket gate --session <id> --diff`** — the host's re-entry flag was read before you
+   started: `docket stop` allows a stop already blocked once in this turn before any judge
+   starts (D11, D37), so you were not started on one; started by hand on such a stop and
+   told so by whoever started you, allow it before anything else.
    `SKIP` → allow the stop at once (D10).
    `SURFACE` → the stop does not stand, and the reason is the residue `gate`
    printed with the sentence "report this to the user verbatim, then stop
