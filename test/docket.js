@@ -5248,5 +5248,14 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and the stop, whose judge recorded nothing, blocks without its count, with no stack trace', ps.code === 0 && /"decision":"block"/.test(ps.out) && !/\n\s+at /.test(ps.err), ps.code + ' ' + ps.out + ps.err);
 }
 
+// ── the stop refuses a --session that names none before it reads the host's re-entry flag (FORMAT.md 16, D11's addendum) ──
+{
+  const d = tempRepo();
+  const rs = ['', ' '].map(v => docket(['stop', '--session', v, '--judge', 'true'], { cwd: d, input: '{"session_id":"x","stop_hook_active":true}' }));
+  ok('a stop whose --session is empty or blank is refused, exit 2, with the host’s re-entry flag set too, where it had been allowed', rs.every(r => r.code === 2 && /^--session names no session: its value is empty or blank;/m.test(r.err) && r.out === ''), rs.map(r => r.code + ' ' + r.out + r.err.trim()).join(' | '));
+  const ra = docket(['stop', '--session', 'x', '--judge', 'true'], { cwd: d, input: '{"session_id":"x","stop_hook_active":true}' });
+  ok('…and one that names a session is allowed at the re-entry, as before', ra.code === 0 && ra.out === '' && ra.err === '', ra.code + ' ' + ra.out + ra.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

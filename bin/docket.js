@@ -2525,10 +2525,11 @@ function stop(argv) {
   const waitRaw = flag(argv, '--wait');
   const waitS = waitRaw === null ? STOP_WAIT : /^\d+$/.test(waitRaw) ? Number(waitRaw) : NaN;   // a whole number written as one: not 1e3, 0x10 or +2
   if (!(Number.isInteger(waitS) && waitS >= 1)) die('stop: --wait takes a whole number of seconds, one or more: the bound on the judge it starts', 2);
+  const named = sessionOpt(argv);                                     // an option is read before the host's flag, as --wait is: one naming no session is refused at a re-entry too
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
   const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
-  const id = sessionKey(sessionOpt(argv) || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
+  const id = sessionKey(named || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
   const files = d.touched.map(shown).join(', ');
