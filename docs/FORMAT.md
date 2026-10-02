@@ -615,7 +615,12 @@ than eight are cited a last line `  +<n> more` (a cap that hid its own overflow
 would settle a conflict silently, D14); then the edges
 touching any listed ruling (5), each rendered with its qualifier; then the
 listed rulings that carry addenda, with their dates; then the spec cites in the
-window with their titles (7); then one instruction line. A governed file whose
+window with their titles (7); then one instruction line. Each of the three lines
+stops where the ruling list does, for its reason — the text is read at every
+edit — and names what it left out: at most eight edges and then `+<n> more`, a
+ruling's last eight addenda after `+<n> earlier`, at most eight spec cites and
+then `+<n> more` (D2); `near --json` carries every one, an object being a tool's
+to read and not a reader's at every edit. A governed file whose
 window cites nothing gets a one-line notice that names the window and says so.
 A file that cites nothing anywhere, or has no ledger above it, gets silence.
 When the stdin object carries a `hook_event_name`, the same text is printed

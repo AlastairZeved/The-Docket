@@ -5327,5 +5327,29 @@ const SEC = String.fromCharCode(0xa7);
   ok('FORMAT.md gives both reasons a DOCKET_TODAY that names no day is refused, and says such a date written by hand is read as written', /a value not of that form would be a line the grammar does not read as an addendum/.test(FM) && /would be read as an addendum dated no day/.test(FM) && /Such a line written by hand is read as written/.test(FM), 'FORMAT.md 6');
 }
 
+// ── near's lines beneath its list stop where the list does: eight edges, a ruling's last eight addenda, eight spec cites, each
+// naming what it left out; --json carries every one (FORMAT.md 15, D2) ──
+{
+  const d = tempRepo(x => {
+    const q = path.join(x, 'test', 'fixture', 'DECISIONS.md');
+    let L = read(q);
+    const more = Array.from({ length: 10 }, (_, k) => '> Addendum 2026-10-' + String(k + 1).padStart(2, '0') + ': amended ' + (k + 1) + '.').join('\n');
+    L = L.replace('reading still writes nothing, and the rule stands as written.\n', 'reading still writes nothing, and the rule stands as written.\n' + more + '\n');
+    for (let i = 9; i <= 18; i++) L += '\n### R' + i + '. Extension ' + i + ' (issue #' + (100 + i) + '; extends R2)\nPrinciple: Capture precedes structure.\nReason: r.\n';
+    fs.writeFileSync(q, L);
+    const a = path.join(x, 'test', 'fixture', 'app.js');
+    fs.writeFileSync(a, read(a).replace('// R2: the map is read, never mutated in place', '// R2: the map is read, never mutated in place; ' + Array.from({ length: 10 }, (_, k) => 'UIUX ' + SEC + '9.' + (k + 1)).join(', ')));
+  });
+  const inp = nearInput(path.join(d, 'test', 'fixture', 'app.js'), 'const notes = new Map();');
+  const t = docket(['near'], { cwd: d, input: inp }), j = JSON.parse(docket(['near', '--json'], { cwd: d, input: inp }).out || '{}');
+  const line = p => (t.out.split('\n').find(l => l.startsWith(p)) || '');
+  // the fixture's own edge among the listed rulings is the eleventh
+  const E = (j.edges || []).length, el = line('Edges among these: ');
+  ok('near: the edges line stops at eight and names the rest, +<n> more, where it had listed every one', E === 11 && el.slice('Edges among these: '.length).split('; ').length === 9 && el.endsWith('; +3 more.'), el);
+  ok('…the addenda line gives a ruling its last eight, after +<n> earlier', line('Addenda: ') === 'Addenda: R2 (+3 earlier, 2026-10-03, 2026-10-04, 2026-10-05, 2026-10-06, 2026-10-07, 2026-10-08, 2026-10-09, 2026-10-10).', line('Addenda: '));
+  ok('…the spec cites stop at eight and name the rest', (line('Also cited: ').match(/UIUX /g) || []).length === 8 && / \+2 more\.$/.test(line('Also cited: ')), line('Also cited: '));
+  ok('…and --json carries every edge, every date and every spec cite', E === 11 && j.edges.filter(e => / extends R2$/.test(e)).length === 10 && j.addenda && j.addenda[0].dates.length === 11 && j.specCites && j.specCites.length === 10, JSON.stringify([j.edges, j.addenda, j.specCites && j.specCites.length]));
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -789,10 +789,14 @@ function near(argv) {
     for (const e of r.edges) push(e);
     for (const other of ledger.rulings) for (const e of other.edges) if (e.to === r.id) push(e);
   }
-  if (edges.length) outLines.push('Edges among these: ' + edges.join('; ') + '.');
+  // Each line beneath the list stops where the list does, for its reason — the hook's text is read at every edit — and names
+  // what it left out, as the list does (FORMAT.md 15, D2); --json carries every one
+  const capped = (items, sep) => items.length > CAP ? items.slice(0, CAP).join(sep) + sep + '+' + (items.length - CAP) + ' more' : items.join(sep);
+  if (edges.length) outLines.push('Edges among these: ' + capped(edges, '; ') + '.');
   obj.edges = edges;
   const withAdd = list.map(x => ledger.byId.get(x.id)).filter(r => r.addenda.length);
-  const add = withAdd.map(r => r.id + ' (' + r.addenda.map(a => a.date).join(', ') + ')');
+  const datesOf = r => { const ds = r.addenda.map(a => a.date); return ds.length > CAP ? '+' + (ds.length - CAP) + ' earlier, ' + ds.slice(-CAP).join(', ') : ds.join(', '); };
+  const add = withAdd.map(r => r.id + ' (' + datesOf(r) + ')');
   obj.addenda = withAdd.map(r => ({ id: r.id, dates: r.addenda.map(a => a.date) }));
   if (add.length) outLines.push('Addenda: ' + add.join(', ') + '.');
   if (specs.length) {
@@ -806,7 +810,7 @@ function near(argv) {
       items.push(k + (h ? ' ' + h.title : ''));
       obj.specCites.push({ doc: s.doc, num: s.num, title: h ? h.title : null });
     }
-    outLines.push('Also cited: ' + items.join('; ') + '.');
+    outLines.push('Also cited: ' + capped(items, '; ') + '.');
   }
   outLines.push('Name the ruling you rely on before you edit.');
   void listed;
