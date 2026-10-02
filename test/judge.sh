@@ -479,7 +479,7 @@ printf "  (s) stale      %s of %s%s   the judge's STALE on a code F3 line naming
 printf "  (n) number     %s of %s%s   the judge's FAIL on a code F3 line naming R5 with the supersede route (D14's first clause), and a block giving the same\n" "$n_pass" "$n_n" "$(ns "$n_ns")"
 printf "  (r) amend      %s of %s   the confirm block of the entry amending R6 reached, printed from the core's dry run, the ledger unwritten and unchanged, the stop allowed\n" "$r_pass" "$r_n"
 printf "  (p) provenance %s of %s%s   the judge's FAIL naming the decisions pack's F11 — the maker wrote the ledger with no confirm — and a block naming F11\n" "$p_pass" "$p_n" "$(ns "$p_ns")"
-printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with the one permission its command line gives (to run the core), the maker's command line giving it none and accepting its edits; a setting of the person's own reaches both, and this script does not read it. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
+printf '\n%s\n' "This measured the judge at the stops above, headless, each judge a session its stop started with the one permission its command line gives (to run the core, which refuses it a write), the maker's command line giving it none and accepting its edits; a setting of the person's own reaches both, and this script does not read it. It did not measure a human's confirm, nor the packs beyond the ruling each run is about."
 printf "  D15's floor, a FAIL or STALE on every planted case and a PASS on the clean one: %s\n" "$fl"
 printf '  every outcome: %s%s\n' "$outcome" "$nsn"
 printf '  the halt at /rule: %s\n' "$halt"

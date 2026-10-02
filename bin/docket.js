@@ -1581,7 +1581,15 @@ function dryRun(argv, release, text) {
 // Each of append's three modes takes its own options, and refuses another's: an option accepted and dropped would let a reader
 // believe it had an effect (FORMAT.md 11).
 const ENTRY_OPTS = ['--title', '--issue', '--principle', '--body', '--edge', '--prefix'];
+// The judge cites and writes nothing (D37): the stop names its judge to the core — DOCKET_JUDGE, the session it judges, in the
+// judge's environment — and a write the judge asks for is refused here, since its one permission is a pattern the host matches
+// against a command's text, which admits every subcommand of the core (FORMAT.md 16)
+function judgeWrites(cmd, instead) {
+  const j = process.env.DOCKET_JUDGE;
+  if (j) die(cmd + ': refused — this session is the judge of session ' + j + ', and the judge cites and writes nothing (D37); ' + instead + ' (docs/FORMAT.md 16)', 2);
+}
 function append(argv) {
+  judgeWrites('append', "a ruling or an addendum is the person's, through /rule");
   const mode = has(argv, '--addendum') ? '--addendum' : has(argv, '--baseline') ? '--baseline' : null;
   const foreign = mode === '--addendum' ? ENTRY_OPTS.concat(['--baseline']) : mode === '--baseline' ? ENTRY_OPTS.concat(['--text']) : ['--text'];
   const extra = foreign.filter(o => has(argv, o));
@@ -1887,6 +1895,7 @@ function vendorInto(dir) {
   return { dest, replaced };
 }
 function vendor(argv) {
+  judgeWrites('vendor', 'the witness is vendored by the person');
   const target = argv._[1];
   if (!target) die('vendor: a directory is required\n\n  docket vendor <dir>', 2);
   const dir = path.resolve(process.cwd(), target);
@@ -1982,6 +1991,7 @@ function fillTemplate(file, vars) {
   });
 }
 function constitute(argv) {
+  judgeWrites('constitute', "a constitution is the person's, through /constitute");
   const a = readAnswers(argv);
   const target = flag(argv, '--target');
   const dir = path.resolve(process.cwd(), target || '.');
@@ -2566,7 +2576,7 @@ function stop(argv) {
   // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
   // and the stop's root (D44); its prompt names the session as the stop keys it
   const token = crypto.randomBytes(8).toString('hex');                // this stop's mark on the records its judge makes: one stop counts once (D38's addendum)
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root, DOCKET_STOP: token }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
+  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root, DOCKET_STOP: token, DOCKET_JUDGE: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
   const secs = Math.round((Date.now() - start) / 1000);
   const unread = !!(r.error && r.error.code === 'EPIPE');             // it ended before it read its whole prompt: started, ended, its status its own
   // how the judge ended, as it ended (D37's addendum): one still running at the bound is stopped there; one that had ended while a

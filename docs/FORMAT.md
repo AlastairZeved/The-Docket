@@ -776,7 +776,11 @@ carrying the recorded reason and its route — the judge runs with `DOCKET_SESSI
 set to the stop's session, so a verdict that names none is this session's, with `DOCKET_ROOT`
 set to the stop's root (1), and with `DOCKET_STOP`, the stop's own mark: a second record its
 judge makes in that stop replaces the first in the count, so the session's blocks move once
-and its history ends with the later record, and one stop counts once (D38's addendum). A FAIL or
+and its history ends with the later record, and one stop counts once (D38's addendum). Its
+environment carries `DOCKET_JUDGE` too, the session it judges: under it `append`, `constitute`
+and `vendor` refuse, exit 2, naming what the person does instead — the judge cites and writes
+nothing (D37), and its one permission, a pattern the host matches against a command's text,
+admits every subcommand of the core, so the core holds the line the pattern cannot. A FAIL or
 STALE recorded for the diff the last PASS judged takes that PASS back: the later word on a
 diff decides; a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
