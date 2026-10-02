@@ -5238,5 +5238,15 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and one with its word, its time and its count is read, its hash absent', /^Last verdict: FAIL at 2026-09-30T10:00:00\.000Z \(2 located failures\); session s is SURFACED/m.test(whole.out), whole.out);
 }
 
+// ── the state's file a directory: named and refused by the verdict, never a stack trace; the stop's block stands (FORMAT.md 16) ──
+{
+  const e = tempRepo(); fs.appendFileSync(path.join(e, 'test', 'fixture', 'app.js'), 'const e2 = 1; // R2\n');
+  fs.mkdirSync(path.join(e, '.docket', 'verdict.json'), { recursive: true });
+  const pv = docket(['verdict', 'PASS', '--session', 'e'], { cwd: e });
+  ok('verdict with .docket/verdict.json a directory refuses, exit 2, naming it, with no stack trace, where the rename had thrown (FORMAT.md 16)', pv.code === 2 && /^verdict: \.docket\/verdict\.json is not a file: the state cannot be written over it; move it aside$/m.test(pv.err) && !/\n\s+at /.test(pv.err) && fs.statSync(path.join(e, '.docket', 'verdict.json')).isDirectory(), pv.code + ' ' + pv.err);
+  const ps = docket(['stop', '--judge', 'true', '--session', 'e'], { cwd: e, input: '{"session_id":"e"}' });
+  ok('…and the stop, whose judge recorded nothing, blocks without its count, with no stack trace', ps.code === 0 && /"decision":"block"/.test(ps.out) && !/\n\s+at /.test(ps.err), ps.code + ' ' + ps.out + ps.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -706,6 +706,9 @@ word, time or count is missing or of another kind holds nothing, and is read as
 none, its hash, session and reason, when present, text. Each change is made under
 a lock beside the file, `verdict.json.lock`, the state re-read inside it and written
 whole to a new file renamed over the old, so judges recording at once lose nothing.
+A state with nowhere to go — `.docket` a file, or `verdict.json` anything but a
+file — is refused by the verdict, exit 2, naming it, and the gate's answer and the
+stop's block stand without it.
 A lock names its holder, and one whose holder is gone is taken over, the ledger's
 lock and the state's alike; the state's held past five seconds is written through,
 with a note, except by the call at a session's start, which waits one second and

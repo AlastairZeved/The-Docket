@@ -1620,6 +1620,7 @@ function saveState(root, st) { const p = statePath(root); docketDir(root); const
 function withState(root, change, opts) {
   const p = statePath(root), lockPath = p + '.lock', wait = opts && opts.wait !== undefined ? opts.wait : LOCK_WAIT_MS;
   if (exists(path.dirname(p)) && !isDir(path.dirname(p))) throw Object.assign(new Error(rel(root, path.dirname(p)) + ' is a file, not a directory: the state has nowhere to go; move it aside'), { docket: true });
+  if (exists(p) && !isFile(p)) throw Object.assign(new Error(rel(root, p) + ' is not a file: the state cannot be written over it; move it aside'), { docket: true });
   docketDir(root);
   const lock = takeLock(lockPath, wait);
   if (!lock) {
