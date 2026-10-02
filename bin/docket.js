@@ -2345,27 +2345,28 @@ function lineCount(text) { return text === null ? 0 : text.split('\n').length - 
 // A location is the file it resolves to, as FORMAT.md 1 reads a link for the walk: a link out of the tree is not the tree's
 // file, and a link to a ledger is that ledger. A path that resolves to nothing is kept as written (read at HEAD, or refused).
 function realOr(p) { try { return fs.realpathSync(p); } catch (e) { return p; } }
-function evidenceOf(root, fields, at) {
+function evidenceOf(root, fields, at, base) {
   const a = fields.map(x => x.trim()).find(x => /^reason (?:holds|gone)\b/i.test(x));
   const groups = a ? [...a.matchAll(/\(((?:`[^`\n]*`|[^()`])*)\)/g)].filter(g => /:\d/.test(g[1])) : [];   // a backticked path may hold a parenthesis
   const g = groups.length ? groups[groups.length - 1] : null;
   const premise = a && g ? a.replace(g[0], ' ').replace(/^reason (?:holds|gone)\b[\s:—–-]*/i, '').trim() : '';
   const locs = g ? [...g[1].trim().matchAll(LOC_RE)] : [], ev = [];
   if (!a || !g || !/[\p{L}\p{N}]/u.test(premise) || !locs.length) die(at + ' answers the reason question without its evidence' + (a ? ' (read: "' + a + '")' : '') + ': the answer is a field of its own, `reason holds: <the premise, as the code the diff leaves shows it> (<file:line>)` or `reason gone: <what the diff changed> (<file:line>)`; a range `<file:first-last>`, or several locations with commas, will do (protocol step 4, D27)', 2);
-  for (const L of locs) ev.push(heldLine(root, L, at + ' points its evidence'));
+  for (const L of locs) ev.push(heldLine(root, L, at + ' points its evidence', base));
   return ev;
 }
 // A location held as evidence (D27): a line of a file in the repository, before or after the diff, the file its path
-// resolves to (FORMAT.md 1). `lead` says what points there, so a refusal names it.
-function heldLine(root, L, lead) {
+// resolves to (FORMAT.md 1). `lead` says what points there, so a refusal names it. Before the diff is the file as HEAD and
+// as the session's base hold it: the diff runs from the base, so a file the session deleted in a commit is located there (D40).
+function heldLine(root, L, lead, base) {
   const p = locPath(L), first = Number(L[3]), last = L[4] === undefined ? first : Number(L[4]), abs = path.resolve(root, p), where = L[0].trim();
   if (!isWithin(abs, root)) die(lead + ' outside the repository: ' + where, 2);
   const real = realOr(abs);
   if (!isWithin(real, realOr(root))) die(lead + ' outside the repository: ' + where + ' is a link to a file outside it (FORMAT.md 1)', 2);
-  let now = null, then = null;
+  let now = null;
   if (isFile(abs)) { try { now = fs.readFileSync(abs, 'utf8'); } catch (e) { now = null; } }
-  const h = sh('git', ['cat-file', 'blob', 'HEAD:./' + rel(root, abs).split(path.sep).join('/')], root); if (h.status === 0) then = h.stdout;
-  const count = Math.max(lineCount(now), lineCount(then));
+  const blobAt = rev => { const h = sh('git', ['cat-file', 'blob', rev + ':./' + rel(root, abs).split(path.sep).join('/')], root); return h.status === 0 ? h.stdout : null; };
+  const count = Math.max(lineCount(now), lineCount(blobAt('HEAD')), base && base !== 'HEAD' ? lineCount(blobAt(base)) : 0);
   // a bare path that follows a space or a parenthesis may be the tail of one that holds them: the refusal says how to write it whole
   const cut = L[1] === undefined && L.index > 0 && /[\s(]/.test(L.input[L.index - 1]) ? '; a path with a space or a parenthesis is written in backticks, `like this.js`:12 (D23)' : '';
   if (!(first >= 1 && last >= first && last <= count)) die(lead + ' at ' + where + ', which is not a line of a file in this repository, before or after the diff (D27)' + cut, 2);
@@ -2388,7 +2389,7 @@ function ownClaim(root, f, ev, at) {
   });
   if (ev.length && why.every(Boolean)) die(at + ' answers "reason holds" with its own claim as the evidence — ' + Array.from(new Set(why)).join(' and ') + ': a ruling\'s text restates the claim and the failure\'s own line is the contradiction, so neither shows the premise; point the evidence at the line that shows it, as the code the diff leaves shows it, and record again (D36)', 2);
 }
-function holdToLines(root, v, failures, lines) {
+function holdToLines(root, v, failures, lines, base) {
   if (!lines.length) die('verdict: a ' + v + ' names its located failures: --reason "<one per line: pack · F<n> · file:line · what · route>"', 2);
   if (lines.length !== failures) die('verdict: --failures ' + failures + ' but --reason carries ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ': one located failure per line, and the count is theirs', 2);
   let ids = null;
@@ -2403,20 +2404,20 @@ function holdToLines(root, v, failures, lines) {
     const gone = /\b(?:reason gone|cite stale)\b/i.test(said), holds = /\breason holds\b/i.test(said);
     if (gone && holds) die(at + ' says both that the reason holds and that it is gone', 2);
     const names = f[0] === 'code' && (f[3].match(/(?<![\p{L}\p{N}_])[A-Za-z]+[1-9]\d*(?![\p{L}\p{N}_])/gu) || []).some(t => rulingIds().has(t));
-    if (names && !gone && !holds && /\b(?:reason (?:holds|gone)|cite stale)\b/i.test(mid.join(LOCATED_SEP))) evidenceOf(root, mid, at);   // an answer said inside another field is told where it goes
+    if (names && !gone && !holds && /\b(?:reason (?:holds|gone)|cite stale)\b/i.test(mid.join(LOCATED_SEP))) evidenceOf(root, mid, at, base);   // an answer said inside another field is told where it goes
     if (names && !gone && !holds) die(at + ' names a ruling and says nothing of its reason: after what the diff breaks, write "reason holds: <the premise> (<file:line>)", or "reason gone: <what changed> (<file:line>)" (or "cite stale"), then the route (protocol step 4)', 2);
-    if (holds || /\breason gone\b/i.test(said)) { const ev = evidenceOf(root, mid, at); if (holds) ownClaim(root, f, ev, at); }
+    if (holds || /\breason gone\b/i.test(said)) { const ev = evidenceOf(root, mid, at, base); if (holds) ownClaim(root, f, ev, at); }
     else if (gone) {                                                   // `cite stale`: the failure's own location is its evidence (D27)
       const own = [...String(f[2]).matchAll(LOC_RE)];
       if (!own.length) die(at + ' says cite stale, whose evidence is its own location, and ' + f[2] + ' names no line of a file (D27)', 2);
-      for (const L of own) heldLine(root, L, at + ' says cite stale, whose evidence is its own location, and points');
+      for (const L of own) heldLine(root, L, at + ' says cite stale, whose evidence is its own location, and points', base);
     }
     if (gone) stale += 1;
     // the failure's own location is held as its evidence is (D23, D27): a line of a file in the repository, before or after the
     // diff — read after the answer, so a line that skipped the question is told so first
     const own = [...String(f[2]).matchAll(LOC_RE)];
     if (!own.length) die(at + ' locates its failure at "' + f[2] + '", which names no line of a file: the third field is <file:line> — a range <file:first-last>, or several with commas, will do, and a path with a space or a parenthesis is written in backticks, `like this.js`:12 (protocol step 4, D23)', 2);
-    for (const L of own) heldLine(root, L, at + ' locates its failure');
+    for (const L of own) heldLine(root, L, at + ' locates its failure', base);
   });
   if (v === 'STALE' && stale < lines.length) die('verdict: STALE is the verdict only when every failure is a stale one (protocol step 6); ' + (lines.length - stale) + ' of these ' + lines.length + (lines.length - stale === 1 ? ' is' : ' are') + ' not: record FAIL, with the stale ones and their addendum route among its lines', 2);
   if (v === 'FAIL' && stale === lines.length) die('verdict: every failure here is a stale one: the verdict is STALE, not FAIL (protocol step 6)', 2);
@@ -2434,11 +2435,12 @@ function verdict(argv) {
   if (reason !== null && UNSAFE_RE.test(reason)) die('verdict: --reason carries a control or bidi character', 2);
   const lines = reason === null ? [] : String(reason).split('\n').map(x => x.trim()).filter(Boolean);
   if (v === 'PASS' && lines.length) die('verdict: a PASS names no located failures; --reason is for a FAIL or a STALE', 2);
-  if (v !== 'PASS') holdToLines(root, v, failures, lines);            // D23
+  const base = sessionBase(root, loadState(root), id);                 // the diff's own start (D40): a line before the diff is one there too
+  if (v !== 'PASS') holdToLines(root, v, failures, lines, base);      // D23
   // A verdict is the judgement of the diff in front of the judge: a hash the working tree does not hash to is another diff's,
   // and counted here it would be counted again by the stop, which reads no record for its own, or reset the count at every
   // stop and never surface the session (D11, D38). It is refused, with the way to record it.
-  const now = governedDiff(root, sessionBase(root, loadState(root), id)).hash, given = flag(argv, '--hash');
+  const now = governedDiff(root, base).hash, given = flag(argv, '--hash');
   if (given !== null && !String(given).trim()) die('verdict: --hash names no diff: its value is empty or blank; give the hash the gate printed, or leave the option out and the diff in front of you is recorded (FORMAT.md 16)', 2);   // an option accepted and ignored is a silence
   if (given && given !== now) die('verdict: --hash ' + given + ' is not the diff in front of you: the working tree\'s governed diff hashes to ' + now + ' now; run `docket gate` for the hash, judge the diff it names, and record again', 2);
   const hash = now;

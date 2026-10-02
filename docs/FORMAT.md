@@ -685,7 +685,10 @@ held to the same rule (D27). A line is a stale one when its answer is `reason go
 `cite stale`: STALE is refused unless every line is a stale one and FAIL when every
 line is; a PASS carries no reason (D23). A line's own location, its third field,
 is held as its evidence is: each `<file:line>` there a line of a file in the
-repository before or after the diff, or the record is refused. A path with a
+repository before or after the diff, or the record is refused. Before the diff is
+the file as the session's base and as `HEAD` hold it — a governed file the session
+deleted in a commit is located there, since the diff runs from the base (D40) —
+and after it, the working tree's. A path with a
 space or a parenthesis is written in backticks, `` `app/(group)/login.js`:46 ``,
 in the location and in the evidence alike (D23).
 

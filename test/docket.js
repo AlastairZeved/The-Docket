@@ -5270,5 +5270,19 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and the most is taken: the judge starts and the stop decides', most.code === 0 && /"decision":"block"/.test(most.out) && fs.existsSync(path.join(d, '.docket', 'judge.log')), most.code + ' ' + most.out + most.err);
 }
 
+// ── a line before the diff is a line of the file at the session's base: a governed file deleted in a commit is located (D40) ──
+{
+  const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'gone.js'), 'const g = 1; // R2\nconst h = 2;\n'));
+  const g = (args) => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(args), d);
+  docket(['status', '--session-start'], { cwd: d, input: JSON.stringify({ session_id: 'f', cwd: d }) });
+  g(['rm', '-q', 'test/fixture/gone.js']); g(['commit', '-qm', 'gone']);
+  const j = docket(['gate', '--session', 'f'], { cwd: d });
+  const rec = loc => docket(['verdict', 'FAIL', '--failures', '1', '--session', 'f', '--reason', 'code · F2 · ' + loc + ' · the check fails on the deleted file · run it'], { cwd: d });
+  const r1 = rec('test/fixture/gone.js:2');
+  ok('verdict: a failure located on a line of a governed file the session deleted in a commit is recorded, the file read at the session’s base, where it had been refused as no line before or after the diff (FORMAT.md 16, D40)', /^JUDGE [0-9a-f]{64} .*test\/fixture\/gone\.js/.test(j.out) && r1.code === 0 && recorded(d, 'FAIL', 'code · F2 · test/fixture/gone.js:2 · the check fails on the deleted file · run it'), j.out + r1.code + ' ' + r1.err);
+  const r2 = rec('test/fixture/gone.js:3');
+  ok('…and a line past the end it had at the base is refused, as before', r2.code === 2 && /which is not a line of a file in this repository, before or after the diff/.test(r2.err), r2.code + ' ' + r2.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
