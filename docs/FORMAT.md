@@ -507,7 +507,8 @@ tool result, marked `[result]`, or `[result, error]` where the host marks it one
 a call or result over forty lines prints forty in all — its first ten, the count
 between and its last twenty-nine, so the mark stands for two lines or more (D42) —
 and a line of one over four hundred characters is cut, marked (D14), the maker's
-own text printed whole; `transcript --last <n>` keeps the last n assistant turns
+own text printed whole; `transcript --last <n>`, n a positive whole number written
+as digits, keeps the last n assistant turns
 and what follows the first of them, and n at or past the number of assistant turns
 keeps the whole transcript, as no `--last` does; `stop` prints its answer as
 it always does, and `{}` for a stop it allows, where it otherwise prints nothing.
@@ -742,7 +743,9 @@ is surfaced; it blocks, with the residue and no judge, a stop at which the gate
 surfaces the session. For any other stop it starts the judge with a prompt that
 names the core by its path, the permission's spelling when given, and the hook
 input's session, transcript path and directory — none of what the maker wrote;
-waits for it to end, up to `--wait` seconds (700 by default), then stops
+waits for it to end, up to `--wait` seconds (700 by default; a whole number
+written as digits, at most 9007199254740, the most seconds whose milliseconds are
+counted exactly), then stops
 it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
 for this diff and this session since the judge started is relayed as a block
 carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`

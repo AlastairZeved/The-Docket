@@ -2524,7 +2524,9 @@ function stop(argv) {
   if (typeof input !== 'object' || Array.isArray(input)) input = {};
   const waitRaw = flag(argv, '--wait');
   const waitS = waitRaw === null ? STOP_WAIT : /^\d+$/.test(waitRaw) ? Number(waitRaw) : NaN;   // a whole number written as one: not 1e3, 0x10 or +2
-  if (!(Number.isInteger(waitS) && waitS >= 1)) die('stop: --wait takes a whole number of seconds, one or more: the bound on the judge it starts', 2);
+  // at most the seconds whose milliseconds are counted exactly: past them the timer's number is a rounded one, and measured, one
+  // so large never fires, so the bound would be none and the stop's lines would print a number not written (FORMAT.md 16)
+  if (!(Number.isInteger(waitS) && waitS >= 1 && waitS <= Math.floor(Number.MAX_SAFE_INTEGER / 1000))) die('stop: --wait takes a whole number of seconds, one or more and at most ' + Math.floor(Number.MAX_SAFE_INTEGER / 1000) + ': the bound on the judge it starts', 2);
   const named = sessionOpt(argv);                                     // an option is read before the host's flag, as --wait is: one naming no session is refused at a re-entry too
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
@@ -2637,7 +2639,7 @@ function transcript(argv) {
   if (!given) die('usage: docket transcript <path> [--last <n>]', 2);
   const p = path.resolve(process.cwd(), given);
   if (!isFile(p)) die('transcript: cannot read ' + given, 2);
-  const last = flag(argv, '--last'); const keep = last === null ? Infinity : Number(last);
+  const last = flag(argv, '--last'); const keep = last === null ? Infinity : /^\d+$/.test(last) ? Number(last) : NaN;   // digits, as --wait and --failures take: not 1e1 or 0x10
   if (!(Number.isInteger(keep) && keep > 0) && last !== null) die('transcript: --last takes a positive integer', 2);
   const lines = splitLines(readText(p)); const turns = []; let plain_ = true;
   for (const line of lines) {

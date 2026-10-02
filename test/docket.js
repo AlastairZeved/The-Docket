@@ -5257,5 +5257,18 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and one that names a session is allowed at the re-entry, as before', ra.code === 0 && ra.out === '' && ra.err === '', ra.code + ' ' + ra.out + ra.err);
 }
 
+// ── transcript's --last is digits; the stop's --wait is at most the seconds whose milliseconds are exact (FORMAT.md 13, 16) ──
+{
+  const td = tmpDir('last-');
+  fs.writeFileSync(path.join(td, 't.jsonl'), JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'One.' }] } }) + '\n');
+  const rl = ['1e1', '0x10', '+2', '1.0'].map(n => docket(['transcript', path.join(td, 't.jsonl'), '--last', n]));
+  ok('transcript --last takes a positive whole number written as digits: 1e1, 0x10, +2 and 1.0 are refused, exit 2, as --wait and --failures refuse them', rl.every(r => r.code === 2 && /--last takes a positive integer/.test(r.err)), rl.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  const d = tempRepo(); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const w = 1; // R2\n');
+  const big = docket(['stop', '--wait', '9007199254741', '--judge', 'true'], { cwd: d, input: '{"session_id":"w"}' });
+  ok('stop: a --wait past 9007199254740 seconds is refused, exit 2, naming the most it takes, and no judge starts', big.code === 2 && /^stop: --wait takes a whole number of seconds, one or more and at most 9007199254740:/m.test(big.err) && !fs.existsSync(path.join(d, '.docket', 'judge.log')), big.code + ' ' + big.err);
+  const most = docket(['stop', '--wait', '9007199254740', '--judge', 'true'], { cwd: d, input: '{"session_id":"w"}' });
+  ok('…and the most is taken: the judge starts and the stop decides', most.code === 0 && /"decision":"block"/.test(most.out) && fs.existsSync(path.join(d, '.docket', 'judge.log')), most.code + ' ' + most.out + most.err);
+}
+
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
