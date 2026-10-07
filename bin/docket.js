@@ -189,8 +189,10 @@ function stopRoot(cwd) {
 // directory the walk passes is given its answer, which depends on the directory and the root alone: a walk over many files
 // looks at each directory once (D14's addendum).
 function findLedger(filePath, root, memo) {
-  let dir = path.resolve(path.dirname(filePath)), found = null;
-  const stop = path.resolve(root), passed = [];
+  const raw = path.dirname(filePath);
+  if (memo && memo.has(raw)) return memo.get(raw);                    // the directory as given, before it is resolved: one resolution per directory, not one per file (D14's addendum)
+  let dir = path.resolve(raw), found = null;
+  const stop = path.resolve(root), passed = [raw];
   for (;;) {
     if (memo && memo.has(dir)) { found = memo.get(dir); break; }
     passed.push(dir);
@@ -484,10 +486,37 @@ function ledgerSpecs(ledger) {
 // ─── 3. cites ───────────────────────────────────────────────────────────────
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+// The ledger's cite pattern — its prefixes on word boundaries, a numeral with no leading zero and fifteen digits at most
+// (FORMAT.md 2, 8) — built once per ledger and not once per line read (D14's addendum). Global: each call runs it to its end.
+function citeRe(ledger) {
+  if (!ledger.prefixes.length) return null;
+  if (!ledger.citeRe) ledger.citeRe = new RegExp(NOT_WORD_BEFORE + '(' + ledger.prefixes.map(escapeRe).join('|') + ')([1-9]\\d{0,14})' + NOT_WORD_AFTER, 'gu');
+  ledger.citeRe.lastIndex = 0;
+  return ledger.citeRe;
+}
+// The lines of a text that can hold a cite — a prefix of the ledger's and a numeral on word boundaries, or a spec document's
+// name before § — found by one pass of one pattern over the whole text, each match's line counted forward from the last, so a
+// file of a million lines costs one scan and not a pattern run per line (D14's addendum). A superset of the lines with a cite:
+// each is then read as every line was, its code spans masked and a fenced block left out. Ascending, each line once.
+function citeLines(text, ledger) {
+  if (!ledger.lineRe) {
+    const alts = ledger.prefixes.length ? ['(?:' + ledger.prefixes.map(escapeRe).join('|') + ')[1-9]\\d{0,14}' + NOT_WORD_AFTER] : [];
+    alts.push('(?:UIUX|PRD) ?§\\d');
+    ledger.lineRe = new RegExp(NOT_WORD_BEFORE + '(?:' + alts.join('|') + ')', 'gu');
+  }
+  const re = ledger.lineRe; re.lastIndex = 0;
+  const at = []; let from = 0, line = 1, m;
+  while ((m = re.exec(text)) !== null) {
+    for (let k = from; k < m.index; k++) if (text.charCodeAt(k) === 10) line++;
+    from = m.index;
+    if (at.length === 0 || at[at.length - 1] !== line) at.push(line);
+  }
+  return at;
+}
 // Ruling cites: an id on word boundaries whose prefix is one of the ledger's; `exists` says whether the number is defined.
 function citesInLine(line, ledger) {
-  if (!ledger.prefixes.length) return [];
-  const re = new RegExp(NOT_WORD_BEFORE + '(' + ledger.prefixes.map(escapeRe).join('|') + ')([1-9]\\d{0,14})' + NOT_WORD_AFTER, 'gu');   // FORMAT.md 2, 8: no leading zero, and fifteen digits at most — a longer numeral is no id
+  const re = citeRe(ledger);
+  if (!re) return [];
   const found = [];
   let m;
   const scan = maskCode(line);                                        // FORMAT.md 8: an id in a code span is quoted, not cited
@@ -504,9 +533,15 @@ function fencedLines(lines) {
   }
   return out;
 }
-function citesIn(text, ledger) {
-  const all = [], lines = splitLines(text), fenced = fencedLines(lines);
-  lines.forEach((l, i) => { if ((i & 4095) === 4095) inTime(); if (fenced[i]) return; for (const c of citesInLine(l, ledger)) all.push(Object.assign({ line: i + 1, text: l }, c)); });   // the bound within one file (D14's addendum)
+// Every cite of a text, in order: the candidate lines of one pass (citeLines), each read as every line was. `lines` and `fenced`,
+// when the caller has split the text already, are its own and not split again.
+function citesIn(text, ledger, lines, fenced) {
+  inTime();                                                           // the bound within one file (D14's addendum)
+  const at = citeLines(text, ledger);
+  if (!at.length) return [];
+  const all = []; let n = 0;
+  lines = lines || splitLines(text); fenced = fenced || fencedLines(lines);
+  for (const ln of at) { if ((++n & 4095) === 4095) inTime(); if (ln > lines.length || fenced[ln - 1]) continue; for (const c of citesInLine(lines[ln - 1], ledger)) all.push(Object.assign({ line: ln, text: lines[ln - 1] }, c)); }
   return all;
 }
 const SPEC_CITE_RE = /(?<![\p{L}\p{N}_])(UIUX|PRD) §(\d+(?:\.\d+){0,2})/gu;   // the heading's depth (FORMAT.md 8): `UIUX §4.5.1.1` cites `UIUX §4.5.1`
@@ -549,6 +584,7 @@ function walkFiles(dir, acc, root, seen) {
 function loadContext(root, opts) {
   opts = opts || {};
   let files = trackedFiles(root);
+  const fromGit = files !== null;                                     // git's list, or the walk's: the cite files are asked of git only for its own
   if (files === null) files = walkFiles(root, [], root);
   if (opts.includeUntracked) files = files.concat(untrackedFiles(root));
   // The judge's own state is never a governed file, whatever the project's .gitignore says: its verdicts and its trail
@@ -565,17 +601,19 @@ function loadContext(root, opts) {
     // costs the listing of its names, not a read of each file (D14's addendum). One named docket.js is read wherever it lies,
     // to tell the vendored witness (D9).
     if (!lp && path.basename(f) !== 'docket.js') continue;
-    if (!isFile(f)) continue;
+    let st; try { st = fs.lstatSync(f); } catch (e) { continue; }   // one stat per file; a link is read through, and marked, since git grep skips it
+    const link = st.isSymbolicLink();
+    if (link ? !isFile(f) : !st.isFile()) continue;
     // A ledger saved as UTF-16, or holding a NUL byte, is no text file, and alone in its tree no text file leads to it: it is
     // read as a ledger where it stands, so that check 2 names it and the tree does not read as governed by none (D45's addendum)
     if (!isTextFile(f)) { if (lp === path.resolve(f) && !ledgers.has(lp)) ledgers.set(lp, loadLedger(lp)); continue; }
     if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
     if (!lp) continue;
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
-    entries.push({ path: f, ledger: lp, rel: rel(root, f) });
+    entries.push({ path: f, ledger: lp, rel: rel(root, f), link });
   }
   seedLedgerText(entries, ledgers);                                   // one read per file, so one version per run
-  return { root, ledgers, files: entries, vendored };
+  return { root, ledgers, files: entries, vendored, fromGit, untracked: !!opts.includeUntracked };
 }
 // A file whose text is this program's own, at another path, is the witness `vendor` copied there (D9). Its
 // comments cite this plugin's rulings and the fixture's examples, which resolve to nothing under the ledger it
@@ -611,11 +649,28 @@ function isLedgerDoc(p, text) {
   try { if (typeof t === 'function') t = t(); } catch (e) { t = null; }
   return typeof t === 'string' && splitLines(t).some(l => HEADING_RE.test(l));
 }
+// The files a ledger's cites can lie in, asked of git in one pass — `git grep -l -w -E` for a prefix and a numeral on word
+// boundaries over the tracked files and, with the context's untracked ones, those too — so that the files that can hold a cite
+// are read and no other (D14's addendum). git's word is the ASCII one, narrower than a cite's [\p{L}\p{N}_], and every file is
+// read as text (-a, as the gate diffs them), so the list is a superset of the files with a cite. git grep reads no symbolic
+// link: a link is read whatever the list says. A context from a walk and not from git, a ledger with no prefix, or a git that
+// answers with neither a list nor an empty one leaves every file read, as before.
+function citeFiles(ctx, ledger) {
+  if (!ctx.fromGit || !ledger.prefixes.length || ledger.prefixes.some(p => !/^[A-Za-z]+$/.test(p))) return null;
+  if (!ctx.citeFiles) ctx.citeFiles = new Map();
+  if (ctx.citeFiles.has(ledger.path)) return ctx.citeFiles.get(ledger.path);
+  const args = ['-c', 'grep.fullName=false', 'grep', '-l', '-z', '-w', '-E', '-a', '--no-color', '--no-textconv', '--no-recurse-submodules']
+    .concat(ctx.untracked ? ['--untracked'] : [], ['-e', '(' + ledger.prefixes.join('|') + ')[1-9][0-9]*']);
+  const r = sh('git', args, ctx.root);
+  const set = r.status === 0 ? new Set(r.stdout.split('\0').filter(Boolean)) : r.status === 1 && !r.stderr ? new Set() : null;
+  ctx.citeFiles.set(ledger.path, set);
+  return set;
+}
 // Code cites: resolving cites in every governed file of a ledger except the ledger itself.
 function codeCites(ctx, ledger) {
-  const cites = [];
+  const cites = [], cand = citeFiles(ctx, ledger);                   // the files that can hold a cite, or null for every file
   for (const e of ctx.files) {
-    if (e.ledger !== ledger.path || isLedgerDoc(e.path, () => fileText(e))) continue;
+    if (e.ledger !== ledger.path || (cand && !e.link && !cand.has(e.rel)) || isLedgerDoc(e.path, () => fileText(e))) continue;
     // One line, one cite, HERE: the same id twice on a line is one reliance for the code-cite
     // lists — what governs prints and what "cited nowhere" counts. near does not share this
     // rule: its count is per occurrence and is the first key of two of its three orders
@@ -725,18 +780,21 @@ function near(argv) {
   const byId = new Map();
   const specs = [];
   // The union of the windows (D7): a line inside two overlapping windows is read once, at its distance to the
-  // nearest anchor — a union, not a sum, so a cite counts once however many windows hold it.
-  const nearest = new Map();                                           // line -> distance to the nearest anchor
-  windows.forEach((w, wi) => {
-    const anchor = anchors[wi];
-    for (let ln = w[0]; ln <= w[1]; ln++) {
-      const d = anchor === undefined ? ln : (ln < anchor ? anchor - ln : ln > anchor + span ? ln - (anchor + span) : 0);   // inside the edited span, distance is 0
-      if (!nearest.has(ln) || d < nearest.get(ln)) nearest.set(ln, d);
-    }
-  });
-  for (const ln of Array.from(nearest.keys()).sort((a, b) => a - b)) {
+  // nearest anchor — a union, not a sum, so a cite counts once however many windows hold it. The lines read are the ones
+  // that can hold a cite (citeLines), each at its distance to the nearest anchor, found among the ascending anchors by
+  // halving: a Write of a long file is one scan of its text, not a pattern run per line and a map of every line (D14's addendum)
+  const distTo = ln => {                                               // a whole file's distance is the line itself (no anchor)
+    if (!anchors.length) return ln;
+    let lo = 0, hi = anchors.length - 1;                               // the last anchor at or before the line, or the first
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (anchors[mid] <= ln) lo = mid; else hi = mid - 1; }
+    const dOf = a => ln < a ? a - ln : ln > a + span ? ln - (a + span) : 0;   // inside the edited span, distance is 0
+    return lo + 1 < anchors.length ? Math.min(dOf(anchors[lo]), dOf(anchors[lo + 1])) : dOf(anchors[lo]);
+  };
+  for (const ln of citeLines(text, ledger)) {
+    const d = distTo(ln);
+    if (anchors.length && d > WINDOW) continue;                        // outside every window; a whole file has no anchor and no edge
     if (fenced[ln - 1]) continue;                                      // FORMAT.md 8: a fenced block is quoted
-    const l = lines[ln - 1], d = nearest.get(ln);
+    const l = lines[ln - 1];
     for (const c of citesInLine(l, ledger)) {
       if (!c.exists) continue;
       const d0 = anchors.length ? (ln < anchors[0] ? anchors[0] - ln : ln > anchors[0] + span ? ln - (anchors[0] + span) : 0) : ln;
@@ -761,7 +819,7 @@ function near(argv) {
   const outLines = [];
   const obj = { ledger: ledgerRel, file: fileRel, mode, anchors, region: where, rulings: [], more: 0, edges: [], addenda: [], specCites: [], notice: null };
   if (byId.size === 0) {
-    const governed = citesIn(text, ledger).some(c => c.exists);
+    const governed = citesIn(text, ledger, lines, fenced).some(c => c.exists);
     if (!governed) return 0;                                            // not governed: silent
     obj.notice = 'no ruling is cited in this window; run docket governs <id> for the one you rely on.';
     outLines.push('Governed here (' + shown(ledgerRel) + ', ' + shown(where) + '): ' + obj.notice);   // one line, as D7's addendum and FORMAT.md 15 say

@@ -4961,6 +4961,29 @@ const SEC = String.fromCharCode(0xa7);
     ok('…while a session with no base reads from HEAD — SKIP, nothing governed changed — and that call records the new HEAD as its base', n === 'SKIP\n' && base('nb') === headOf() && headOf() !== head0, n.slice(0, 200) + ' ' + String(base('nb')));
     fs.rmSync(d, { recursive: true, force: true });
   }
+  // F8: discovery reads the files that can hold a cite and no other, and answers as before (D14's addendum)
+  {
+    const d = tempRepo(x => {
+      const f = path.join(x, 'test', 'fixture');
+      fs.writeFileSync(path.join(f, 'quoted.js'), 'quote(); // “R2” — a cite between quotation marks that are no ASCII word\n');
+      fs.writeFileSync(path.join(f, 'glued.js'), 'glued(); // éR2 is no cite, and R2é none: this file is read and cites nothing\n');
+      fs.symlinkSync('quoted.js', path.join(f, 'lnk.js'));            // a link to a file with no bare § cite, so check 4's allowance for app.js is not asked of lnk.js
+    });
+    const g = docket(['governs', 'R2', '--ledger', 'test/fixture/DECISIONS.md'], { cwd: d }).out;
+    ok('a cite between non-ASCII quotation marks is found: the file list git narrows discovery to is a superset of the files with a cite (D14’s addendum)', /^  test\/fixture\/quoted\.js:1  /m.test(g), g);
+    ok('…a tracked symbolic link to a governed file is read through, as before: git lists no link, and a link is read whatever the list says', /^  test\/fixture\/lnk\.js:1  /m.test(g), g);
+    ok('…and a file whose only such token sits against a letter cites nothing, as before', !/glued\.js/.test(g), g);
+    const c = docket(['check'], { cwd: d }), want = governedOf(d);
+    ok('…and the governed-tree count is FORMAT.md 1’s: every text file under the ledger, read for cites or not', c.code === 0 && c.out.includes('(' + want.ledgers + ' ledger, ' + want.files + ' governed-tree files)'), c.out.split('\n').slice(-2).join(' ') + ' want ' + want.files);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+  // F9: near's window under the one scan ends where it did: twenty lines above the edit's first line and twenty below its last (D2, D7)
+  {
+    const d = tempRepo(x => { fs.writeFileSync(path.join(x, 'test', 'fixture', 'edge.js'), ['far(); // R3'].concat(Array.from({ length: 20 }, (_, i) => 'pad' + i + '();'), ['edge(); // R4'], Array.from({ length: 19 }, (_, i) => 'mid' + i + '();'), ['anchor();', 'anchor2();'], Array.from({ length: 19 }, (_, i) => 'low' + i + '();'), ['near(); // R5', 'out(); // R6']).join('\n') + '\n'); });
+    const n = docket(['near'], { cwd: d, input: nearInput(path.join(fx(d), 'edge.js'), 'anchor();\nanchor2();') }).out;
+    ok('a cite exactly twenty lines above a two-line edit’s first line, and one exactly twenty below its last, are in the window; the line past each is not (D2, D7)', /^  R4  /m.test(n) && /^  R5  /m.test(n) && !/^  R3  /m.test(n) && !/^  R6  /m.test(n) && /edge\.js:42–43/.test(n), n);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   // G: the bound in force, with no --wait
   {
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 11; // R2\n');
