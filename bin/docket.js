@@ -698,6 +698,7 @@ function near(argv) {
   const lp = findLedger(file, pr || path.parse(path.resolve(startDir)).root);
   if (!lp) return 0;                                                   // ungoverned tree: silent
   recordCore(pr || ledgerHome(lp));                                    // the judge finds the core through this file (16)
+  if (pr && typeof input.session_id === 'string' && input.session_id) ensureSessionBase(pr, sessionKey(input.session_id));   // the session's first call records its base (D40's addendum)
   if (isLedgerDoc(file, () => readText(file))) return 0;               // FORMAT.md 8: the ledger, or a copy of one, is amended through append; a direct edit is check 7's business
   if (isSelfCopy(file)) return 0;                                      // D9: the vendored witness cites another ledger; a list from it would be wrong, so there is none
   if (rel(pr || ledgerHome(lp), file).split('/').includes('.docket')) return 0;   // D26: the judge's state is outside the governed set, the window's as the walk's
@@ -2157,6 +2158,18 @@ function sessionBase(root, st, id) {
   return 'HEAD';
 }
 function headCommit(root) { const r = sh('git', ['rev-parse', '--verify', '-q', 'HEAD'], root); return r.status === 0 ? r.stdout.trim() : null; }
+// A session's first call records the commit its diff runs from when the session-start hook did not — the host runs no such
+// hook, or the session began before it was bound (D40's addendum): HEAD at that call, so a commit later in the session stays
+// in the gate's range. A session with a base keeps it; a tree with no commit records none; a lock held past a second, or a
+// state with nowhere to go, records none, and the diff runs from HEAD as one with no base does.
+function ensureSessionBase(root, id) {
+  const s = loadState(root).sessions[id];
+  if (s && s.base) return;
+  const head = headCommit(root);
+  if (!head) return;
+  try { withState(root, st => { const x = Object.assign(freshSession(), st.sessions[id] || {}); if (!x.base) x.base = head; st.sessions[id] = x; }, { wait: SESSION_START_WAIT_MS, orSkip: true }); }
+  catch (e) { /* nowhere to go: the diff runs from HEAD */ }
+}
 // Files the base governed that the working tree does not show as governed — deleted, stripped of their last cite, or under
 // a ledger that is gone — a ledger the base held that is gone, and a spec document beside it that is gone. A diff that
 // removes a governed file touches a governed file (D10), so each is in the diff (D22). Governed is read at the base: the
@@ -2257,7 +2270,7 @@ function governedDiff(root, base) {
       for (const f of rels) if (isFile(path.join(root, f))) { text += '+++ ' + f + '\n' + readText(path.join(root, f)); touched.push(f); }
     }
   }
-  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, base, rels: fromGit ? rels : [], untracked };
+  return { hash: sha256(text), touched: uniq(touched), empty: text === '', text, base, rels: fromGit ? rels : [], untracked, ledgers: ctx.ledgers.size };
 }
 // The diff the judge reads: the hashed text with each touched function whole, so that a ruling's premise in the same
 // function is on the page and not a file read away; a host caps a judge's turns (D30). Beneath it, each ruling cited
@@ -2338,6 +2351,7 @@ function gateDecide(root, id) {
     d = { hash: sha256(''), touched: [], empty: true, text: '', base: 'HEAD', rels: [], untracked: [] };
     return { decision: 'SKIP', reason: 'no ledger governs the working directory, and the tree past the walk\'s bound is not read', d, st, sess };
   }
+  if (d.ledgers) ensureSessionBase(root, id);                         // a governed session's first call records where its diff runs from (D40's addendum)
   if (d.empty || d.hash === st.lastPassHash) return { decision: 'SKIP', reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff', d, st, sess };   // D10
   if (sess.surfaced) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
   const h = sess.history;
