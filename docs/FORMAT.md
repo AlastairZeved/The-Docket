@@ -677,7 +677,11 @@ heuristic, no hunks joined, git's own order of files, paths quoted as git quotes
 them, a blank context line kept — so one diff is the same text on every run and
 every machine (D40's addendum). How the checkout holds its files — its line
 endings, the filters its attributes name — is read as configured: read past it,
-a clean file would show as changed. A diff the gate cannot read whole is
+a clean file would show as changed; save that every file is diffed as text
+(`--text`), since a governed file is text — it carries a cite, and a NUL in its
+first 8000 bytes ungoverns it (1) — and a `-diff` attribute that called one
+binary had the diff say `Binary files differ` and show the judge no hunk (D40's
+addendum). A diff the gate cannot read whole is
 refused, exit 2, with the reason: the copy of the index not made, or the add
 failing, would leave every tracked file read as deleted; and a repository git
 will not read — its ownership, its config — is not a tree with no repository,

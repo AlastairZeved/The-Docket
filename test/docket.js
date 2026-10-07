@@ -4815,8 +4815,19 @@ const SEC = String.fromCharCode(0xa7);
   // F: the gate's hash recomputed from git's own diff
   {
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 10; // R2\n');
-    const h = hashOf(d, 'hh'), diff = cp.spawnSync('git', ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null', 'HEAD', '--no-renames', '-U3', '--', 'test/fixture/app.js'], { cwd: d, encoding: 'utf8' }).stdout;   // git's diff as FORMAT.md 16 pins it, written out here and not read from the core
+    const h = hashOf(d, 'hh'), diff = cp.spawnSync('git', ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--text', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null', 'HEAD', '--no-renames', '-U3', '--', 'test/fixture/app.js'], { cwd: d, encoding: 'utf8' }).stdout;   // git's diff as FORMAT.md 16 pins it, written out here and not read from the core
     ok('the gate’s hash is the SHA-256 of the diff it reads, recomputed here from git’s own diff of the one file the change touched (FORMAT.md 16)', diff.length > 0 && h === require('crypto').createHash('sha256').update(diff).digest('hex'), h);
+  }
+  // F3: a -diff attribute on a governed file hides no hunk — the diff is read as text (D40's addendum)
+  {
+    const d = tempRepo(); fs.writeFileSync(path.join(d, '.gitattributes'), 'test/fixture/app.js -diff\n');
+    const h0 = hashOf(d, 'ga');
+    fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 12; // R2\n');
+    const g = docket(['gate', '--session', 'ga', '--diff'], { cwd: d }).out;
+    ok('a governed file marked -diff in .gitattributes is diffed as text: the gate prints its hunk, not "Binary files differ" (D40’s addendum)', /^\+const q = 12; \/\/ R2$/m.test(g) && !/Binary files/.test(g), g.slice(0, 400));
+    fs.writeFileSync(path.join(d, '.gitattributes'), '');
+    ok('…and the hash is the same with the attribute and without it: the attribute changed what the diff showed, not what changed', hashOf(d, 'ga') === g.split('\n')[0].split(' ')[1] && h0 !== hashOf(d, 'ga'), g.split('\n')[0]);
+    fs.rmSync(d, { recursive: true, force: true });
   }
   // G: the bound in force, with no --wait
   {

@@ -95,8 +95,10 @@ function today() {
 // only how git prints a diff is pinned as well — the full blob names on the index line (core.abbrev), the default algorithm
 // and indent heuristic, no hunks joined, git's own order of files, paths quoted as git quotes them, a blank context line
 // kept — while how this checkout holds its files, its line endings and the filters its attributes name, is read as set:
-// read past it, a clean file would show as changed
-const GIT_DIFF_PIN = ['--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null'];
+// read past it, a clean file would show as changed. Every file is diffed as text (--text): a governed file is one — it
+// carries a cite, and a NUL in its first 8000 bytes ungoverns it (FORMAT.md 1) — so an attribute that calls it binary
+// (-diff) hid a hunk and nothing else, and the judge, shown "Binary files differ", scored no line of it (D40's addendum)
+const GIT_DIFF_PIN = ['--no-ext-diff', '--no-textconv', '--no-color', '--text', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null'];
 const GIT_DIFF = ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff'].concat(GIT_DIFF_PIN);
 function gitEnv(base) { const e = Object.assign({}, base || process.env, { GIT_LITERAL_PATHSPECS: '1' }); delete e.GIT_DIFF_OPTS; delete e.GIT_EXTERNAL_DIFF; return e; }
 function sh(cmd, args, cwd) {
