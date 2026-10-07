@@ -63,6 +63,20 @@ process.on('exit', () => { for (const d of TEMP_DIRS) { try { fs.rmSync(d, { rec
 }
 // A temporary directory the suite owns: removed at exit, whatever the tests did with it.
 function tmpDir(prefix) { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); TEMP_DIRS.push(d); return d; }
+// A directory the core cannot write into, for the assertions that read a refusal: its write bits cleared, and where that does not
+// bind — the witness run as root — the immutable attribute, where the filesystem has it. Answers the function that puts it back,
+// or null where neither held; the caller then says what it did not run.
+function unwritable(dir) {
+  const probe = () => { const p = path.join(dir, '.probe-' + process.pid); try { fs.writeFileSync(p, ''); fs.unlinkSync(p); return true; } catch (e) { return false; } };
+  const mode = fs.statSync(dir).mode & 0o7777;
+  fs.chmodSync(dir, 0o555);
+  if (!probe()) return () => fs.chmodSync(dir, mode);
+  const on = cp.spawnSync('chattr', ['+i', dir], { encoding: 'utf8' });
+  if (on.status === 0 && !probe()) return () => { cp.spawnSync('chattr', ['-i', dir]); fs.chmodSync(dir, mode); };
+  if (on.status === 0) cp.spawnSync('chattr', ['-i', dir]);
+  fs.chmodSync(dir, mode);
+  return null;
+}
 // The names D13 keeps out of the core's words — hosts, models, vendors — one list for every check of them; a word's boundary
 // where the name is also a word ("coheres" is not the vendor)
 const HOST_NAMES = /claude|anthropic|openai|\bsonnet|\bopus|haiku|\bfable\b|\bgpt|gemini|copilot|\bcursor\b|llama|mistral|mixtral|qwen|\bcohere\b|\bgrok\b|deepseek|windsurf|\bcline\b|replit|\bdevin\b|\bcodex\b|\baider\b|\bzed\b|\bMCP\b|model context protocol/i;
@@ -4878,6 +4892,32 @@ const SEC = String.fromCharCode(0xa7);
     const gj = JSON.parse(docket(['gate', '--session', 'h2', '--json'], { cwd: d }).out);
     const diff = cp.spawnSync('git', ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--text', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null', 'HEAD', '--no-renames', '-U3', '--', 'test/fixture/app.js', 'test/fixture/styles.css'], { cwd: d, encoding: 'utf8' }).stdout;
     ok('two tracked governed files changed: the JUDGE line names both, app.js before styles.css in path order, and its hash is the SHA-256 of git’s one diff of both (FORMAT.md 16)', first === 'JUDGE ' + gj.hash + ' test/fixture/app.js test/fixture/styles.css' && gj.files.join() === 'test/fixture/app.js,test/fixture/styles.css' && diff.length > 0 && gj.hash === require('crypto').createHash('sha256').update(diff).digest('hex'), first);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+  // F4: a count with nowhere to go — the block says it cannot be counted, and why, and carries the relay line (D11, FORMAT.md 16)
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 13; // R2\n');
+    fs.writeFileSync(path.join(d, '.docket'), 'x\n');
+    const stops = [1, 2].map(() => JSON.parse(docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'nc' }) }).out || '{}'));
+    const said = /This block cannot be counted — \.docket is a file, not a directory: the state has nowhere to go; move it aside — so the 5 blocks a session may take since its last PASS cannot surface it, and nothing of the judge is kept there: report this to the user verbatim, then stop again\./;
+    ok('a stop whose block count has nowhere to go — .docket a file — blocks, and its reason says the block cannot be counted, names why, and carries the relay line in place of "n of the 5" (D11, FORMAT.md 16)', stops[0].decision === 'block' && said.test(stops[0].reason) && !/ of the 5 a session/.test(stops[0].reason), JSON.stringify(stops[0]).slice(0, 700));
+    ok('…and the second stop says the same, not "2 of the 5": no count was kept', stops[1].decision === 'block' && said.test(stops[1].reason), JSON.stringify(stops[1]).slice(0, 700));
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+  // F5: a .docket/ the filesystem will not write — the verdict refuses with the path and the code, the stop's block says it cannot be counted
+  {
+    const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 14; // R2\n');
+    const dd = path.join(d, '.docket'); fs.mkdirSync(dd); fs.writeFileSync(path.join(dd, '.gitignore'), '*\n');
+    const H = hashOf(d, 'uw');
+    const restore = unwritable(dd);
+    if (!restore) console.error('  note: ' + dd + ' could be written as root with chmod and chattr both unavailable: the unwritable-state assertions were not run');
+    else {
+      const v = docket(['verdict', 'PASS', '--hash', H, '--session', 'uw'], { cwd: d });
+      ok('verdict under a .docket/ that cannot be written refuses, exit 2, naming the lock and the code, with no stack trace (FORMAT.md 16)', v.code === 2 && /^verdict: \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/m.test(v.err) && !/\n\s+at /.test(v.err), v.code + ' ' + v.err);
+      const s = JSON.parse(docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'uw' }) }).out || '{}');
+      ok('…and a stop there blocks with a block that says it cannot be counted, naming the lock and the code', s.decision === 'block' && /This block cannot be counted — \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/.test(s.reason), JSON.stringify(s).slice(0, 700));
+      restore();
+    }
     fs.rmSync(d, { recursive: true, force: true });
   }
   // G: the bound in force, with no --wait

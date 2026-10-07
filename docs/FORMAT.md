@@ -748,8 +748,12 @@ none, its hash, session and reason, when present, text. Each change is made unde
 a lock beside the file, `verdict.json.lock`, the state re-read inside it and written
 whole to a new file renamed over the old, so judges recording at once lose nothing.
 A state with nowhere to go — `.docket` a file, or `verdict.json` anything but a
-file — is refused by the verdict, exit 2, naming it, and the gate's answer and the
-stop's block stand without it.
+file, or a directory, lock or file the filesystem will not write (`EACCES`, `EPERM`,
+`EROFS`, `ENOSPC`) — is refused by the verdict, exit 2, naming the path and the
+code, never a stack; the gate's answer stands without its mark, and the stop's block
+stands without its count and says so: that it cannot be counted, and why, so that
+the five blocks that would surface the session cannot come, and that the maker is
+to report the line to the user verbatim and stop again.
 A lock names its holder, and one whose holder is gone is taken over, the ledger's
 lock and the state's alike; the state's held past five seconds is written through,
 with a note, except by the call at a session's start, which waits one second and

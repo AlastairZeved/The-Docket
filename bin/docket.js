@@ -1651,13 +1651,17 @@ function withState(root, change, opts) {
   const p = statePath(root), lockPath = p + '.lock', wait = opts && opts.wait !== undefined ? opts.wait : LOCK_WAIT_MS;
   if (exists(path.dirname(p)) && !isDir(path.dirname(p))) throw Object.assign(new Error(rel(root, path.dirname(p)) + ' is a file, not a directory: the state has nowhere to go; move it aside'), { docket: true });
   if (exists(p) && !isFile(p)) throw Object.assign(new Error(rel(root, p) + ' is not a file: the state cannot be written over it; move it aside'), { docket: true });
-  docketDir(root);
-  const lock = takeLock(lockPath, wait);
+  // a refusal the filesystem makes — the directory, the lock or the file cannot be written: unwritable, read only, full — is
+  // named as the two above are, with the error's code, and never a stack: the state has nowhere to go (FORMAT.md 16)
+  const nowhere = (e, what) => { if (e && e.docket) return e; if (!e || typeof e.code !== 'string') throw e; return Object.assign(new Error(what + ' cannot be written (' + e.code + '): the state has nowhere to go (the docket writes it under .docket/)'), { docket: true, code: e.code }); };
+  try { docketDir(root); } catch (e) { throw nowhere(e, rel(root, path.dirname(p))); }
+  let lock;
+  try { lock = takeLock(lockPath, wait); } catch (e) { throw nowhere(e, rel(root, lockPath)); }
   if (!lock) {
     if (opts && opts.orSkip) return null;
     process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + wait / 1000 + ' seconds; the state is changed without it\n');
   }
-  try { const st = loadState(root); change(st); saveState(root, st); return st; }
+  try { const st = loadState(root); change(st); try { saveState(root, st); } catch (e) { throw nowhere(e, rel(root, p)); } return st; }
   finally { releaseLock(lockPath, lock); }
 }
 // An addendum is pending until a ruling written after it has an edge into its entry (FORMAT.md 6, D21). Which came
@@ -2620,10 +2624,15 @@ function stop(argv) {
   // A block with no record is a block (D38): it counts toward the session's five as a recorded one does, so a judge that
   // never records surfaces the session, and its residue reaches the person, as a judge that never passes does (D11).
   let sess = Object.assign(freshSession(), st.sessions[id] || {}, { blocks: (st.sessions[id] ? st.sessions[id].blocks : 0) + 1 });
-  try { withState(root, s => { sess = Object.assign(freshSession(), s.sessions[id] || {}); sess.blocks += 1; s.sessions[id] = sess; }); } catch (e) { /* the block stands without its count */ }
+  // a count with nowhere to go — .docket a file, or one the filesystem will not write — leaves the block standing and says so:
+  // the five blocks that would surface the session cannot come, so the block itself carries the relay line (D11, FORMAT.md 16)
+  let uncounted = null;
+  try { withState(root, s => { sess = Object.assign(freshSession(), s.sessions[id] || {}); sess.blocks += 1; s.sessions[id] = sess; }); } catch (e) { if (!e || !e.docket) throw e; uncounted = e.message; }
   // The maker reads this. Told that the judge could not run, a maker tried to run the judge itself; so the reason says
   // whose job it is, what to do — nothing, then stop again — and where a person finds the judge's own words.
-  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since its last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.';
+  const reason = 'The docket\'s judge recorded no verdict for this stop\'s diff (' + files + '): it ' + ended + ', so this stop cannot stand: a governed stop is judged, and the judge is not you. Do not run the core yourself; stop again, and this block will not repeat in this turn. '
+    + (uncounted ? 'This block cannot be counted — ' + uncounted + ' — so the ' + BLOCK_CAP + ' blocks a session may take since its last PASS cannot surface it, and nothing of the judge is kept there: report this to the user verbatim, then stop again.'
+      : 'This block is ' + sess.blocks + ' of the ' + BLOCK_CAP + ' a session may take since its last PASS before the docket surfaces it; the judge\'s own output is in .docket/judge.log.');
   return blockStop(reason);
 }
 
