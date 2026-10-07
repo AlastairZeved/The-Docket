@@ -2424,6 +2424,17 @@ function ownClaim(root, f, ev, at) {
   });
   if (ev.length && why.every(Boolean)) die(at + ' answers "reason holds" with its own claim as the evidence — ' + Array.from(new Set(why)).join(' and ') + ': a ruling\'s text restates the claim and the failure\'s own line is the contradiction, so neither shows the premise; point the evidence at the line that shows it, as the code the diff leaves shows it, and record again (D36)', 2);
 }
+// A located line names a pack and one of its features: a pack none of the packs here is, or a feature the pack does not
+// define, is no location in the protocol — a judge that wrote `bogus · F3` or `code · F99` recorded a failure no pack scores,
+// and the record stood as one (protocol step 4). The vendored copy carries no packs/ and holds the shape alone.
+function packFeature(pack, feature, at) {
+  const dir = path.join(__dirname, '..', 'packs');
+  if (!isDir(dir)) return;
+  const names = fs.readdirSync(dir).filter(f => /^[a-z][a-z0-9-]*\.md$/.test(f)).map(f => f.slice(0, -3)).sort();
+  if (!names.includes(pack)) die(at + ' names the pack ' + pack + ', which none of the packs here is: they are ' + names.join(', ') + ' (protocol step 4)', 2);
+  const feats = Array.from(readText(path.join(dir, pack + '.md')).matchAll(/^\*\*(F\d+[a-z]?)\b/gm), m => m[1]);
+  if (!feats.includes(feature)) die(at + ' names ' + pack + ' · ' + feature + ', a feature the ' + pack + ' pack does not define: its features are ' + feats.join(', ') + ' (protocol step 4)', 2);
+}
 function holdToLines(root, v, failures, lines, base) {
   if (!lines.length) die('verdict: a ' + v + ' names its located failures: --reason "<one per line: pack · F<n> · file:line · what · route>"', 2);
   if (lines.length !== failures) die('verdict: --failures ' + failures + ' but --reason carries ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + ': one located failure per line, and the count is theirs', 2);
@@ -2433,6 +2444,7 @@ function holdToLines(root, v, failures, lines, base) {
   lines.forEach((l, i) => {
     const f = l.split(LOCATED_SEP).map(x => x.trim()), at = 'verdict: line ' + (i + 1);
     if (f.length < 5 || !/^[a-z][a-z0-9-]*$/.test(f[0]) || !/^F\d+[a-z]?$/.test(f[1]) || !f[2] || !f[f.length - 1]) die(at + ' is not a located failure: <pack> · F<n> · <file:line> · <what> · <fix route>, its fields joined by " · " (the protocol\'s form)', 2);
+    packFeature(f[0], f[1], at);                                       // the pack and the feature are the packs' own (protocol step 4)
     // The answer is a field of its own (protocol step 4), read there and nowhere else: prose that says the words is not an
     // answer, and an answer on any line, of any pack, is held to its line (D27)
     const mid = f.slice(3, -1), said = mid.filter(x => /^(?:reason (?:holds|gone)|cite stale)\b/i.test(x)).join(LOCATED_SEP);

@@ -707,6 +707,7 @@ the judge's answer; a PASS resets the session's block count and remembers the
 hash, a FAIL or STALE bumps the count and appends the failure count to the
 session's history; a changed hash never resets anything. A FAIL
 or STALE carries `--reason`, one located failure per line in the protocol's form,
+its pack one of the packs beside the core and its feature one the pack defines,
 as many lines as `--failures` says; a code-pack line that names a ruling answers,
 in a field of its own, `reason holds: <the premise> (<file:line>)`, `reason gone:
 <what changed> (<file:line>)` or `cite stale`, the line one of a file in the
