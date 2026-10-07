@@ -520,7 +520,7 @@ says so rather than printing nothing.
 (a pack's with its domain); `transcript` prints the turns it keeps, each its role
 and its lines, and a line that is not JSON as `raw`. A turn's lines are its text,
 each tool call — the tool named in brackets, then every line of its command, or
-its file, pattern or prompt, each after the first indented under it — and each
+its file or notebook, pattern or prompt, each after the first indented under it — and each
 tool result, marked `[result]`, or `[result, error]` where the host marks it one;
 a call or result over forty lines prints forty in all — its first ten, the count
 between and its last twenty-nine, so the mark stands for two lines or more (D42) —

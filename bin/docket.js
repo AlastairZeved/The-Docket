@@ -2687,7 +2687,7 @@ function transcript(argv) {
     for (const b of blocks) {
       if (!b || typeof b !== 'object') continue;
       if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) L.push(b.text.trim());
-      if (b.type === 'tool_use') { const inp = b.input || {}; L.push(transcriptItem('[' + b.name + ']', (inp.command || inp.file_path || inp.pattern || inp.prompt || '').toString())); }
+      if (b.type === 'tool_use') { const inp = b.input || {}; L.push(transcriptItem('[' + b.name + ']', (inp.command || inp.file_path || inp.notebook_path || inp.pattern || inp.prompt || '').toString())); }   // a notebook edit names its file as notebook_path
       if (b.type === 'tool_result') L.push(transcriptItem(b.is_error === true ? '[result, error]' : '[result]', resultText(b.content)));
     }
     if (L.length) turns.push({ role, lines: L });
