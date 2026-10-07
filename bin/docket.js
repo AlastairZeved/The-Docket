@@ -1351,9 +1351,10 @@ function writeLedger(ledger, text) {
   try { target = fs.realpathSync(ledger.path); } catch (e) { target = ledger.path; }
   try { mode = fs.statSync(target).mode & 0o7777; } catch (e) { mode = null; }
   const tmp = target + '.docket-' + process.pid;
-  fs.writeFileSync(tmp, text);
-  if (mode !== null) fs.chmodSync(tmp, mode);
-  fs.renameSync(tmp, target);
+  // a write the filesystem refuses — the directory read only, the file immutable, the disk full — is named with its code, and
+  // the new file taken away: the ledger is unchanged, and nothing is left beside it for check 1 to read as a second ledger
+  try { fs.writeFileSync(tmp, text); if (mode !== null) fs.chmodSync(tmp, mode); fs.renameSync(tmp, target); }
+  catch (e) { try { fs.unlinkSync(tmp); } catch (e2) { /* never written */ } die('append: ' + ledger.path + ' cannot be written (' + (e && e.code ? e.code : 'error') + '); the ledger is unchanged, and nothing is left beside it', 2); }
 }
 // A ledger that two sessions can append to at once is a ledger that can lose an entry: each would read the same last
 // id, compute the same next one, and the later write would carry the earlier one away while both callers were told the
@@ -1399,7 +1400,9 @@ function releaseLock(lockPath, lock) {
 function lockedLedger(argv) {
   const scoped = ledgerFromCwd(argv);
   const lockPath = scoped.ledger.path + '.lock';
-  const lock = takeLock(lockPath, LOCK_WAIT_MS);
+  let lock;
+  try { lock = takeLock(lockPath, LOCK_WAIT_MS); }
+  catch (e) { die('append: the lock ' + rel(scoped.root, lockPath) + ' cannot be made (' + (e && e.code ? e.code : 'error') + '); the ledger is unchanged', 2); }   // a directory that will not take the lock: named, never a stack
   if (!lock) die('append: ' + rel(scoped.root, scoped.ledger.path) + ' is held by another append that has not finished; if none is running, remove ' + rel(scoped.root, lockPath), 2);
   // Released once, and only while it is still ours: a second release at exit, after another append has
   // taken the lock, would unlink that one's and let two writers read the same last id.

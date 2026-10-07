@@ -4920,6 +4920,29 @@ const SEC = String.fromCharCode(0xa7);
     }
     fs.rmSync(d, { recursive: true, force: true });
   }
+  // F6: an append the filesystem refuses — named with its code, exit 2, the ledger unchanged and nothing left beside it (FORMAT.md 11)
+  {
+    const d = tempRepo(), fxd = fx(d), lp = path.join(fxd, 'DECISIONS.md'), before = read(lp);
+    const entry = ['append', '--title', 'Pinned notes keep their size', '--issue', '21', '--principle', 'Positions are permanent', '--body', 'A pinned note keeps its own size inside a fold. Reason: a pinned note is a landmark, and resizing a landmark moves the map.'];
+    const litter = () => fs.readdirSync(fxd).filter(f => /^DECISIONS\.md\.(lock|docket-)/.test(f));
+    const restore = unwritable(fxd);
+    if (!restore) console.error('  note: ' + fxd + ' could be written as root with chmod and chattr both unavailable: the refused-append assertions were not run');
+    else {
+      const r = docket(entry, { cwd: fxd });
+      restore();
+      ok('append into a directory that cannot be written refuses, exit 2, naming the lock and the code, with no stack trace; the ledger is unchanged and nothing is left beside it (FORMAT.md 11)', r.code === 2 && /^append: the lock test\/fixture\/DECISIONS\.md\.lock cannot be made \((EACCES|EPERM)\); the ledger is unchanged$/m.test(r.err) && !/\n\s+at /.test(r.err) && read(lp) === before && litter().length === 0, r.code + ' ' + r.err + ' ' + litter().join(','));
+    }
+    // the ledger itself immutable, where the filesystem has the attribute: the new file is written beside it, the rename refused, and the file taken away
+    const im = cp.spawnSync('chattr', ['+i', lp], { encoding: 'utf8' });
+    let held = false; try { fs.appendFileSync(lp, ''); } catch (e) { held = true; }
+    if (im.status !== 0 || !held) { if (im.status === 0) cp.spawnSync('chattr', ['-i', lp]); console.error('  note: the ledger could not be made immutable here: the refused-rename assertion was not run'); }
+    else {
+      const r = docket(entry, { cwd: fxd });
+      cp.spawnSync('chattr', ['-i', lp]);
+      ok('append over a ledger the filesystem will not replace refuses, exit 2, naming the ledger and the code; the ledger is unchanged and the new file is taken away (FORMAT.md 11)', r.code === 2 && /^append: \S*DECISIONS\.md cannot be written \(EPERM\); the ledger is unchanged, and nothing is left beside it$/m.test(r.err) && !/\n\s+at /.test(r.err) && read(lp) === before && litter().length === 0, r.code + ' ' + r.err + ' ' + litter().join(','));
+    }
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   // G: the bound in force, with no --wait
   {
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 11; // R2\n');

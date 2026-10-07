@@ -460,6 +460,11 @@ baseline's comment — exactly as the write prints it, and writes nothing. The
 intake's confirm block is that output (RULE.md), so the person confirms the bytes
 the write appends; the entry's number is the next free one when the write runs.
 
+A write the filesystem refuses — the lock beside the ledger that cannot be made,
+the new file that cannot be written or renamed over the old — is refused, exit 2,
+naming the file and the error's code; the ledger is unchanged, and nothing is left
+beside it.
+
 ## 12. Prefixes and numbering
 
 The prefixes of a ledger are the distinct `<P>` of its entry headings. Within a
