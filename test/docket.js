@@ -29,6 +29,9 @@ function docket(args, opts) {
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
 function read(p) { return fs.readFileSync(p, 'utf8'); }
+// A state file read as a snapshot, where the gate may have left none: null, so the assertion that names what the gate
+// leaves fails by name instead of the run dying at the read.
+function readIf(p) { try { return fs.readFileSync(p, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return null; throw e; } }
 // What a verdict recorded, read back: the last answer of the project's verdict log is the word and the lines it was given. An
 // assertion that a verdict records reads this, and an exit code alone is not a record.
 function recorded(dir, word, reason) {
@@ -2984,7 +2987,7 @@ const SEC = String.fromCharCode(0xa7);
     const d = tempRepo();
     fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const v = 1; // R2\n');
     const H = docket(['gate', '--session', 'v'], { cwd: d }).out.split(' ')[1];
-    const st0 = read(path.join(d, '.docket', 'verdict.json'));         // what the gate left: the session's base (D40's addendum), and nothing a refusal may add to
+    const st0 = readIf(path.join(d, '.docket', 'verdict.json'));         // what the gate left: the session's base (D40's addendum), and nothing a refusal may add to
     const vd = (word, n, reason) => docket(['verdict', word, '--hash', H, '--failures', String(n), '--session', 'v'].concat(reason === undefined ? [] : ['--reason', reason]), { cwd: d });
     let v = vd('FAIL', 1);
     ok('verdict refuses a FAIL with no --reason: a located failure is located', v.code === 2 && /a FAIL names its located failures: --reason/.test(v.err), v.code + ' ' + v.err);
@@ -3066,7 +3069,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and refuses a range that runs backwards', v.code === 2 && /which is not a line of a file/.test(v.err), v.err);
     v = docket(['verdict', 'PASS', '--hash', H, '--failures', '0', '--session', 'v', '--reason', 'all good'], { cwd: d });
     ok('…and a PASS that carries a reason: a PASS names no located failures', v.code === 2 && /a PASS names no located failures; --reason is for a FAIL or a STALE/.test(v.err), v.err);
-    ok('nothing refused is recorded: the state is what the gate left', read(path.join(d, '.docket', 'verdict.json')) === st0, 'a refused verdict wrote the state');
+    ok('nothing refused is recorded: the state is what the gate left', readIf(path.join(d, '.docket', 'verdict.json')) === st0, 'a refused verdict wrote the state');
     let said = 'design · F1 · test/fixture/styles.css:3 · R6 wants the toolbar’s token and this diff changes it · restore the token';
     v = vd('FAIL', 1, said);
     ok('verdict records a line of another pack that names a ruling with no answer: the question is the code pack’s', v.code === 0 && recorded(d, 'FAIL', said), v.err);
@@ -3088,7 +3091,7 @@ const SEC = String.fromCharCode(0xa7);
     const ad = tempRepo();
     fs.appendFileSync(path.join(ad, 'test', 'fixture', 'app.js'), 'const an = 1; // R2\n');
     const ah = docket(['gate', '--session', 'an'], { cwd: ad }).out.split(' ')[1];
-    const ast0 = read(path.join(ad, '.docket', 'verdict.json'));       // what the gate left
+    const ast0 = readIf(path.join(ad, '.docket', 'verdict.json'));       // what the gate left
     const av = (word, reason) => docket(['verdict', word, '--hash', ah, '--failures', '1', '--session', 'an', '--reason', reason], { cwd: ad });
     let r = av('STALE', 'design · F5 · test/fixture/styles.css:3 · a card pattern · reason gone: the old layout is gone (no/such/path.css:9999) · supersede via /rule');
     ok('verdict holds an answer on a line of another pack to its line: a STALE whose evidence is in no file is refused (D27)', r.code === 2 && /line 1 points its evidence at no\/such\/path\.css:9999, which is not a line of a file in this repository/.test(r.err), r.code + ' ' + r.err);
@@ -3098,7 +3101,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and a “cite stale” line, whose evidence is its own location: a location in no file is refused', r.code === 2 && /line 1 says cite stale, whose evidence is its own location, and points at made\/up\/path\.js:999999, which is not a line of a file in this repository/.test(r.err), r.code + ' ' + r.err);
     r = av('STALE', 'code · F5 · test/fixture/app.js · R2 is cited on code that no longer implements it · cite stale · /rule --addendum R2');
     ok('…and one whose location names no line', r.code === 2 && /line 1 says cite stale, whose evidence is its own location, and test\/fixture\/app\.js names no line of a file/.test(r.err), r.code + ' ' + r.err);
-    ok('nothing refused is recorded: the state is what the gate left', read(path.join(ad, '.docket', 'verdict.json')) === ast0, 'a refused verdict wrote the state');
+    ok('nothing refused is recorded: the state is what the gate left', readIf(path.join(ad, '.docket', 'verdict.json')) === ast0, 'a refused verdict wrote the state');
     r = av('FAIL', 'design · F5 · test/fixture/styles.css:3 · a card pattern where the reason gone from the old layout no longer explains it · change the CSS');
     ok('…and reads the answer in its own field alone: a line whose prose says “reason gone” is not a stale one, so its FAIL records', r.code === 0 && /verdict recorded: FAIL \(1 located failure\)/.test(r.out), r.code + ' ' + r.err);
     r = av('STALE', 'code · F5 · test/fixture/app.js:40 · R2 is cited on code that no longer implements it · cite stale · /rule --addendum R2');
