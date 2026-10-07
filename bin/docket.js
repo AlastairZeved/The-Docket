@@ -2663,12 +2663,36 @@ function pack(argv) {
 // marked (D14, D42). A line that is not JSON, or a file that is not such a log, is printed as it is. `--last <n>` keeps
 // the last n assistant turns.
 const TRANSCRIPT_LINES = 40, TRANSCRIPT_HEAD = 10, TRANSCRIPT_WIDTH = 400;
-function transcriptItem(label, text) {
+const LEDGER_NAME_RE = /DECISIONS[^\s\/"'`]*\.md/i;                     // a ledger document's name, as the ledger documents are named (FORMAT.md 1, 8)
+// A call's line that names a ledger document is never cut away (D14's addendum): the one thing step 5 reads the transcript for is
+// a write of the ledger among the maker's calls, and a cut that dropped it read the write as no call of the maker's. `keep` is
+// that name's pattern for a call, and nothing for a result, which is not the maker's call.
+function transcriptItem(label, text, keep) {
   let ls = String(text).replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
   const tail = TRANSCRIPT_LINES - TRANSCRIPT_HEAD - 1;                 // twenty-nine: forty lines in all, the mark among them
-  if (ls.length > TRANSCRIPT_LINES) ls = ls.slice(0, TRANSCRIPT_HEAD).concat(['\u2026 ' + (ls.length - TRANSCRIPT_HEAD - tail) + ' lines \u2026'], ls.slice(-tail));
-  ls = ls.map(l => { const a = Array.from(l); return a.length > TRANSCRIPT_WIDTH ? a.slice(0, TRANSCRIPT_WIDTH - 1).join('') + '\u2026' : l; });
+  if (ls.length > TRANSCRIPT_LINES) {
+    // the middle, between the first ten and the last twenty-nine: a mark for each run of lines left out, a kept line in its place,
+    // and a run of one line printed rather than marked, so a mark stands for two lines or more (D42)
+    const mid = ls.slice(TRANSCRIPT_HEAD, ls.length - tail), outMid = []; let held = [];
+    const flush = () => { if (held.length >= 2) outMid.push('\u2026 ' + held.length + ' lines \u2026'); else outMid.push(...held); held = []; };
+    for (const l of mid) { if (keep && keep.test(l)) { flush(); outMid.push(l); } else held.push(l); }
+    flush();
+    ls = ls.slice(0, TRANSCRIPT_HEAD).concat(outMid, ls.slice(-tail));
+  }
+  ls = ls.map(l => cutWide(l, keep));
   return label + ' ' + ls[0] + ls.slice(1).map(l => '\n    ' + l).join('');
+}
+// A line over TRANSCRIPT_WIDTH code points keeps the width in all, the mark among them: its head and a mark (D14). One that names
+// a ledger document past the head — `keep` given — keeps its head, a mark, the stretch that ends at the last such name, and a mark
+// after what follows it, so a write of the ledger is never cut away (D14's addendum)
+function cutWide(l, keep) {
+  const a = Array.from(l);
+  if (a.length <= TRANSCRIPT_WIDTH) return l;
+  let end = -1;
+  if (keep) for (const m of l.matchAll(new RegExp(keep.source, keep.flags.replace('g', '') + 'g'))) end = Array.from(l.slice(0, m.index + m[0].length)).length;   // the last name's end, in code points
+  if (end <= TRANSCRIPT_WIDTH - 1) return a.slice(0, TRANSCRIPT_WIDTH - 1).join('') + '\u2026';   // no name past the head: the plain cut
+  const half = Math.floor((TRANSCRIPT_WIDTH - 2) / 2);                 // one hundred and ninety-nine each side of the first mark
+  return a.slice(0, half).join('') + '\u2026' + a.slice(end - half, end).join('') + (end < a.length ? '\u2026' : '');
 }
 function resultText(c) { return typeof c === 'string' ? c : Array.isArray(c) ? c.filter(x => x && x.type === 'text' && typeof x.text === 'string').map(x => x.text).join('\n') : ''; }
 function transcript(argv) {
@@ -2692,7 +2716,7 @@ function transcript(argv) {
     for (const b of blocks) {
       if (!b || typeof b !== 'object') continue;
       if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) L.push(b.text.trim());
-      if (b.type === 'tool_use') { const inp = b.input || {}; L.push(transcriptItem('[' + b.name + ']', (inp.command || inp.file_path || inp.notebook_path || inp.pattern || inp.prompt || '').toString())); }   // a notebook edit names its file as notebook_path
+      if (b.type === 'tool_use') { const inp = b.input || {}; L.push(transcriptItem('[' + b.name + ']', (inp.command || inp.file_path || inp.notebook_path || inp.pattern || inp.prompt || '').toString(), LEDGER_NAME_RE)); }   // a notebook edit names its file as notebook_path
       if (b.type === 'tool_result') L.push(transcriptItem(b.is_error === true ? '[result, error]' : '[result]', resultText(b.content)));
     }
     if (L.length) turns.push({ role, lines: L });

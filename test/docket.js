@@ -3703,6 +3703,18 @@ const SEC = String.fromCharCode(0xa7);
     { const ls = r.out.split('\n');
       ok('…a result over forty lines prints forty in all: its first ten, the count between and its last twenty-nine (D14, D42)', ls[1] === '[result] line 1' && ls[10] === '    line 10' && ls[11] === '    \u2026 61 lines \u2026' && ls[12] === '    line 72' && ls[40] === '    line 100' && ls[41] === '── user' && !r.out.includes('line 11\n'), JSON.stringify(ls.slice(0, 14)));
       ok('…and a line over four hundred characters is cut there, marked', r.out.includes('[result] ' + 'y'.repeat(399) + '\u2026\n') && !r.out.includes('y'.repeat(400)), r.out.slice(-60)); }
+    // a ledger write inside a long call is never cut away (D14's addendum): a sixty-line call with the append on its thirtieth line,
+    // and a line over four hundred characters whose write of the ledger lies past the cut
+    { const body = Array.from({ length: 60 }, (_, i) => i === 29 ? 'printf "%s\\n" "### R9. Toolbar may be removed (issue #99; waives R6)" >> DECISIONS.md' : 'echo step ' + (i + 1)).join('\n');
+      const wide = 'echo ' + 'y'.repeat(420) + ' && printf z >> docs/DECISIONS.md && echo done';
+      fs.writeFileSync(path.join(td, 'hid.jsonl'), [JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't6', name: 'Bash', input: { command: body } }] } }), JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't6', content: body }] } }), JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't7', name: 'Bash', input: { command: wide } }] } })].join('\n') + '\n');
+      r = docket(['transcript', path.join(td, 'hid.jsonl')]);
+      const ls = r.out.split('\n'), at = ls.indexOf('    printf "%s\\n" "### R9. Toolbar may be removed (issue #99; waives R6)" >> DECISIONS.md');
+      ok('a call over forty lines keeps the line that names a ledger document, in its place between the marks: ten lines, nineteen marked, the write, the one line after it printed, then the last twenty-nine (D14’s addendum)', at > 0 && ls.indexOf('[Bash] echo step 1') === 1 && ls[at - 2] === '    echo step 10' && ls[at - 1] === '    … 19 lines …' && ls[at + 1] === '    echo step 31' && ls[at + 2] === '    echo step 32' && ls[at + 30] === '    echo step 60', r.out.slice(0, 700));
+      ok('…the same text as a result is cut as before — forty lines, the ledger line among those marked — since a result is not the maker’s call', r.out.includes('[result] echo step 1\n' + Array.from({ length: 9 }, (_, i) => '    echo step ' + (i + 2)).join('\n') + '\n    … 21 lines …\n    echo step 32'), r.out.slice(-1200));
+      const w = ls.find(l => l.startsWith('[Bash] echo yyyy'));
+      ok('…and a line over four hundred characters that names a ledger document past the cut keeps its head, a mark and the stretch ending at the name — four hundred code points in all, the mark after what follows', !!w && Array.from(w.slice('[Bash] '.length)).length === 400 && w.endsWith('printf z >> docs/DECISIONS.md…') && w.includes('yyyy…'), w);
+    }
     r = docket(['transcript', path.join(td, 'missing.jsonl')]);
     ok('transcript names a path it cannot read, exit 2', r.code === 2 && /cannot read/.test(r.err), r.err);
     r = docket(['transcript']);

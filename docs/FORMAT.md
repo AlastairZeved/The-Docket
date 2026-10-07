@@ -524,8 +524,13 @@ its file or notebook, pattern or prompt, each after the first indented under it 
 tool result, marked `[result]`, or `[result, error]` where the host marks it one;
 a call or result over forty lines prints forty in all — its first ten, the count
 between and its last twenty-nine, so the mark stands for two lines or more (D42) —
-and a line of one over four hundred characters is cut, marked (D14), the maker's
-own text printed whole; `transcript --last <n>`, n a positive whole number written
+save that a call's line naming a ledger document (`DECISIONS*.md`, 1) is kept in
+its place among the marks, a run of one line printed rather than marked, since a
+write of the ledger among the maker's calls is what step 5 reads there (D14's
+addendum); and a line of one over four hundred characters is cut, marked (D14) —
+a call's line that names a ledger document past the cut keeping its head, a mark
+and the stretch that ends at the last such name — the maker's own text printed
+whole; `transcript --last <n>`, n a positive whole number written
 as digits, keeps the last n assistant turns
 and what follows the first of them, and n at or past the number of assistant turns
 keeps the whole transcript, as no `--last` does; `stop` prints its answer as
