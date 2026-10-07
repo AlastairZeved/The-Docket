@@ -4829,6 +4829,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('…and the hash is the same with the attribute and without it: the attribute changed what the diff showed, not what changed', hashOf(d, 'ga') === g.split('\n')[0].split(' ')[1] && h0 !== hashOf(d, 'ga'), g.split('\n')[0]);
     fs.rmSync(d, { recursive: true, force: true });
   }
+  // F2: two tracked governed files changed — one JUDGE line names both, in path order, and its hash is over git's one diff of both
+  {
+    const d = tempRepo();
+    fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q2 = 11; // R2\n');
+    fs.appendFileSync(path.join(fx(d), 'styles.css'), '/* R3 */\n.q2 { color: #000; }\n');
+    const first = docket(['gate', '--session', 'h2'], { cwd: d }).out.split('\n')[0];
+    const gj = JSON.parse(docket(['gate', '--session', 'h2', '--json'], { cwd: d }).out);
+    const diff = cp.spawnSync('git', ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--text', '--src-prefix=a/', '--dst-prefix=b/', '--full-index', '--diff-algorithm=myers', '--indent-heuristic', '--inter-hunk-context=0', '-O/dev/null', 'HEAD', '--no-renames', '-U3', '--', 'test/fixture/app.js', 'test/fixture/styles.css'], { cwd: d, encoding: 'utf8' }).stdout;
+    ok('two tracked governed files changed: the JUDGE line names both, app.js before styles.css in path order, and its hash is the SHA-256 of git’s one diff of both (FORMAT.md 16)', first === 'JUDGE ' + gj.hash + ' test/fixture/app.js test/fixture/styles.css' && gj.files.join() === 'test/fixture/app.js,test/fixture/styles.css' && diff.length > 0 && gj.hash === require('crypto').createHash('sha256').update(diff).digest('hex'), first);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
   // G: the bound in force, with no --wait
   {
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 11; // R2\n');
