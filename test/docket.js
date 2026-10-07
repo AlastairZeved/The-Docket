@@ -3640,6 +3640,8 @@ const SEC = String.fromCharCode(0xa7);
       ok('docket pack <name>… --json prints each pack as an object — its name, its domain and its text, byte for byte — in the order given', pj.code === 0 && Array.isArray(j) && j.length === 2 && j.map(x => x.name).join() === 'code,decisions' && j[0].text === read(path.join(ROOT, 'packs', 'code.md')) && j[1].text === read(path.join(ROOT, 'packs', 'decisions.md')) && /^the ledger/.test(j[1].domain), pj.code + ' ' + pj.out.slice(0, 80)); }
     r = docket(['pack', '../judge/PROTOCOL']);
     ok('pack refuses a name that is not a plain pack name, exit 2', r.code === 2 && /a pack is named by its file/.test(r.err), r.code + ' ' + r.err);
+    r = docket(['pack', '']);
+    ok('an empty name is a name, not --list: pack "" is refused, exit 2, by the naming line, printing no list', r.code === 2 && r.out === '' && /a pack is named by its file/.test(r.err), r.code + ' ' + r.out.slice(0, 60) + ' ' + r.err);
     r = docket(['pack', 'nosuch']);
     ok('pack refuses a name no pack has, exit 2, naming it and the packs there are — not the vendored copy’s message: the packs are beside it', r.code === 2 && /^pack: no pack named nosuch; the packs are code, decisions, design, prose \(docket pack --list\)$/m.test(r.err) && !/vendored/.test(r.err), r.code + ' ' + r.err);
     r = docket(['pack', 'code', 'nosuch']);

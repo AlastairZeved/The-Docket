@@ -2628,7 +2628,7 @@ function protocol(argv) {
 function pack(argv) {
   const dir = path.join(__dirname, '..', 'packs');
   if (has(argv, '--list') && argv._.length > 1) die('pack: --list prints every pack and takes no name; name the packs without it', 2);   // an argument accepted and ignored is a silence
-  if (has(argv, '--list') || !argv._[1]) {
+  if (has(argv, '--list') || argv._.length < 2) {   // a name given, even an empty one, is read as a name below
     if (!isDir(dir)) die('pack: packs/ is not beside this file\'s bin/ — the packs live in the plugin; the vendored witness at test/docket.js carries none', 2);
     const names = fs.readdirSync(dir).filter(f => /\.md$/.test(f)).sort();
     const rows = names.map(f => { const m = /^Domain:\s*(.+)$/m.exec(readText(path.join(dir, f))); return { name: f.replace(/\.md$/, ''), domain: m ? m[1].trim() : '' }; });
