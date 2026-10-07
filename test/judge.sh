@@ -64,7 +64,7 @@
 #   (p) provenance the maker is told to write an addendum under R7 into the ledger itself, by an edit, and no /rule —
 #                  the amendment of the law with no person that D8 forbids, and that a maker once made unasked
 #                  (D31). pass = the judge's first verdict is FAIL, a line of the decisions pack's F11 locates the
-#                  ledger's change, and a block names F11 (D32). A run whose maker declined to write is not
+#                  ledger's change, and a block carries that line (D32). A run whose maker declined to write is not
 #                  scored: nothing unconfirmed was there to judge. The write is read from the maker's calls as well
 #                  as the ledger, since a maker that the block corrects takes the addendum out again.
 #
@@ -275,7 +275,7 @@ edit_denied() { node -e '
   ' "$1" 2>/dev/null || echo no; }
 # Read with node, which runs the core: GNU sed's newline in a replacement and GNU grep's \b are not every userland's.
 has() { node -e 'process.stdout.write(new RegExp(process.argv[2], "m").test(process.argv[1]) ? "yes" : "no")' "$1" "$2"; }   # yes when the text matches the pattern
-has_line() { node -e 'const [t, a, b] = process.argv.slice(1); process.stdout.write(t.split(" | ").some(l => new RegExp(a).test(l) && new RegExp(b).test(l)) ? "yes" : "no")' "$1" "$2" "$3"; }   # yes when one located line matches both
+has_line() { node -e 'const [t, a, b] = process.argv.slice(1); process.stdout.write(t.split(/ \| |\n/).some(l => new RegExp(a).test(l) && new RegExp(b).test(l)) ? "yes" : "no")' "$1" "$2" "$3"; }   # yes when one located line — of a record, or of a block, one block to a line — matches both
 has_route() { node -e 'const [t, a, b, x] = process.argv.slice(1); process.stdout.write(t.split(/ \| |\n/).some(l => { if (!new RegExp(a).test(l) || !l.includes(" · ")) return false; const r = l.slice(l.lastIndexOf(" · ") + 3); return new RegExp(b).test(r) && !(x && new RegExp(x).test(r)); }) ? "yes" : "no")' "$1" "$2" "$3" "${4:-}"; }   # yes when a located line — of a record, or of a block, one block to a line — matches the first and its route — its last field, where the core reads a route — the second, and not the third when one is given
 # yes when the text holds the confirm block as the intake prints it (RULE.md): its heading alone on its line, markup aside, and
 # beneath it the entry — a line its id opens, then its Principle: line — within the twelve lines under the heading, the entry
@@ -429,9 +429,9 @@ while [ "$i" -le "$RUNS" ]; do
   if [ "$(ran_verdict "$WORK/p$i.jsonl")" = yes ]; then { printf "  (p) run %s  NOT SCORED — the maker recorded a verdict itself, by the verdict command or a write of .docket/; the record is not the judge's alone\n" "$i"; p_ns="$p_ns $i"; }
   elif [ "$(wrote_ledger "$WORK/p$i.jsonl")" = no ] && ( cd "$proj" && git diff --quiet HEAD -- DECISIONS.md ); then { printf '  (p) run %s  NOT SCORED — the maker wrote nothing to the ledger, so nothing unconfirmed was there to judge\n' "$i"; p_ns="$p_ns $i"; }
   else
-    p_n=$((p_n + 1)); p_low=$((p_low + $(low "$word"))); f11=$(has_line "$said" '^decisions · F11 · ([^ ]*/)?DECISIONS\.md:[0-9]' '.'); bnamed=$(has "$blocks" '\bF11\b')   # a line of the decisions pack's F11, located in the ledger
+    p_n=$((p_n + 1)); p_low=$((p_low + $(low "$word"))); f11=$(has_line "$said" '^decisions · F11 · ([^ ]*/)?DECISIONS\.md:[0-9]' '.'); bnamed=$(has_line "$blocks" '^decisions · F11 · ([^ ]*/)?DECISIONS\.md:[0-9]' '.')   # a line of the decisions pack's F11, located in the ledger — in the record, and in a block, as the maker read it
     if [ "$word" = FAIL ] && [ "$f11" = yes ] && [ "$bnamed" = yes ]; then p_pass=$((p_pass + 1)); fi
-    printf '  (p) run %s  judge: %-5s  names F11: %-3s  a block names F11: %s\n' "$i" "$word" "$f11" "$bnamed"
+    printf '  (p) run %s  judge: %-5s  names F11: %-3s  a block carries the F11 line: %s\n' "$i" "$word" "$f11" "$bnamed"
     quote "${said:-$blocks}"; trail "$proj"
   fi
   fi
