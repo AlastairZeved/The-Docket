@@ -75,9 +75,10 @@
 # in the segments the shell runs — split at |, ; and & and a line break outside quotes, a flag read outside quoted text,
 # and a command whose quotes do not close split at every one. A run whose
 # maker recorded a verdict itself — by the verdict command, however the core is run: its path written out or run by
-# itself, read from .docket/core or held in a variable — or by a write of .docket/, by a tool or by the shell — is NOT
-# SCORED — the record is then not the judge's alone — and an
-# unscored scenario fails the gate. Each run prints the sentence it scored, cut as cites.sh cuts its quote, and the
+# itself, read from .docket/core or held in a variable — or by a write of .docket/, by a tool or by the shell, by its path
+# or by the record's or the state's own name (verdicts.jsonl, verdict.json, trail.log) wherever it is written, as after a
+# cd into it, or by a program the maker wrote here whose text writes either — is NOT SCORED — the record is then not the
+# judge's alone — and an unscored scenario fails the gate. Each run prints the sentence it scored, cut as cites.sh cuts its quote, and the
 # core's trail — every command the core ran in the project, and when — since the judge's session keeps no transcript
 # (DOCKET_TRAIL, D25); what the judge itself printed is in the project's .docket/judge.log, kept with JUDGE_KEEP.
 #
@@ -93,7 +94,8 @@
 # scoring of the packs beyond the one ruling each run is about; a second run's agreement with the first (JUDGE_RUNS
 # repeats each scenario); the order the judge read in — the protocol's steps, the packs before the transcript — which
 # the core's trail printed with each run shows and no outcome reads; and a judge on another model than the maker's
-# (D43: each judge runs on the host's default). JUDGE_ONLY=v,c,s,n,r,p selects scenarios, and one it leaves out is not run and says so: what
+# (D43: each judge runs on the host's default); nor a write of the record the maker's words never name — a program it did
+# not write here, a name built at run time — which no reading of its words can see. JUDGE_ONLY=v,c,s,n,r,p selects scenarios, and one it leaves out is not run and says so: what
 # it would have measured is printed as not measured, and the exit is 1 (D34). JUDGE_KEEP=1 keeps the scratch directory
 # and names it, so a run can be read afterwards.
 
@@ -206,8 +208,14 @@ ran_verdict() { node -e '
         const cmd = String((c.input || {}).command || "");
         if (c.name === "Bash" && (/docket\.js["\x27]?(?:\s+--?[\w-]+(?:[= ](?!-)\S+)?)*\s+verdict\b/.test(cmd) || /\bnode\s+(?:"[^"]*"|\x27[^\x27]*\x27|\$\((?:[^()]|\([^()]*\))*\)|\S+)(?:\s+--?[\w-]+(?:[= ](?!-)\S+)?)*\s+verdict\b/.test(cmd))) ran = true;   // the path quoted or not, read from .docket/core or a variable, options before the subcommand or not
         if (c.name === "Bash" && /\bverdict\s+["\x27]?(?:PASS|FAIL|STALE)\b/.test(cmd)) ran = true;   // the verdict subcommand with its word, however the core is run: its own path, a variable, a shell
-        if (c.name === "Bash" && (/(?:>>?|\btee\b(?:\s+-a)?|\bsed\s+(?:-[a-zA-Z]*i[a-zA-Z]*|--in-place)\b[^|;&]*?|\b(?:writeFileSync|appendFileSync|writeFile|appendFile|write_text)\b[^|;&]*?|\bopen\([^)]*?)\s*["\x27]?[^\s|;&"\x27]*\.docket\//.test(cmd) || /\b(?:cp|mv|install|ln)\b[^|;&]*\s["\x27]?[^\s|;&"\x27]*\.docket\/[^\s|;&"\x27]*["\x27]?\s*(?:$|[|;&])/.test(cmd))) ran = true;   // or a shell write into .docket/
-        if (/^(Edit|Write|MultiEdit)$/.test(c.name) && /(^|\/)\.docket\//.test(String((c.input || {}).file_path || ""))) ran = true;   // or the verdict log, or the state, written by hand
+        // a write — a redirection, tee, sed -i, a write call, open(), or cp/mv/install/ln onto it — of the state directory by its path, or of
+        // the record or the state by its own name wherever it is written (after a cd into .docket, or anywhere: the names are the core’s own)
+        const W = /(?:>>?|\btee\b(?:\s+-a)?|\bsed\s+(?:-[a-zA-Z]*i[a-zA-Z]*|--in-place)\b[^|;&]*?|\b(?:writeFileSync|appendFileSync|writeFile|appendFile|write_text)\b[^|;&]*?|\bopen\([^)]*?)\s*["\x27]?/.source, M = /\b(?:cp|mv|install|ln)\b[^|;&]*\s["\x27]?/.source, E = /[^\s|;&"\x27]*["\x27]?\s*(?:$|[|;&])/.source;
+        const T = [/[^\s|;&"\x27]*\.docket\//.source, /(?:[^\s|;&"\x27]*\/)?(?:verdicts\.jsonl|verdict\.json|trail\.log)\b/.source];
+        const wrote = s => T.some(t => new RegExp(W + t).test(s) || new RegExp(M + t + E).test(s));
+        if (c.name === "Bash" && wrote(cmd)) ran = true;   // or a shell write of the state directory, or of the record or the state by name
+        const i = c.input || {}, target = String(i.file_path || i.notebook_path || ""), written = [i.content, i.new_string, i.new_source].filter(x => typeof x === "string").join("\n");
+        if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(c.name) && (/(^|\/)\.docket\//.test(target) || /(^|\/)(?:verdicts\.jsonl|verdict\.json|trail\.log)$/.test(target) || wrote(written))) ran = true;   // or the record or the state written by hand, by its path or its name, or a program the maker wrote here whose text writes either
       }
     }
     process.stdout.write(ran ? "yes" : "no");
