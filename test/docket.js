@@ -2400,7 +2400,14 @@ const SEC = String.fromCharCode(0xa7);
         fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const astral = 1; // R2 ' + 'x'.repeat(75) + '\u{1F732} tail\n');   // the astral character is the hundredth
       });
       const s = docket(['status'], { cwd: path.join(dir, 'test', 'fixture') }), n = JSON.parse(docket(['status', '--json'], { cwd: path.join(dir, 'test', 'fixture') }).out).witness.failures.length;
-      ok('status: more than five witness failures print five and a pointer, "+N more — docket check lists them all" (D14\'s addendum)', n === 8 && new RegExp('^Witness: FAIL \\(' + n + '\\)\\n(?:  [^\\n]*\\n){5}  \\+' + (n - 5) + ' more — docket check lists them all$', 'm').test(s.out), n + '\n' + s.out);
+      ok('status: more than five witness failures print five and a pointer naming what lists the hidden ones — here two of check’s and the fixture’s one spec-check failure: "+3 more — docket check and docket spec-check list them all" (D14\'s addendum)', n === 8 && new RegExp('^Witness: FAIL \\(' + n + '\\)\\n(?:  [^\\n]*\\n){5}  \\+' + (n - 5) + ' more — docket check and docket spec-check list them all$', 'm').test(s.out), n + '\n' + s.out);
+      // the hidden failures all check's: the token corrected, seven bad cites; all spec-check's: five bad cites and the fixture's token
+      { const dc = tempRepo(d => { edit(d, 'test/fixture/styles.css', '--line: #7a8fa7', '--line: #7a8fa6'); fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), Array.from({ length: 7 }, (_, i) => 'const bad' + i + ' = 1; // R' + (90 + i)).join('\n') + '\n'); });
+        const sc = docket(['status'], { cwd: path.join(dc, 'test', 'fixture') });
+        ok('…the pointer names docket check alone when every hidden failure is check’s', /^Witness: FAIL \(7\)\n(?:  [^\n]*\n){5}  \+2 more — docket check lists them all$/m.test(sc.out), sc.out);
+        const ds = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), Array.from({ length: 5 }, (_, i) => 'const bad' + i + ' = 1; // R' + (90 + i)).join('\n') + '\n'));
+        const ss = docket(['status'], { cwd: path.join(ds, 'test', 'fixture') });
+        ok('…and docket spec-check alone when the one hidden failure is spec-check’s, which docket check would not list', /^Witness: FAIL \(6\)\n(?:  [^\n]*\n){5}  \+1 more — docket spec-check lists them all$/m.test(ss.out), ss.out); }
       const g = docket(['governs', 'R2'], { cwd: path.join(dir, 'test', 'fixture') });
       const line = g.out.split('\n').find(l => l.includes('const astral'));
       ok('governs cuts a cited line past one hundred characters at ninety-nine code points and a mark, never a split character (FORMAT.md 3, D14)', !!line && Array.from(line.replace(/^  \S+  /, '')).length === 100 && line.endsWith('…') && !line.includes('�') && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(line), JSON.stringify(line));

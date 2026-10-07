@@ -1783,7 +1783,10 @@ function status(argv) {
   const skipped7 = check_.info.filter(i => /: check 7 skipped/.test(i)).length;
   L.push('Witness: ' + (witness.ok ? 'ok (' + witness.ledgers + ' ledger' + (witness.ledgers === 1 ? '' : 's') + (skipped7 ? '; check 7 skipped for ' + skipped7 + ' — docket check says why' : '') + ')' : 'FAIL (' + witness.failures.length + ')'));
   for (const f of witness.failures.slice(0, 5)) L.push('  ' + shown(f.file) + ':' + f.line + '  ' + (typeof f.k === 'number' ? 'check ' : 'spec-check ') + f.k + ': ' + f.message);
-  if (witness.failures.length > 5) L.push('  +' + (witness.failures.length - 5) + ' more — docket check lists them all');   // D14's addendum: five, then the pointer
+  if (witness.failures.length > 5) {                                  // D14's addendum: five, then the pointer — at the command, or the two, that list what is hidden
+    const hidden = witness.failures.slice(5), cmds = uniq(hidden.map(f => typeof f.k === 'number' ? 'docket check' : 'docket spec-check'));
+    L.push('  +' + hidden.length + ' more — ' + cmds.join(' and ') + (cmds.length > 1 ? ' list' : ' lists') + ' them all');
+  }
   out(L.join('\n'));
   return 0;
 }
