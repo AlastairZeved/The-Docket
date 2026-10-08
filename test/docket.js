@@ -6013,7 +6013,18 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   const market = JSON.parse(read(path.join(ROOT, '.claude-plugin', 'marketplace.json')));
   const header = /^# [^\n]+\n\n(\*\*Reader\.\*\* [\s\S]+?)\n\n/.exec(readme);
   ok('the README opens with its reader header: its title, then Reader, Purpose and Source in that order, the reader with what they know and what they do not', !!header && /^\*\*Reader\.\*\* [\s\S]*?\bknow\b[\s\S]*?\bdo not know\b[\s\S]*?\*\*Purpose\.\*\* \S[\s\S]*?\*\*Source\.\*\* \S/.test(header[1]), readme.slice(0, 300));
+  // the reader is a person as the intake reads one (D18): the Reader's first sentence, handed to the core's constitute as the
+  // role, is not refused as a crowd — the core's own refusal decides, not a list kept here beside it
+  { const role = header ? header[1].replace(/^\*\*Reader\.\*\* /, '').split(/\.(?=\s|$)/)[0].replace(/\s+/g, ' ').trim() : '', dir = tmpDir('reader-');
+    fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ name: 'Reader', what: 'A page that holds one note.', who: { role, knows: 'git', doesntKnow: 'a plugin' }, feeling: 'calm', refuses: ['sync to a server', 'ask for an account', 'send a reminder'] }));
+    const r = docket(['constitute', '--answers', 'a.json'], { cwd: dir, env: { DOCKET_TODAY: '2026-09-22', CLAUDE_PROJECT_DIR: '' } });
+    ok('the README’s reader is a person as the intake reads one: its Reader sentence, given to constitute as the role, is not refused as a crowd (D18)', !!role && r.code === 0 && !/who\.role/.test(r.err), JSON.stringify(role) + ' → exit ' + r.code + ' ' + r.err.slice(0, 200)); }
   const heads = readme.match(/^## .+$/gm) || [];
+  // the sections a reader comes for, each found by its heading or its bold lead: what it is, who it is for, the five jobs — five
+  // rows, the judge's first (D49) — how to install it and the demo
+  { const jobs = (/\n## The five jobs\n\n\| When \| Job \| What happens \|\n\|---\|---\|---\|\n((?:\|[^\n]*\|\n)+)/.exec(readme) || [])[1] || '', rows = jobs.split('\n').filter(Boolean).map(r => r.split('|')[1].trim());
+    const has = { what: /^## What it is$/m.test(readme), who: /^\*\*Who it is for:\*\* \S/m.test(readme), jobs: rows.join(' | ') === 'at "done" | before an edit | at a decision | at a new project | across time', install: /^## Install$/m.test(readme), demo: /^## The two-second demo$/m.test(readme) };
+    ok('the README holds what it is, who it is for, the five jobs — five rows, the judge’s at "done" first — the install and the two-second demo, each under its heading or bold lead', Object.values(has).every(Boolean), JSON.stringify(has) + ' ' + rows.join(' | ')); }
   ok('the README ends with Measured Results, then Known Limits', heads.slice(-2).join(' | ') === '## Measured Results | ## Known Limits', heads.slice(-3).join(' | '));
   // each ruling's whole text — heading, body and addenda — and every number a line there states, figures and number words
   const text = {}; let cur = null;
@@ -6022,32 +6033,35 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   const NUM = new RegExp('(?<![\\p{L}\\p{N}_.])\\d+(?:[.:-]\\d+)*(?![\\p{L}\\p{N}_])|(?<![\\p{L}\\p{N}_])(?:' + WORDS.join('|') + ')(?![\\p{L}\\p{N}_])', 'giu');
   // a duration is held with its unit: "22 seconds" is one the ruling states as 22 seconds, not a 22 beside some count of minutes
   const DUR = new RegExp('(?<![\\p{L}\\p{N}_.])(\\d+(?:[.:-]\\d+)*|' + WORDS.join('|') + ')\\s+(second|minute|hour|day)s?(?![\\p{L}\\p{N}_])', 'giu');
-  const durHeld = (m, held) => new RegExp('(?<![\\p{L}\\p{N}_.])' + m[1].replace(/\./g, '\\.') + '\\s+' + m[2] + 's?(?![\\p{L}\\p{N}_])', 'iu').test(held);
+  const durHeld = (m, held) => new RegExp('(?<![\\p{L}\\p{N}_.])(?<!\\d[.:-])' + m[1].replace(/\./g, '\\.') + '\\s+' + m[2] + 's?(?![\\p{L}\\p{N}_])', 'iu').test(held);
+  // a figure is held whole: "2.1.294" holds no 2 and "2026-10-08" no 10 — a figure the ruling runs on into with a point, a colon
+  // or a hyphen and a digit is part of a larger one. The verdict words are held as figures are, in capitals as the core writes them.
+  const numHeld = (t, held) => new RegExp('(?<![\\p{L}\\p{N}_.])(?<!\\d[.:-])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])(?![.:-]\\d)', 'iu').test(held);
+  const VERD = /(?<![\p{L}\p{N}_])(?:PASS|FAIL|STALE)(?![\p{L}\p{N}_])/gu, verdHeld = (t, held) => new RegExp('(?<![\\p{L}\\p{N}_])' + t + '(?![\\p{L}\\p{N}_])', 'u').test(held);
   const at = readme.indexOf('\n## Measured Results\n'), lines = at < 0 ? [] : readme.slice(at).split(/\n- /).slice(1), bad = [];
   for (const b of lines) {
     const ids = ((/^\*\*[^*\n]+\*\*/.exec(b) || [''])[0].match(/\bD\d+\b/g) || []);
     if (!ids.length || ids.some(id => !text[id])) { bad.push('"' + b.slice(0, 60) + '…" names no ruling the ledger holds in its bold lead'); continue; }
     const held = ids.map(id => text[id]).join('\n');
-    for (const m of b.matchAll(NUM)) {
-      const t = m[0], re = new RegExp('(?<![\\p{L}\\p{N}_.])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])', 'iu');
-      if (!re.test(held)) bad.push(t + ' in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold');
-    }
+    for (const m of b.matchAll(NUM)) if (!numHeld(m[0], held)) bad.push(m[0] + ' in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold');
+    for (const m of b.matchAll(VERD)) if (!verdHeld(m[0], held)) bad.push('the verdict ' + m[0] + ' in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold');
     for (const m of b.matchAll(DUR)) if (!durHeld(m, held)) bad.push('the duration "' + m[0] + '" in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold with its unit');
     // a count is held whole: "four stops of five" is in the ruling as written, not its two numbers apart
     const N = '(?:\\d+|' + WORDS.join('|') + ')', COUNT = new RegExp('(?<![\\p{L}\\p{N}_])' + N + '(?:\\s+\\p{L}+)?\\s+of\\s+' + N + '(?![\\p{L}\\p{N}_])', 'giu');
     const flat = held.replace(/\s+/g, ' ').toLowerCase();
     for (const m of b.matchAll(COUNT)) if (!flat.includes(m[0].replace(/\s+/g, ' ').toLowerCase())) bad.push('the count "' + m[0] + '" in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold as written');
   }
-  ok('every line under Measured Results and Known Limits names in its bold lead the rulings it rests on, and every number in it, figure or word, is one those rulings hold, a count as written and a duration with its unit', lines.length >= 10 && !bad.length, bad.join('\n'));
+  ok('every line under Measured Results and Known Limits names in its bold lead the rulings it rests on, and every number in it, figure or word, is one those rulings hold whole, a count as written, a duration with its unit and a verdict as the core writes it', lines.length >= 10 && !bad.length, bad.join('\n'));
   // the FAQ's answers are held as those sections are: every number in an answer, figure or word, outside code, is one the rulings
   // that answer cites hold — an answer that cites none states none
   { const a0 = readme.indexOf('\n## FAQ\n'), a1 = readme.indexOf('\n## ', a0 + 1), answers = a0 < 0 ? [] : readme.slice(a0, a1 < 0 ? undefined : a1).split('<details>').slice(1), fbad = [];
     for (const a of answers) {
       const body = a.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, ''), ids = Array.from(new Set(body.match(/\bD\d+\b/g) || [])), held = ids.map(id => text[id] || '').join('\n');
-      for (const m of body.matchAll(NUM)) { const t = m[0]; if (!new RegExp('(?<![\\p{L}\\p{N}_.])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])', 'iu').test(held)) fbad.push(t + ' in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold'); }
+      for (const m of body.matchAll(NUM)) if (!numHeld(m[0], held)) fbad.push(m[0] + ' in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold');
+      for (const m of body.matchAll(VERD)) if (!verdHeld(m[0], held)) fbad.push('the verdict ' + m[0] + ' in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold');
       for (const m of body.matchAll(DUR)) if (!durHeld(m, held)) fbad.push('the duration "' + m[0] + '" in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold with its unit');
     }
-    ok('every number in a FAQ answer, figure or word, outside code, is one the rulings that answer cites hold, a duration with its unit — an answer citing none states none', answers.length >= 5 && !fbad.length, fbad.join('\n')); }
+    ok('every number in a FAQ answer, figure or word, outside code, is one the rulings that answer cites hold whole, a duration with its unit and a verdict as the core writes it — an answer citing none states none', answers.length >= 5 && !fbad.length, fbad.join('\n')); }
   // the spec's four limits, stated under Known Limits; the block cap as the core counts it, and the final block beside it; who it is
   // for and who not; the judge's write named as the verdict it records; the witness vendored on both routes
   { const kl = readme.slice(readme.indexOf('\n## Known Limits\n')), cap = Number((/^const BLOCK_CAP = (\d+);/m.exec(read(CORE)) || [])[1]);
@@ -6074,8 +6088,15 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, every clone and marketplace source is AlastairZeved/The-Docket, and an owner/name in its prose is this repository or a path in it', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
   const badge = /img\.shields\.io\/badge\/version-((?:[^-)\s]|--)+)-/.exec(readme);
   ok('the README’s version badge is the plugin manifest’s version', !!badge && badge[1].replace(/--/g, '-') === plugin.version, (badge ? badge[1] : 'no version badge') + ' against ' + plugin.version);
+  // the manifests are the plugin the fresh install measured (D50): the version the README's record of it names, which D50 holds,
+  // is the manifest's — a version no install was measured at is not the one shipped — and each names the-docket, the
+  // marketplace's one plugin at the repository's root
+  { const v = (/^- \*\*The fresh install \(D50\)\.\*\*[\s\S]*?\bat version (\d+\.\d+\.\d+)\b/m.exec(readme) || [])[1];
+    ok('the plugin manifest names the-docket at the version the fresh install was measured at, which the README names and D50 holds, with a description and an author; the marketplace names the-docket and its one plugin, the-docket at ./', !!v && plugin.version === v && !!text.D50 && new RegExp('\\bversion ' + v.replace(/\./g, '\\.') + '(?![.\\d])').test(text.D50) && plugin.name === 'the-docket' && typeof plugin.description === 'string' && !!plugin.author && typeof plugin.author.name === 'string' && market.name === 'the-docket' && Array.isArray(market.plugins) && market.plugins.length === 1 && market.plugins[0].name === 'the-docket' && market.plugins[0].source === './', JSON.stringify({ measured: v, plugin: [plugin.name, plugin.version], market: [market.name, (market.plugins || []).map(p => p.name + '@' + p.source)] })); }
   const descs = [plugin.description, market.description].concat((market.plugins || []).map(p => p.description));
-  ok('the plugin’s description and the marketplace’s two lead with the judge, and give the hook before an edit after it (D49)', descs.length === 3 && descs.every(d => typeof d === 'string' && d.indexOf('judge') >= 0 && d.indexOf('judge') < d.toLowerCase().indexOf('before an edit')), descs.join('\n'));
+  // leading is where a reader meets them: the first sentence that names the judge or the hook names the judge, ahead of the hook
+  const leads = d => { const s = d.split(/(?<=[.!?])\s+/).find(x => /\b(?:judge|hook)/i.test(x)) || '', j = s.search(/\bjudge/i), h = s.search(/\bhook|\bbefore an edit/i); return j >= 0 && (h < 0 || j < h); };
+  ok('the plugin’s description and the marketplace’s two lead with the judge — the first sentence naming the judge or the hook names the judge, ahead of the hook — and give the hook before an edit after it (D49)', descs.length === 3 && descs.every(d => typeof d === 'string' && leads(d) && d.indexOf('judge') >= 0 && d.indexOf('judge') < d.toLowerCase().indexOf('before an edit')), descs.join('\n'));
   const claudeMd = read(path.join(ROOT, 'CLAUDE.md'));
   ok('CLAUDE.md opens with its reader header and says what D6 gives it to say: the repository governs itself, work here with claude --plugin-dir ., run the witness before you stop', /^# CLAUDE\.md\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(claudeMd) && /governs itself \(D6\)/.test(claudeMd) && /^    claude --plugin-dir \.$/m.test(claudeMd) && /Before you stop, run both/.test(claudeMd) && /^    node test\/docket\.js /m.test(claudeMd) && /^    node bin\/docket\.js /m.test(claudeMd), claudeMd.slice(0, 300));
   const packsMd = read(path.join(ROOT, 'docs', 'PACKS.md')), form = '<pack> · F<n> · <file:line> · <what> · <fix route>';
