@@ -540,7 +540,9 @@ says so rather than printing nothing.
 `--json` is on every subcommand. A subcommand that prints a file — `intake`,
 `protocol`, `pack <name>…` — prints, with it, the file's name and its whole text
 (a pack's with its domain); `transcript` prints the turns it keeps, each its role
-and its lines, and a line that is not JSON as `raw`. A turn's lines are its text,
+and its lines, and a line that is not JSON as `raw` — a file no line of which is
+a message, plain text or JSON lines of another shape, is printed as it is, its
+lines each `raw`. A turn's lines are its text,
 each tool call — the tool named in brackets, then every line of its command, or
 its file or notebook, pattern or prompt, each after the first indented under it — and each
 tool result, marked `[result]`, or `[result, error]` where the host marks it one;

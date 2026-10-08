@@ -2819,7 +2819,7 @@ function pack(argv) {
 // A call or a result over TRANSCRIPT_LINES lines prints that many in all: its first TRANSCRIPT_HEAD, the count between,
 // and the rest from its end — its head names what ran, and a runner prints its verdict last — so the mark stands for two
 // lines or more and the cut never prints more than it keeps out; and a line over TRANSCRIPT_WIDTH characters is cut,
-// marked (D14, D42). A line that is not JSON, or a file that is not such a log, is printed as it is. `--last <n>` keeps
+// marked (D14, D42). A line that is not JSON, or a file no line of which is a message, is printed as it is. `--last <n>` keeps
 // the last n assistant turns.
 const TRANSCRIPT_LINES = 40, TRANSCRIPT_HEAD = 10, TRANSCRIPT_WIDTH = 400;
 const LEDGER_NAME_RE = /DECISIONS[^\s\/"'`]*\.md/i;                     // a ledger document's name, as the ledger documents are named (FORMAT.md 1, 8)
@@ -2861,15 +2861,15 @@ function transcript(argv) {
   if (!isFile(p)) die('transcript: cannot read ' + given, 2);
   const last = flag(argv, '--last'); const keep = last === null ? Infinity : /^\d+$/.test(last) ? Number(last) : NaN;   // digits, as --wait and --failures take: not 1e1 or 0x10
   if (!(Number.isInteger(keep) && keep > 0) && last !== null) die('transcript: --last takes a positive integer', 2);
-  const lines = splitLines(readText(p)); const turns = []; let plain_ = true;
+  const lines = splitLines(readText(p)); const turns = []; let messages = 0;
   for (const line of lines) {
     if (!line.trim()) continue;
     let o = null; try { o = JSON.parse(line); } catch (e) { o = null; }
     if (!o || typeof o !== 'object') { turns.push({ raw: line }); continue; }
-    plain_ = false;
     const m = o.message && typeof o.message === 'object' ? o.message : null;
     const role = o.type === 'assistant' || (m && m.role === 'assistant') ? 'assistant' : (o.type === 'user' || (m && m.role === 'user') ? 'user' : null);
     if (!role || !m) continue;
+    messages++;
     const blocks = Array.isArray(m.content) ? m.content : (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : []);
     const L = [];
     for (const b of blocks) {
@@ -2880,7 +2880,8 @@ function transcript(argv) {
     }
     if (L.length) turns.push({ role, lines: L });
   }
-  if (plain_ && turns.every(t => t.raw !== undefined)) { out(argv.json ? JSON.stringify(lines.map(raw => ({ raw })), null, 2) : lines.join('\n')); return 0; }
+  // No line is a message: not such a log, printed as it is — plain text, or JSON lines of another shape.
+  if (!messages) { out(argv.json ? JSON.stringify(lines.map(raw => ({ raw })), null, 2) : lines.join('\n')); return 0; }
   const aTurns = turns.filter(t => t.role === 'assistant');
   const whole = keep === Infinity || keep >= aTurns.length;          // the last n turns, n at or past the count, are the whole transcript
   const start = whole ? 0 : aTurns.length - keep;

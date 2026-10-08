@@ -3810,6 +3810,9 @@ const SEC = String.fromCharCode(0xa7);
       ok('…with --last 1, the last assistant turn alone', JSON.stringify(tl) === JSON.stringify([{ role: 'assistant', lines: ['[Edit] app.js', 'Tests pass.'] }]), JSON.stringify(tl));
       const tp = (s => { try { return JSON.parse(s); } catch (e) { return null; } })(docket(['transcript', path.join(td, 'plain.txt'), '--json']).out);
       ok('…and a file with no JSON line as its lines, each raw', JSON.stringify(tp) === JSON.stringify([{ raw: 'just text' }, { raw: 'second line' }]), JSON.stringify(tp)); }
+      fs.writeFileSync(path.join(td, 'log.jsonl'), '{"level":"info","msg":"started"}\n{"level":"warn","msg":"slow"}\n[1,2]\n');
+      const lr = docket(['transcript', path.join(td, 'log.jsonl')]), lj = (s => { try { return JSON.parse(s); } catch (e) { return null; } })(docket(['transcript', path.join(td, 'log.jsonl'), '--json']).out);
+      ok('…and a file of JSON lines no line of which is a message, a log of another shape, is printed as it is, and with --json as its lines, each raw', lr.code === 0 && lr.out === '{"level":"info","msg":"started"}\n{"level":"warn","msg":"slow"}\n[1,2]\n' && JSON.stringify(lj) === JSON.stringify([{ raw: '{"level":"info","msg":"started"}' }, { raw: '{"level":"warn","msg":"slow"}' }, { raw: '[1,2]' }]), JSON.stringify(lr.out) + ' ' + JSON.stringify(lj));
     // every line of a call and every result (code F6, protocol step 5): a ledger write on a command's second line, a result that
     // contradicts the claim after it, a result over forty lines, a line over four hundred characters
     const more = [
