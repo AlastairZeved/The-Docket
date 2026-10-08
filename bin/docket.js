@@ -296,8 +296,21 @@ function clausesOf(meta) { return meta.split(';').map(s => s.trim()).filter(Bool
 // An entry's principle line, as append's guard, the index and check 6 all read it: a body line beginning `Principle:`, a space
 // after it or not, outside fenced blocks (FORMAT.md 5, 11); a second is check 6's failure, since two leave the reader to guess.
 const PRINCIPLE_LINE_RE = /^Principle:(.*)$/;
-// The body states its reason when `Reason:` appears outside code spans and fenced blocks (FORMAT.md 5, 11).
+// The body states its reason in a sentence that begins `Reason:` — at a line's start, a list marker or emphasis aside, or after a
+// sentence's end — and says something after it, a letter or a digit on its line; outside code spans and fenced blocks (FORMAT.md
+// 5, 11). `The Reason: ok.`, `UnReason: ok.` and a bare `Reason:` state none. Answers where it starts in a line with its code
+// masked, or -1.
+const REASON_RE = /(?:^\s*(?:(?:[-*+>]|\d{1,9}[.)])\s+)*|[.!?]["'\u201d\u2019)\]*_]*\s+)[*_]*Reason:/g;
+function reasonAt(masked) {
+  for (const m of masked.matchAll(REASON_RE)) { const at = m.index + m[0].length - 'Reason:'.length; if (/[\p{L}\p{N}]/u.test(masked.slice(at + 'Reason:'.length))) return at; }
+  return -1;
+}
 function assertsReason(lines) {
+  const fenced = fencedLines(lines);
+  return lines.some((l, k) => !fenced[k] && reasonAt(maskCode(l)) >= 0);
+}
+// A `Reason:` outside code that states no reason is named as such by check 6, apart from a body with none at all
+function mentionsReason(lines) {
   const fenced = fencedLines(lines);
   return lines.some((l, k) => !fenced[k] && /Reason:/.test(maskCode(l)));
 }
@@ -460,7 +473,7 @@ function parseLedger(text, ledgerPath) {
         id, prefix: hm[1], n: Number(hm[2]), line: start + 1, heading, title: titleOf(heading), meta, grounding,
         issue: issueM ? Number(issueM[1]) : null, edges, addenda, body: bodyLines.join('\n'), bodyLines,
         principle: pls.length && pls[0].name ? pls[0].name : null, principleLines: pls.map(p => p.line), endLine: j,
-        hasReason: assertsReason(bodyLines),
+        hasReason: assertsReason(bodyLines), mentionsReason: mentionsReason(bodyLines),
       });
       i = j; continue;
     }
@@ -967,14 +980,14 @@ function resolveRuling(ledger, id) {
   if (same.length > 1) return { r: null, ambiguous: same.map(x => x.id) };
   return { r: null };
 }
-// A ruling's reason as the judge's step 4 reads it (D24): from `Reason:` to the end of its line, outside code spans and
-// fenced blocks, and outside addenda; null for an entry that states none.
+// A ruling's reason as the judge's step 4 reads it (D24): from the `Reason:` that begins its sentence, as check 6 reads it, to
+// the end of its line, outside code spans and fenced blocks, and outside addenda; null for an entry that states none.
 function reasonOf(r) {
   const fenced = fencedLines(r.bodyLines);
   for (let k = 0; k < r.bodyLines.length; k++) {
     const l = r.bodyLines[k];
     if (fenced[k] || ADDENDUM_RE.test(l)) continue;
-    const at = maskCode(l).indexOf('Reason:');
+    const at = reasonAt(maskCode(l));
     if (at >= 0) return l.slice(at).trim();
   }
   return null;
@@ -1168,7 +1181,7 @@ function runCheck(root, opts) {
       else if (!r.principle) fail(lp, r.line, 6, r.id + (r.principleLines.length ? ': its "Principle:" line names no principle' : ': no "Principle:" line'));
       else if (!prin.list.length) fail(lp, r.line, 6, r.id + ': names a principle but no principles list was found');
       else if (!principleNamed(prin.list, r.principle)) fail(lp, r.line, 6, r.id + ': principle "' + r.principle + '" is not in the list (' + prin.list.map(p => p.name).join(' · ') + ')');
-      if (!r.hasReason) fail(lp, r.line, 6, r.id + ': body has no "Reason:"');   // quoted in code, it is not stated (FORMAT.md 5)
+      if (!r.hasReason) fail(lp, r.line, 6, r.id + (r.mentionsReason ? ': body states no reason: its "Reason:" begins no sentence, or nothing follows it (FORMAT.md 11)' : ': body has no "Reason:"'));   // quoted in code, it is not stated (FORMAT.md 5)
     }
     // 7. append only: existing headings and bodies unchanged vs the committed ledger
     // FORMAT.md 8: a fence quotes everything to the next fence line; one never closed quotes the rest of the ledger,
@@ -1537,7 +1550,7 @@ function entryArgs(argv) {
   }
   if ((splitLines(body).filter(l => /^\s*```/.test(l)).length % 2) === 1) die('append: --body opens a fence it does not close; every line after it, in this entry and the next, would be read as code (FORMAT.md 8)', 2);
 
-  if (!assertsReason(splitLines(body))) die('append: --body must state the reason as a sentence beginning "Reason:" (outside code spans and fenced blocks)', 2);
+  if (!assertsReason(splitLines(body))) die('append: --body must state the reason as a sentence beginning "Reason:" that says something after it (outside code spans and fenced blocks)', 2);
   if (splitLines(body).some(l => ADDENDUM_RE.test(l))) die('append: --body may not carry an addendum line; an addendum is written by append --addendum and dated by the tool (FORMAT.md 6)', 2);
   if (splitLines(body).some(isBoundary)) die('append: --body may not carry an entry or section heading line — a body opens no entry; the heading is the tool\'s to write (FORMAT.md 2, 7, 11)', 2);
   { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && PRINCIPLE_LINE_RE.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }

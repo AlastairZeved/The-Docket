@@ -444,7 +444,10 @@ contract line, parse loosely (2) and are held to nothing more. The contract:
 4. the body has one line beginning `Principle:`, a space after it or not, and it
    names a principle (10): a second such line fails, since two leave the reader
    to guess which the entry resolves against;
-5. the body contains `Reason:`.
+5. the body states its reason: a sentence beginning `Reason:` — at a line's start,
+   a list marker or emphasis aside, or after a sentence's end — with a letter or a
+   digit after it on its line; `The Reason: ok.`, `UnReason: ok.` and a bare
+   `Reason:` state none.
 
 Both are read outside code spans and fenced blocks (5): a `Reason:` or a
 `Principle:` line quoted in code is an example, not the statement.

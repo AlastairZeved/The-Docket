@@ -798,6 +798,16 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 6: a Principle: line inside a fenced block is not the principle line', r.code === 1 && /check 6: R8: no "Principle:" line/.test(r.out), r.out);
   r = docket(['append', '--title', 'Quoted reason', '--issue', '63', '--principle', 'Zero cognitive tax', '--body', 'Text with `Reason: quoted` only.'], { cwd: abc });
   ok('append: a Reason: only inside a code span is refused', r.code === 2 && /must state the reason/.test(r.err), r.err);
+  // a reason is a sentence that begins Reason: and says something (FORMAT.md 11)
+  for (const [what, body] of [['a bare Reason:', 'The frame costs a read. Reason:'], ['a Reason: inside a sentence', 'The Reason: the frame costs a read.'], ['a word ending in Reason:', 'UnReason: the frame costs a read.']]) {
+    r = docket(['append', '--title', 'No stated reason', '--issue', '65', '--principle', 'Zero cognitive tax', '--body', body], { cwd: abc });
+    ok('append: ' + what + ' states no reason, and is refused', r.code === 2 && /must state the reason as a sentence beginning "Reason:" that says something/.test(r.err), r.err);
+  }
+  const nr = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Reason: a blank frame costs a read', 'The Reason: a blank frame costs a read'));
+  r = docket(['check'], { cwd: nr });
+  ok('check 6: a Reason: that begins no sentence states no reason, and check 6 says so apart from a body with none', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 6: R8: body states no reason: its "Reason:" begins no sentence, or nothing follows it/m.test(r.out), r.out);
+  r = docket(['append', '--title', 'A listed reason', '--issue', '66', '--principle', 'Zero cognitive tax', '--body', 'The frame costs a read.\n\n- **Reason:** a blank frame is a read with nothing in it.', '--dry-run'], { cwd: abc });
+  ok('…while one opening a list item, in emphasis, is stated', r.code === 0, r.err);
   // one reader of the principle line for append, the index and check 6: a line beginning Principle:, a space after it or not (FORMAT.md 11)
   const pp2 = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Principle: Capture precedes structure.\n', 'Principle: Capture precedes structure.\nPrinciple: Zeta.\n'));
   r = docket(['check'], { cwd: pp2 });
