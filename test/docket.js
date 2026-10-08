@@ -587,6 +587,28 @@ const SEC = String.fromCharCode(0xa7);
   const ids = wn.out.split('\n').filter(l => /^  [AR]\d+  /.test(l)).map(l => l.trim().split(/\s+/)[0]);
   ok('near: the window is ±20 inclusive — a cite 20 lines away is in, 21 is out', ids.includes('R3') && ids.includes('R4') && !ids.includes('R5') && !ids.includes('R6'), wn.out);
   ok('near: a ruling cited twice ranks by its nearest cite, then the others nearest first, ties by line', ids.join(',') === 'R7,R8,R3,R4', ids.join(','));
+  // one window over the cap keeps the eight nearest, never the most cited: A1, cited four times at the window's far edge, is
+  // the one cut (D2, FORMAT.md 15). Among equals the earlier line goes first, then the earlier place on it, and a ruling cited
+  // at one distance on both sides ranks by its earlier cite — R5, at 10 before beside R6 and at 10 after behind R7 — as one
+  // cited twice on one line ranks by its first place there: R4, either side of R1. A whole-file write orders a ruling first
+  // cited on a line by its first place on it too.
+  const tie = tempRepo(d => {
+    const L = []; for (let i = 1; i <= 80; i++) L.push(`const t${i} = ${i};`);
+    L[49] = 'anchorT();'; for (const n of [30, 31, 32, 33]) L[n - 1] = '// A1 far';
+    for (let k = 1; k <= 8; k++) L[49 + k] = '// R' + (9 - k);
+    fs.writeFileSync(path.join(d, 'test', 'fixture', 'over.js'), L.join('\n') + '\n');
+    const M = []; for (let i = 1; i <= 80; i++) M.push(`const u${i} = ${i};`);
+    M[49] = 'anchorT();'; M[33] = '// R5 at sixteen'; M[34] = '// R4 then R1 then R4, all at fifteen'; M[39] = '// R6 then R5, both at ten before'; M[44] = '// R3 at five before'; M[54] = '// R2 at five after'; M[59] = '// R7 then R5, both at ten after';
+    fs.writeFileSync(path.join(d, 'test', 'fixture', 'tie.js'), M.join('\n') + '\n');
+    fs.writeFileSync(path.join(d, 'test', 'fixture', 'twice.js'), '// R4 then R1 then R4\n// R1 again\n');
+  });
+  const idsIn = r => r.out.split('\n').filter(l => /^  [AR]\d+  /.test(l)).map(l => l.trim().split(/\s+/)[0]);
+  const ov = docket(['near'], { cwd: tie, input: nearInput(path.join(tie, 'test', 'fixture', 'over.js'), 'anchorT()') });
+  ok('near: one window over the cap lists the eight nearest and says +1 more — the ruling cited most, four times at the far edge, is the one cut (D2, FORMAT.md 15)', ov.code === 0 && idsIn(ov).join(',') === 'R8,R7,R6,R5,R4,R3,R2,R1' && /\n  \+1 more\n/.test(ov.out) && !/\bA1\b/.test(ov.out), ov.out);
+  const ti = docket(['near'], { cwd: tie, input: nearInput(path.join(tie, 'test', 'fixture', 'tie.js'), 'anchorT()') });
+  ok('near: among equal distances the earlier line goes first, then the earlier place on that line, and a ruling cited at one distance on both sides, or twice on one line, ranks by its earlier cite (FORMAT.md 15)', ti.code === 0 && idsIn(ti).join(',') === 'R3,R2,R6,R5,R7,R4,R1', ti.out);
+  const tw = docket(['near'], { cwd: tie, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: path.join(tie, 'test', 'fixture', 'twice.js'), content: 'x' } }) });
+  ok('near: a whole-file write orders two rulings cited as often, first cited on one line, by their first places on it — R4 either side of R1 is first (FORMAT.md 15)', tw.code === 0 && idsIn(tw).join(',') === 'R4,R1', tw.out);
   // the union: nine rulings across two windows list eight, the ninth being the least cited and farthest from the first match; nine matches name eight lines and +1 more
   const un = tempRepo(d => {
     const L = []; for (let i = 1; i <= 130; i++) L.push(`const b${i} = ${i};`);
