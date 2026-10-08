@@ -6,8 +6,9 @@ can score and the core can hold the judge's verdict to, with no judgement the pa
 `docs/DECISIONS.md`; the located failure, `judge/PROTOCOL.md` step 4.
 
 A pack is a markdown file in `packs/`, named by its domain: `packs/<name>.md`, the name lowercase letters, digits and
-hyphens, opening with a letter. `docket pack <name>` prints it, `docket pack --list` lists it with its domain, and the
-judge reads the packs whose domains the diff touches, because the protocol's step 2 tells it to. A pack is a list of
+hyphens, opening with a letter. `docket pack <name>` prints it, `docket pack --list` lists it with its domain — a file
+named otherwise is not listed, and the list says it skipped it — and the judge reads the packs whose domains the diff
+touches, because the protocol's step 2 tells it to. A pack is a list of
 measurable features: if a feature needs a sentence to be scored, the sentence is in the pack.
 
 ## What the core reads in a pack
@@ -15,7 +16,7 @@ measurable features: if a feature needs a sentence to be scored, the sentence is
 Three things; a verdict that does not match them is refused before it is written.
 
 1. **`Domain:`**, the first line that opens with it: the files the pack scores, as globs or names, and what it leaves
-   to another pack. `pack --list` prints the rest of that line. A pack scores only the governed files in the diff — a
+   to another pack. `pack --list` prints the rest of that line, and nothing when the rest is empty. A pack scores only the governed files in the diff — a
    governed file being one that cites a ruling — and where two packs' domains cover a file, both score it.
 2. **Feature ids.** A feature opens a line with its id in bold — `**F1 — <the statement>.**`, as in `code.md`, or
    `**F1** — <the statement>`, as in `prose.md`. The id is `F` and a number, with a letter after it for a feature split

@@ -2861,25 +2861,33 @@ function protocol(argv) {
   if (argv.json) { out(JSON.stringify({ file: 'judge/PROTOCOL.md', text }, null, 2)); return 0; }
   out(text); return 0;
 }
+// A pack's name, as docs/PACKS.md gives it: lowercase letters, digits and hyphens, opening with a letter — the one rule `pack`,
+// `pack --list` and the refusal that names the packs all read, so the list names no pack the command refuses
+const PACK_NAME = /^[a-z][a-z0-9-]*$/;
+// A pack's domain: the rest of the first line that opens with `Domain:`, empty when that line is — never a line after it (PACKS.md)
+function packDomain(text) { const m = /^Domain:[ \t]*(.*)$/m.exec(text); return m ? m[1].trim() : ''; }
+function packFiles(dir) { return fs.readdirSync(dir).filter(f => /\.md$/.test(f)).sort(); }
 function pack(argv) {
   const dir = path.join(__dirname, '..', 'packs');
   if (has(argv, '--list') && argv._.length > 1) die('pack: --list prints every pack and takes no name; name the packs without it', 2);   // an argument accepted and ignored is a silence
   if (has(argv, '--list') || argv._.length < 2) {   // a name given, even an empty one, is read as a name below
     if (!isDir(dir)) die('pack: packs/ is not beside this file\'s bin/ — the packs live in the plugin; the vendored witness at test/docket.js carries none', 2);
-    const names = fs.readdirSync(dir).filter(f => /\.md$/.test(f)).sort();
-    const rows = names.map(f => { const m = /^Domain:\s*(.+)$/m.exec(readText(path.join(dir, f))); return { name: f.replace(/\.md$/, ''), domain: m ? m[1].trim() : '' }; });
+    const files = packFiles(dir), names = files.filter(f => PACK_NAME.test(f.replace(/\.md$/, '')));
+    // a file whose name no pack can have is not listed, and said: `pack` refuses that name, and a verdict cannot name it (PACKS.md)
+    for (const f of files) if (!names.includes(f)) process.stderr.write('pack: packs/' + f + ' is not listed: a pack is named in lowercase letters, digits and hyphens, opening with a letter (docs/PACKS.md)\n');
+    const rows = names.map(f => ({ name: f.replace(/\.md$/, ''), domain: packDomain(readText(path.join(dir, f))) }));
     if (argv.json) { out(JSON.stringify(rows, null, 2)); return 0; }
-    for (const r of rows) out(r.name + '  ' + r.domain);
+    for (const r of rows) out(r.domain ? r.name + '  ' + r.domain : r.name);
     return 0;
   }
   const names = argv._.slice(1);                                      // several names, one command (D30)
-  for (const name of names) if (!/^[a-z][a-z0-9-]*$/.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
+  for (const name of names) if (!PACK_NAME.test(name)) die('pack: a pack is named by its file: docket pack code | design | prose | decisions (docket pack --list)', 2);
   if (isDir(dir)) {                                                    // the plugin's packs are here: a name none has is a name to correct
     const unknown = names.filter(name => !isFile(path.join(dir, name + '.md')));
-    if (unknown.length) die('pack: no pack named ' + unknown.join(', ') + '; the packs are ' + fs.readdirSync(dir).filter(f => /\.md$/.test(f)).map(f => f.replace(/\.md$/, '')).sort().join(', ') + ' (docket pack --list)', 2);
+    if (unknown.length) die('pack: no pack named ' + unknown.join(', ') + '; the packs are ' + packFiles(dir).map(f => f.replace(/\.md$/, '')).filter(n => PACK_NAME.test(n)).join(', ') + ' (docket pack --list)', 2);
   }
   const texts = names.map(name => readText(besideMe('packs', name + '.md', 'pack')));
-  if (argv.json) { out(JSON.stringify(names.map((name, i) => { const m = /^Domain:\s*(.+)$/m.exec(texts[i]); return { name, domain: m ? m[1].trim() : '', text: texts[i] }; }), null, 2)); return 0; }
+  if (argv.json) { out(JSON.stringify(names.map((name, i) => ({ name, domain: packDomain(texts[i]), text: texts[i] })), null, 2)); return 0; }
   out(texts.join('\n')); return 0;
 }
 // A JSON-lines log of messages, as a host writes one: each line an object; the ones whose `type` is `assistant` carry

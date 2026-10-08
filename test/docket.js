@@ -3861,6 +3861,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('pack refuses a name no pack has, exit 2, naming it and the packs there are — not the vendored copy’s message: the packs are beside it', r.code === 2 && /^pack: no pack named nosuch; the packs are code, decisions, design, prose \(docket pack --list\)$/m.test(r.err) && !/vendored/.test(r.err), r.code + ' ' + r.err);
     r = docket(['pack', 'code', 'nosuch']);
     ok('…and among several names, prints nothing and names the one to correct', r.code === 2 && r.out === '' && /no pack named nosuch;/.test(r.err), r.code + ' ' + r.out.slice(0, 80) + ' ' + r.err);
+    // packs of a copy of the plugin: an empty Domain line, and two files no pack's name can be — the list names what the command
+    // reads, a domain is the rest of its own line, and the refusal names the same packs as the list (PACKS.md)
+    { const pd = tmpDir('packs-'); fs.mkdirSync(path.join(pd, 'bin')); fs.mkdirSync(path.join(pd, 'packs')); fs.copyFileSync(CORE, path.join(pd, 'bin', 'docket.js'));
+      fs.writeFileSync(path.join(pd, 'packs', 'ok-1.md'), 'Domain:\n**F1 — a thing.** How scored: look.\n'); fs.writeFileSync(path.join(pd, 'packs', 'code.md'), '# Code\n\nDomain: code, `*.js`\n');
+      for (const f of ['9x.md', 'a_b.md']) fs.writeFileSync(path.join(pd, 'packs', f), 'Domain: other\n');
+      const run = a => cp.spawnSync('node', [path.join(pd, 'bin', 'docket.js')].concat(a), { cwd: pd, encoding: 'utf8', env: outerEnv() });
+      const l = run(['pack', '--list']), lj = run(['pack', '--list', '--json']), one = run(['pack', 'ok-1', '--json']), no = run(['pack', 'nosuch']), j = (t => { try { return JSON.parse(t); } catch (e) { return null; } })(lj.stdout), oj = (t => { try { return JSON.parse(t); } catch (e) { return null; } })(one.stdout);
+      ok('pack --list lists only the packs a name can name — a file named 9x or a_b is not listed and is said to be skipped, where the list had named packs pack and verdict refuse; a Domain line left empty is an empty domain, not the line after it; the refusal names the same packs (PACKS.md)',
+        l.status === 0 && l.stdout === 'code  code, `*.js`\nok-1\n' && /packs\/9x\.md is not listed/.test(l.stderr) && /packs\/a_b\.md is not listed/.test(l.stderr)
+        && !!j && JSON.stringify(j) === JSON.stringify([{ name: 'code', domain: 'code, `*.js`' }, { name: 'ok-1', domain: '' }]) && !!oj && oj[0].domain === ''
+        && no.status === 2 && /the packs are code, ok-1 \(/.test(no.stderr), [l.stdout, l.stderr, lj.stdout.slice(0, 160), one.stdout.slice(0, 120), no.stderr].join(' | ')); }
     const vd = tempRepo(); docket(['vendor', '.'], { cwd: vd });
     const vp = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'protocol'], { cwd: vd, encoding: 'utf8', env: outerEnv() });
     const vk = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'pack', '--list'], { cwd: vd, encoding: 'utf8', env: outerEnv() });

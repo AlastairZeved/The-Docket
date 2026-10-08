@@ -116,6 +116,7 @@ Cap 5 blocks per session since the last PASS; if located failures do not decreas
 Principle: One home per value.
 A pack is a markdown file of numbered measurable features per domain; the judge reads the pack(s) for the domains the diff touches, and scores only governed files. Reason: the judge is only as good as its feature set, and a feature set in a file can be diffed, cited and improved without touching the judge.
 > Addendum 2026-10-01: The decisions pack's F8 and F9 say that an entry with neither is the failure, located at the heading: neither a stated range nor the words that it holds at every scale for F8, and neither a number nor a recorded absence of one for F9. Both had ended neither is a failure, which reads as the opposite of the rule that an unrecorded absence is one.
+> Addendum 2026-10-08: `pack --list` lists only the files a pack's name can be — lowercase letters, digits and hyphens, opening with a letter — and says on its error stream which it skipped, and a pack's domain is the rest of its own `Domain:` line, empty when that is. The list had named a file `9x.md` or `a_b.md`, which `pack` refused by name and a verdict could not cite, and a `Domain:` line left empty had taken the next line of the file for its domain. One name rule now serves the list, the command and the refusal that names the packs.
 
 ### D13. The core is host-agnostic; the host binding is thin (the law should outlive the tool that first ran it)
 Principle: One home per value.
