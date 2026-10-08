@@ -2215,7 +2215,7 @@ function constitute(argv) {
     '`node test/docket.js governs <id>` for each ruling that comes back. A decision is recorded as a new',
     'entry, never as an edit to an old one. Run `node test/docket.js` before you stop: it is the witness,',
     'and CI runs the same command. The witness reads tracked files: add and commit docs/ and test/ first, or it',
-    'reads nothing and says so. Add `.docket/` to .gitignore: the judge keeps its verdicts there.',
+    'reads nothing and says so.',
   ].join('\n');
   if (argv.json) {
     out(JSON.stringify({ name, dir: rel(process.cwd(), dir) || '.', prefix: a.prefix, written: written.map(f => rel(dir, f)), entry: entry.trimEnd(), ciStep: CI_STEP, agentSection: section, ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2));

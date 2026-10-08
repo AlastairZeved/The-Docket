@@ -2283,7 +2283,7 @@ const SEC = String.fromCharCode(0xa7);
     ok('--target constitutes a directory other than the working one', r.code === 0 && fs.existsSync(path.join(dir, 'proj', 'docs', 'DECISIONS.md')) && !fs.existsSync(path.join(dir, 'docs')), r.out + r.err);
     const j = constitute(Object.assign({}, ANSWERS, { prefix: 'L' }), { dir: (() => { const x = freshDir(); return x; })(), args: ['--json'] });
     let o = null; try { o = JSON.parse(j.out); } catch (e) { /* not json */ }
-    ok('--json carries the name, prefix, files written, the entry, the CI step, the section, and the check', o && o.name === 'Lot' && o.prefix === 'L' && o.written.length === 4 && /^### L1\. The constitution/.test(o.entry) && /fetch-depth/.test(o.ciStep) && /^## The docket/.test(o.agentSection) && o.ok === true, j.out.slice(0, 400));
+    ok('--json carries the name, prefix, files written, the entry, the CI step, the section, and the check', o && o.name === 'Lot' && o.prefix === 'L' && o.written.length === 4 && /^### L1\. The constitution/.test(o.entry) && /fetch-depth/.test(o.ciStep) && /^## The docket/.test(o.agentSection) && !/gitignore/.test(o.agentSection) && o.ok === true, j.out.slice(0, 400));
     ok('…and a chosen prefix numbers the constitution with it', o && /L1\./.test(o.entry) && /contract from L1/.test(read(path.join(j.dir, 'docs', 'DECISIONS.md'))), 'prefix not honoured');
     const noName = constitute((() => { const a = JSON.parse(JSON.stringify(ANSWERS)); delete a.name; return a; })());
     ok('without a name the project is named after its directory, and the output says which', noName.code === 0 && new RegExp('^constituted ' + path.basename(noName.dir) + ' in ').test(noName.out), noName.out.split('\n')[0]);
