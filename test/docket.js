@@ -1604,14 +1604,18 @@ const SEC = String.fromCharCode(0xa7);
   const b3TwoR = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'UIUX.md'); fs.writeFileSync(q, read(q).replace('15.04:1', 'AA needs 4.5:1; measured 15.04:1')); });
   r = docket(['spec-check'], { cwd: path.join(b3TwoR, 'test', 'fixture') });
   ok('spec-check (b): a row stating two ratios is refused rather than judged on whichever comes first', r.code === 1 && /a row states one ratio/.test(r.out), r.out);
-  // a contrast row naming a colour with an alpha channel is refused, and the grammar allows 4 and 8 digits
-  const b3AlphaRow = tempRepo(d => {
+  // a contrast row reads each hex as its colour: the grammar allows 4 and 8 digits, an opaque alpha is the colour it spells, and
+  // a colour whose alpha is short of opaque is refused rather than recomputed without it (FORMAT.md 13)
+  const alphaRow = al => tempRepo(d => {
     const q = path.join(d, 'test', 'fixture', 'UIUX.md'), c = path.join(d, 'test', 'fixture', 'styles.css');
-    fs.writeFileSync(c, read(c).replace('--ink: #1b1b1b;', '--ink: #1b1b1bff;'));
-    fs.writeFileSync(q, read(q).replace('`#1b1b1b`', '`#1b1b1bff`'));
+    fs.writeFileSync(c, read(c).replace('--ink: #1b1b1b;', '--ink: #1b1b1b' + al + ';'));
+    fs.writeFileSync(q, read(q).replace('`#1b1b1b`', '`#1b1b1b' + al + '`'));
   });
-  r = docket(['spec-check'], { cwd: path.join(b3AlphaRow, 'test', 'fixture') });
-  ok('spec-check: an eight-digit hex is a colour the grammar allows, and a contrast row naming b3One is refused rather than recomputed without its alpha', r.code === 1 && /alpha/.test(r.out), r.out);
+  const r0 = docket(['spec-check'], { cwd: FIX });
+  r = docket(['spec-check'], { cwd: path.join(alphaRow('ff'), 'test', 'fixture') });
+  ok('spec-check: an eight-digit hex with an opaque alpha is the colour it spells, and a contrast row naming it is recomputed and holds, its failures the fixture\'s own', !/alpha/.test(r.out) && r.code === r0.code && r.out.split('\n').filter(l => /check b|  b  /.test(l) || /states .* but the hexes give/.test(l)).length === r0.out.split('\n').filter(l => /check b|  b  /.test(l) || /states .* but the hexes give/.test(l)).length, r.out + '\n--- the fixture:\n' + r0.out);
+  r = docket(['spec-check'], { cwd: path.join(alphaRow('80'), 'test', 'fixture') });
+  ok('…while one whose alpha is short of opaque is refused, named, rather than recomputed without its alpha', r.code === 1 && /contrast row: --ink is #1b1b1b80, whose alpha channel is short of opaque/.test(r.out), r.out);
   // append writes, then checks: the entry is there even when the ledger as a whole does not pass
   const b3Wf = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const bad = 1;   // R99\n'));
   const b3WfCwd = path.join(b3Wf, 'test', 'fixture');

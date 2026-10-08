@@ -1400,11 +1400,13 @@ function runSpecCheck(root, ctx, onlyLedger) {
       if (toks.length !== 2) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row names ' + toks.length + ' tokens; a contrast row names exactly two' }); return; }
       const a = valueOf(toks[0]), b = valueOf(toks[1]);
       if (!a || !b) { failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: no hex known for ' + (a ? toks[1] : toks[0]) }); return; }
-      for (const [tok, hx] of [[toks[0], a], [toks[1], b]]) if (hx.length === 5 || hx.length === 9) {   // #rgba or #rrggbbaa
-        failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: ' + tok + ' is ' + hx + ', which carries an alpha channel; what it meets the eye as depends on what lies behind it, so a ratio cannot be recomputed from it' });
+      // each hex read as its colour, as a token row reads it: an opaque alpha, ff, is the colour it spells (FORMAT.md 13)
+      const ca = colourOf(a), cb = colourOf(b);
+      for (const [tok, hx, c] of [[toks[0], a, ca], [toks[1], b, cb]]) if (c.length === 9) {   // an alpha short of opaque
+        failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: 'contrast row: ' + tok + ' is ' + hx + ', whose alpha channel is short of opaque; what it meets the eye as depends on what lies behind it, so a ratio cannot be recomputed from it' });
         return;
       }
-      const statedH = hundredths(cm[1]), gotH = Math.round(contrast(a, b) * 100);   // both in hundredths: the stated one from its digits, the computed one from its value
+      const statedH = hundredths(cm[1]), gotH = Math.round(contrast(ca, cb) * 100);   // both in hundredths: the stated one from its digits, the computed one from its value
       if (gotH !== statedH) failures.push({ file: rel(root, docs.uiux), line: i + 1, k: 'b', message: toks[0] + ' on ' + toks[1] + ' states ' + fixed2(statedH) + ':1 but the hexes give ' + fixed2(gotH) + ':1' });
     });
   }

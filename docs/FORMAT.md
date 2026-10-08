@@ -565,8 +565,11 @@ runs to the end of the file, as CSS reads it; and a
 ends it, so `4.5:10` is not one, and a row that names two tokens with a ratio in
 another shape (`4.5:10`, `4.5 : 1`, `4.5 to 1`) fails, named, and is not read as
 prose — which names exactly two tokens or fails, and whose ratio is recomputed from the two
-hexes to two decimals (b): the stated ratio is rounded half-up on its written
-digits, the recomputed one on its value, and the two are compared in hundredths. `governs <id>` names the ledger it searched and
+hexes to two decimals (b) — each hex read as its colour, so an opaque alpha,
+`ff`, is the colour it spells, and a hex whose alpha is short of opaque fails,
+named, since what it meets the eye as depends on what lies behind it: the stated
+ratio is rounded half-up on its written digits, the recomputed one on its value,
+and the two are compared in hundredths. `governs <id>` names the ledger it searched and
 exits 2 when `<id>` is not one of its entries; `query <term>…` reads each argument
 as a term, lists every ruling any term matches, once each, in the ledger's order,
 refuses a blank term, and prints that nothing matches and exits 0 when none does;
