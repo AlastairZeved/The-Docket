@@ -28,6 +28,10 @@ stands. A FAIL blocks the stop, and the maker is told which ruling, where, and t
 has already printed the rulings that govern the lines about to change: that is the judge's first half, the list
 against which a claim like "this follows R6" can be checked at the stop.
 
+**Who it is for:** a solo builder using a coding agent on one project across many sessions; someone with a real spec
+the agent keeps paraphrasing; a team of two to four where the reason for a decision lives in one head. **Not for:**
+enterprises, throwaway projects, or anyone who will not open the ledger twice.
+
 Everything it enforces is plain text in your repository. Uninstall the plugin and the rulings still govern, because
 the witness that checks them is a node script your repository owns and your CI runs (D9).
 
@@ -46,7 +50,7 @@ CI.
 
 | When | Job | What happens |
 |---|---|---|
-| at "done" | **Did this break a ruling?** | The stop hook starts a judge: a headless session of its own that can read files and run the docket's core, and can write nothing. It scores the session's diff against the rulings and the packs — files of features the judge scores, one per domain: code, design, prose, decisions (D12). A FAIL, or a STALE for a ruling whose reason the diff has made untrue, blocks the stop with located lines (D37). |
+| at "done" | **Did this break a ruling?** | The stop hook starts a judge: a headless session of its own, allowed to read files and to run the docket's core, which records its verdict (D37). It scores the session's diff against the rulings and the packs — files of features the judge scores, one per domain: code, design, prose, decisions (D12). A FAIL, or a STALE for a ruling whose reason the diff has made untrue, blocks the stop with located lines (D37). |
 | before an edit | **What governs this region?** | A hook prints the rulings cited within twenty lines of the edit, nearest first, with the edges among them. It informs and never blocks (D1, D2). |
 | at a decision | **Record it where it will be found.** | `/rule` asks five questions, refuses a vague answer, prints the entry under RULING — PLEASE CONFIRM, and writes nothing until you type `confirm` (D8, D18). |
 | at a new project | **A spine before the first line.** | `/constitute` asks four gated questions and, on your `confirm`, writes `docs/PRD.md`, `docs/UIUX.md` and `docs/DECISIONS.md`, vendors the witness as `test/docket.js`, and prints a CI step (D9). |
@@ -226,8 +230,8 @@ sh test/install.sh      # the plugin installed fresh from this repository, then 
 <summary>Does my law live in the plugin?</summary>
 
 No. It is files in your repository — `docs/PRD.md`, `docs/UIUX.md`, `docs/DECISIONS.md`, or a ledger of your own.
-The witness is vendored into your repository as `test/docket.js` (D9), so your CI goes on checking the ledger after
-the plugin is gone.
+`/constitute` vendors the witness into your repository as `test/docket.js`, and so does `docket vendor .` for a ledger
+of your own (D9), so your CI goes on checking the ledger after the plugin is gone.
 
 </details>
 
@@ -253,9 +257,9 @@ leads with the judge (D49).
 <summary>Will the judge block every stop?</summary>
 
 No. A judge starts only when the session's diff touches a governed file — one that cites a ruling — a ledger, or a
-spec document beside one (D10, D40). A change to anything else starts nothing. A session is blocked at most five
-times between passes; when its located failures stop going down, the residue goes to you once and the judge stands
-down until a PASS or a new session (D11).
+spec document beside one (D10, D40). A change to anything else starts nothing. A judge blocks a session at most 5
+times between passes; the stop after the fifth block, or after the third once its located failures stop going down, is
+blocked one final time to hand you the residue, and the judge stands down until a PASS or a new session (D11).
 
 </details>
 
@@ -263,7 +267,7 @@ down until a PASS or a new session (D11).
 <summary>Can I use it without Claude Code?</summary>
 
 The core reads JSON on stdin and writes text, exit codes and markdown, and names no host or model (D13).
-`docs/PROTOCOL-BINDING.md` binds a second host in three calls: before an edit, at a session's start, and at the stop.
+`docs/PROTOCOL-BINDING.md` says what a second host calls: before an edit, at a session's start, and at the stop.
 No second host has been bound yet.
 
 </details>
@@ -313,10 +317,17 @@ fixture, with no model named in the run. A result holds for that host, that date
 
 ## Known Limits
 
-- **The maker can record a verdict (D11).** The maker's session may run the core — `/rule` and `/docket` do — and a
-  PASS the maker records passes the diff in front of it as one you record does. What stands in the way is the
-  permission to run the core and the call's place in the maker's transcript, where you can read it: the boundary is
+- **The maker can record a verdict (D11, D40).** The maker's session may run the core — `/rule` and `/docket` do — and
+  a PASS the maker records passes the diff in front of it as one you record does. A session that resets its history
+  past where it started is read from the new HEAD, so the commits it rewrote are not judged. What stands in the way is
+  the permission to run the core and the call's place in the maker's transcript, where you can read it: the boundary is
   permission and visibility, not cryptography.
+- **The judge is a model reading prose (D12, D37).** It scores the diff against rulings and packs written as text. It
+  can cite a ruling and route a change through `/rule`; the core refuses it the commands that write the ledger, so it
+  cannot rewrite one. Its features are the packs, files you can read. That is the whole defence against drift.
+- **Cost (D10, D11).** One judge per stop whose diff touches a governed file — a headless session of its own that uses
+  your account as one does — and at most 5 judged blocks per session between passes; the stop after them surfaces
+  with no judge.
 - **The judge's permission is a text pattern (D37).** It admits any node command whose text names a `docket.js`, not
   the core alone. The core refuses the judge `append`, `constitute` and `vendor`; nothing refuses another script of
   that name.
@@ -327,9 +338,11 @@ fixture, with no model named in the run. A result holds for that host, that date
   `.docket/judge.log`; the next stop in the same turn is allowed. That block counts toward the session's cap, 5
   blocks since the last PASS, as a FAIL does.
 - **A stop can take minutes (D42).** The judge is bounded at seven hundred seconds, and the stop hook's timeout is
-  seven hundred and thirty. Each judged stop is a headless session of its own, and uses your account as one does.
-- **The judge runs on the host's default model (D13, D43).** The binding names no model, so the judge most likely
-  shares the maker's model, and its blind spots. A second model is yours to set in the host.
+  seven hundred and thirty.
+- **The judge runs on the host's default model (D13, D43).** The binding names no model, so the judge's accuracy is
+  that model's, on that host: every result under Measured Results states the host's version and the date that
+  produced it. The judge most likely shares the maker's model, and its blind spots; a second model is yours to set in
+  the host.
 - **What the calibration covers (D25).** Six planted cases on one fixture, read through the code pack and the
   decisions pack. The design and prose packs' features are read by the judge and driven by no planted case.
 - **The hook's effect is not shown (D17, D49).** No measurement of the hook has had a control; it informs and never

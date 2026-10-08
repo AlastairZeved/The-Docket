@@ -6020,6 +6020,9 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   for (const l of ledger.split('\n')) { const m = /^### (D\d+)\./.exec(l); if (m) cur = m[1]; if (cur) text[cur] = (text[cur] || '') + l + '\n'; }
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'thousand'];
   const NUM = new RegExp('(?<![\\p{L}\\p{N}_.])\\d+(?:[.:-]\\d+)*(?![\\p{L}\\p{N}_])|(?<![\\p{L}\\p{N}_])(?:' + WORDS.join('|') + ')(?![\\p{L}\\p{N}_])', 'giu');
+  // a duration is held with its unit: "22 seconds" is one the ruling states as 22 seconds, not a 22 beside some count of minutes
+  const DUR = new RegExp('(?<![\\p{L}\\p{N}_.])(\\d+(?:[.:-]\\d+)*|' + WORDS.join('|') + ')\\s+(second|minute|hour|day)s?(?![\\p{L}\\p{N}_])', 'giu');
+  const durHeld = (m, held) => new RegExp('(?<![\\p{L}\\p{N}_.])' + m[1].replace(/\./g, '\\.') + '\\s+' + m[2] + 's?(?![\\p{L}\\p{N}_])', 'iu').test(held);
   const at = readme.indexOf('\n## Measured Results\n'), lines = at < 0 ? [] : readme.slice(at).split(/\n- /).slice(1), bad = [];
   for (const b of lines) {
     const ids = ((/^\*\*[^*\n]+\*\*/.exec(b) || [''])[0].match(/\bD\d+\b/g) || []);
@@ -6029,20 +6032,46 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
       const t = m[0], re = new RegExp('(?<![\\p{L}\\p{N}_.])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])', 'iu');
       if (!re.test(held)) bad.push(t + ' in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold');
     }
+    for (const m of b.matchAll(DUR)) if (!durHeld(m, held)) bad.push('the duration "' + m[0] + '" in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold with its unit');
     // a count is held whole: "four stops of five" is in the ruling as written, not its two numbers apart
     const N = '(?:\\d+|' + WORDS.join('|') + ')', COUNT = new RegExp('(?<![\\p{L}\\p{N}_])' + N + '(?:\\s+\\p{L}+)?\\s+of\\s+' + N + '(?![\\p{L}\\p{N}_])', 'giu');
     const flat = held.replace(/\s+/g, ' ').toLowerCase();
     for (const m of b.matchAll(COUNT)) if (!flat.includes(m[0].replace(/\s+/g, ' ').toLowerCase())) bad.push('the count "' + m[0] + '" in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold as written');
   }
-  ok('every line under Measured Results and Known Limits names in its bold lead the rulings it rests on, and every number in it, figure or word, is one those rulings hold, a count as written', lines.length >= 10 && !bad.length, bad.join('\n'));
+  ok('every line under Measured Results and Known Limits names in its bold lead the rulings it rests on, and every number in it, figure or word, is one those rulings hold, a count as written and a duration with its unit', lines.length >= 10 && !bad.length, bad.join('\n'));
+  // the FAQ's answers are held as those sections are: every number in an answer, figure or word, outside code, is one the rulings
+  // that answer cites hold — an answer that cites none states none
+  { const a0 = readme.indexOf('\n## FAQ\n'), a1 = readme.indexOf('\n## ', a0 + 1), answers = a0 < 0 ? [] : readme.slice(a0, a1 < 0 ? undefined : a1).split('<details>').slice(1), fbad = [];
+    for (const a of answers) {
+      const body = a.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, ''), ids = Array.from(new Set(body.match(/\bD\d+\b/g) || [])), held = ids.map(id => text[id] || '').join('\n');
+      for (const m of body.matchAll(NUM)) { const t = m[0]; if (!new RegExp('(?<![\\p{L}\\p{N}_.])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])', 'iu').test(held)) fbad.push(t + ' in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold'); }
+      for (const m of body.matchAll(DUR)) if (!durHeld(m, held)) fbad.push('the duration "' + m[0] + '" in the answer to "' + ((/<summary>(.*?)<\/summary>/.exec(a) || [])[1] || '?') + '", which ' + (ids.join(', ') || 'no ruling') + ' does not hold with its unit');
+    }
+    ok('every number in a FAQ answer, figure or word, outside code, is one the rulings that answer cites hold, a duration with its unit — an answer citing none states none', answers.length >= 5 && !fbad.length, fbad.join('\n')); }
+  // the spec's four limits, stated under Known Limits; the block cap as the core counts it, and the final block beside it; who it is
+  // for and who not; the judge's write named as the verdict it records; the witness vendored on both routes
+  { const kl = readme.slice(readme.indexOf('\n## Known Limits\n')), cap = Number((/^const BLOCK_CAP = (\d+);/m.exec(read(CORE)) || [])[1]);
+    const said = { verdict: /^- \*\*The maker can record a verdict \(D11, D40\)\.\*\*[\s\S]*?not cryptography/m.test(kl),
+      prose: /^- \*\*The judge is a model reading prose \(D12, D37\)\.\*\*[\s\S]*?cannot rewrite one[\s\S]*?files you can read\. That is the whole defence against drift\./m.test(kl),
+      cost: new RegExp('^- \\*\\*Cost \\(D10, D11\\)\\.\\*\\* One judge per stop whose diff touches a governed file[\\s\\S]*?at most ' + cap + ' judged blocks per session between passes', 'm').test(kl),
+      accuracy: /the judge's accuracy is\s+that model's, on that host: every result under Measured Results states the host's version and the date/.test(kl),
+      cap: new RegExp('A judge blocks a session at most ' + cap + '\\s+times between passes;[\\s\\S]{0,120}?blocked one final time to hand you the residue').test(readme),
+      who: /\*\*Who it is for:\*\* a solo builder[\s\S]*?\*\*Not for:\*\*\s+enterprises, throwaway projects, or anyone who will not open the ledger twice\./.test(readme),
+      write: !/can write nothing/.test(readme) && /allowed to read files and to run the docket's core, which records its verdict \(D37\)/.test(readme),
+      vendor: /`\/constitute` vendors the witness[\s\S]{0,80}?and so does `docket vendor \.` for a ledger\s+of your own \(D9\)/.test(readme) };
+    ok('the README states the four limits — the maker can record a verdict, the judge a model reading prose that cites and cannot rewrite, the cost per stop with the cap the core counts, accuracy the host’s with host and date stated — the cap with the final block that hands over the residue, who it is for and not, the judge’s one write, and the witness vendored on both routes', Number.isInteger(cap) && Object.values(said).every(Boolean), JSON.stringify(said)); }
   // a repository is named by a link, a clone or a marketplace's source; every link is held to the four kinds the README makes —
   // this repository, its owner's account, a static badge, Node's site — so a host no list could name is caught as well
   const OWN = /^(?:https:\/\/github\.com\/)?AlastairZeved\/The-Docket(?:\.git)?$/;
   const links = Array.from(readme.matchAll(/\bhttps?:\/\/[^\s)<>\]"'`]+/g), m => m[0]);
   const sources = Array.from(readme.matchAll(/\b(?:marketplace add|clone)\s+([^\s`]+\/[^\s`]+)/g), m => m[1]);
   const KINDS = [OWN, /^https:\/\/github\.com\/AlastairZeved$/, /^https:\/\/img\.shields\.io\/badge\/[\w%.-]+$/, /^https:\/\/nodejs\.org\/$/];
-  const other = links.filter(u => !KINDS.some(k => k.test(u))).concat(sources.filter(s => !OWN.test(s)));
-  ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, and every clone and marketplace source is AlastairZeved/The-Docket', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
+  // …and named bare in its prose, an owner/name outside code, links and addresses: one that is not a path of this repository is a
+  // repository's name, held to this one
+  const prose = readme.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '').replace(/\]\([^)]*\)/g, ']').replace(/\bhttps?:\/\/\S+/g, '');
+  const bare = Array.from(prose.matchAll(/(?<![\w./-])[A-Za-z0-9][\w.-]*\/[\w.-]+(?![\w/])/g), m => m[0].replace(/\.+$/, '')).filter(t => !OWN.test(t) && !fs.existsSync(path.join(ROOT, t)));
+  const other = links.filter(u => !KINDS.some(k => k.test(u))).concat(sources.filter(s => !OWN.test(s)), bare);
+  ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, every clone and marketplace source is AlastairZeved/The-Docket, and an owner/name in its prose is this repository or a path in it', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
   const badge = /img\.shields\.io\/badge\/version-((?:[^-)\s]|--)+)-/.exec(readme);
   ok('the README’s version badge is the plugin manifest’s version', !!badge && badge[1].replace(/--/g, '-') === plugin.version, (badge ? badge[1] : 'no version badge') + ' against ' + plugin.version);
   const descs = [plugin.description, market.description].concat((market.plugins || []).map(p => p.description));
