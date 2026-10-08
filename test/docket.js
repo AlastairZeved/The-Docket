@@ -66,6 +66,23 @@ process.on('exit', () => { for (const d of TEMP_DIRS) { try { fs.rmSync(d, { rec
 }
 // A temporary directory the suite owns: removed at exit, whatever the tests did with it.
 function tmpDir(prefix) { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); TEMP_DIRS.push(d); return d; }
+// The build's own state as the run found it: each file under every .docket/ in the tree the witness reads, by path and bytes.
+// The witness's calls that record — a gate, a stop, a verdict — run in trees of their own, so a developer's working copy keeps
+// its sessions and a fresh checkout gains none; the run's last assertion holds it to this
+function dockState() {
+  const out = [];
+  const walk = (d, inDock) => {
+    let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of es.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+      const p = path.join(d, e.name), dock = inDock || e.name === '.docket';
+      if (e.isDirectory()) { if (dock) out.push(path.relative(ROOT, p) + '/'); if (e.name !== '.git' || inDock) walk(p, dock); }
+      else if (inDock) { let b; try { b = fs.readFileSync(p, 'latin1'); } catch (x) { b = '<unreadable: ' + x.code + '>'; } out.push(path.relative(ROOT, p) + '\0' + b); }
+    }
+  };
+  walk(ROOT, false);
+  return out;
+}
+const DOCK0 = dockState();
 // A refusal for the assertions that read one, so that they run on every runner, an unprivileged CI's included: made by the
 // filesystem where it can be — a directory's write bits cleared, or where those do not bind (the witness run as root) the
 // immutable attribute, where the filesystem has it — and otherwise injected: a preload loaded with the core fails the same calls
@@ -3876,7 +3893,9 @@ const SEC = String.fromCharCode(0xa7);
       for (const f of ['packs/code.md', 'packs/design.md', 'packs/prose.md', 'packs/decisions.md', 'judge/PROTOCOL.md']) for (const l of read(path.join(ROOT, f)).split('\n')) if (/^    [a-z][a-z0-9-]* · F\d+[a-z]? · /.test(l)) ex.push(l.trim());
       const byAddendum = ex.filter(l => !/\b(reason gone|cite stale)\b/i.test(l) && !/^decisions · F11 · /.test(l) && /addendum/i.test(l.split(' · ').pop()));
       ok('no FAIL a pack or the protocol gives as an example routes through an addendum — the STALE route alone — save the decisions pack’s F11, which puts the maker’s own addendum to the person as it is (D32, D35)', ex.length >= 7 && byAddendum.length === 0, byAddendum.join('\n') || ex.length + ' examples'); }
-    for (const c of ['gate', 'verdict', 'pack', 'transcript', 'governs']) ok('the protocol names `docket ' + c + '`, and the core answers it', new RegExp('docket ' + c + '\\b').test(PR) && !/unknown subcommand/.test(docket([c]).err), c);
+    // each answered in an empty directory outside any repository: a gate run in this tree would record a session in its .docket/
+    { const empty = tmpDir('docket-empty-');
+      for (const c of ['gate', 'verdict', 'pack', 'transcript', 'governs']) ok('the protocol names `docket ' + c + '`, and the core answers it', new RegExp('docket ' + c + '\\b').test(PR) && !/unknown subcommand/.test(docket([c], { cwd: empty, env: { CLAUDE_PROJECT_DIR: '' } }).err), c); }
     ok('the protocol says how the judge finds the core — the path its stop’s prompt names, or the breadcrumb for one run by hand — and what each missing-breadcrumb case means (D37)', /where `docket stop` started the judge — the file its\s+prompt names/.test(PR) && /finds no\s+`\.docket\/core` and no ledger says the project is not under the docket/.test(PR) && /finds a ledger and no `\.docket\/core` says the session did not start with\s+the plugin loaded/.test(PR), 'the protocol does not say');
     ok('the protocol names no host, no model and no vendor', !HOST_NAMES.test(PR), PR.match(HOST_NAMES));
   }
@@ -5759,5 +5778,9 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('the packs that score a change with check and spec-check run them given --untracked: decisions F1, F3 and F4, design F1 and F2, code F2', (packs[0].match(/How scored: `docket check --untracked`/g) || []).length === 3 && (packs[1].match(/How scored: `docket spec-check --untracked` \([ab]\)/g) || []).length === 2 && /How scored: `docket check --untracked`; exit code decides/.test(packs[2]) && !/How scored: `docket (spec-)?check`/.test(packs.join(' ')), packs.map(p => (p.match(/How scored: `docket [^`]*`/g) || []).join(' / ')).join(' | '));
 }
 
+// the run leaves the build's own state as it found it (dockState, above)
+{ const now = dockState(), had = new Set(DOCK0), has = new Set(now);
+  ok('the witness leaves every .docket/ in the tree it witnesses as it found it: each call that records ran in a tree of its own', now.join('\n') === DOCK0.join('\n'),
+    'gained or changed: ' + (now.filter(x => !had.has(x)).map(x => x.split('\0')[0]).join(', ') || 'none') + '; lost or changed: ' + (DOCK0.filter(x => !has.has(x)).map(x => x.split('\0')[0]).join(', ') || 'none')); }
 console.log(`witness: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
