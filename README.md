@@ -305,10 +305,11 @@ fixture, with no model named in the run. A result holds for that host, that date
 - **The intake (D18).** One run of each measure beside an empty project, 2026-09-23: told the reader was a general
   audience, `/constitute` refused it and wrote nothing, one of one; given four acceptable answers, it printed
   CONSTITUTION — PLEASE CONFIRM and wrote nothing, one of one.
-- **The fresh install (D50).** On 2026-10-08, on "version 2.1.294 (Claude Code)": the plugin added from this
-  repository's marketplace and installed into a scratch project's local scope, at version 0.1.0. `/constitute`
-  reached its confirm block and wrote nothing, one of one. An edit in a governed region printed "Governed here" from
-  the installed hook, and the stop's judge recorded a PASS and ended 22 seconds after it started, one of one.
+- **The fresh install (D50).** The latest record, of 2026-10-08 on "version 2.1.295 (Claude Code)": the plugin added
+  from this repository's marketplace and installed into a scratch project's local scope, at version 0.1.0, its core,
+  hook binding and manifest this repository's own by SHA-256. `/constitute` reached its confirm block and wrote
+  nothing, one of one. One edit in a governed region changed the file, the installed hook printed the governed list
+  for it, and the stop's judge recorded a PASS and ended 22 seconds after it started, one of one.
 - **The hook (D17, D49).** Asked to edit a governed region, the maker named a ruling from the hook's list in three of
   three runs; told to remove the toolbar, it named R6 and left the toolbar in place in three of three (2026-09-21).
   This is not evidence the list was read: the fixture's code names its rulings in its own comments, no run turned the
