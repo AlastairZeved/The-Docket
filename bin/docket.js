@@ -103,7 +103,7 @@ const GIT_DIFF = ['-c', 'core.quotePath=true', '-c', 'diff.suppressBlankEmpty=fa
 function gitEnv(base) { const e = Object.assign({}, base || process.env, { GIT_LITERAL_PATHSPECS: '1' }); delete e.GIT_DIFF_OPTS; delete e.GIT_EXTERNAL_DIFF; return e; }
 function sh(cmd, args, cwd) {
   const r = cp.spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28, env: cmd === 'git' ? gitEnv() : process.env });   // 256 MiB: past any diff, blame or listing a session makes (D14's addendum)
-  return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+  return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error ? (r.error.code || r.error.message) : null };   // error: the command never ran
 }
 function gitRoot(dir) {
   const r = sh('git', ['rev-parse', '--show-toplevel'], dir);
@@ -1293,6 +1293,8 @@ function namesHead(rev, groot) {
 function committedText(root, filePath, workingText, note) {
   const groot = gitRoot(path.dirname(filePath)) || root;               // git resolves <rev>:<path> from the repository root, whatever the enumeration root is
   const p = rel(groot, filePath);
+  const run = sh('git', ['--version'], groot);                         // a git that never started holds no version: said as that, not as a ledger never committed
+  if (run.error) { if (note) note('skipped — git could not be run (' + run.error + '), so no committed version of the ledger was read to compare', true); return null; }
   const { base, refused } = baseRevision();
   let why = refused, self = false;                                     // why a named base was not the one compared with: said beside what was
   // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule
@@ -2384,6 +2386,7 @@ function governedDiff(root, base) {
       // is asked in its own words, whatever the locale, so "not a git repository" is read as written
       const C_ = gitEnv(Object.assign({}, process.env, { LC_ALL: 'C', LANGUAGE: '' }));
       const gd = cp.spawnSync('git', ['rev-parse', '--git-dir'], { cwd: root, encoding: 'utf8', env: C_ });
+      if (gd.error) throw Object.assign(new Error('the gate cannot run git (' + (gd.error.code || gd.error.message) + ') at ' + root + ': it reads no diff it cannot read whole (FORMAT.md 16)'), { refusal: true });
       const noRepo = gd.status !== 0 && /not a git repository/i.test(gd.stderr || '');
       const unborn = gd.status === 0 && cp.spawnSync('git', ['rev-parse', '--verify', '-q', base + '^{commit}'], { cwd: root, encoding: 'utf8', env: C_ }).status !== 0;
       if (!noRepo && !unborn) throw Object.assign(new Error('git will not read the repository at ' + root + ' — ' + (String(gd.status !== 0 ? gd.stderr : dr.stderr).trim().split('\n')[0] || 'git diff ' + base + ' failed') + '; the gate reads no diff it cannot read whole (FORMAT.md 16)'), { refusal: true });

@@ -4904,6 +4904,10 @@ const SEC = String.fromCharCode(0xa7);
     fs.appendFileSync(path.join(e, '.git', 'config'), '\n[core\n');   // a config git will not read
     const gr = docket(['gate', '--session', 'gr'], { cwd: e, env: { CLAUDE_PROJECT_DIR: '' } });
     ok('…and when git will not read the repository it says so, with git’s own line, exit 2, where it had read every governed file as new (FORMAT.md 16)', gr.code === 2 && /git will not read the repository at /.test(gr.err) && /config/.test(gr.err) && !/^JUDGE/m.test(gr.out), [gr.code, gr.out.slice(0, 200), gr.err.slice(0, 300)].join('|'));
+    const ng = tempRepo(); fs.appendFileSync(path.join(ng, 'test', 'fixture', 'app.js'), 'const q = 7; // R2\n');
+    const nodeOnly = tmpDir('nogit-'); fs.symlinkSync(process.execPath, path.join(nodeOnly, 'node'));   // a PATH that holds node and no git
+    const ngg = docket(['gate', '--session', 'ng'], { cwd: ng, env: { PATH: nodeOnly, CLAUDE_PROJECT_DIR: '' } }), ngc = docket(['check'], { cwd: ng, env: { PATH: nodeOnly } });
+    ok('…and when git cannot be run the gate refuses, exit 2, naming the error, and check 7 is skipped saying so — not that the ledger is uncommitted, and no "undefined" (FORMAT.md 13, 16)', ngg.code === 2 && /^the gate cannot run git \(ENOENT\) at .*: it reads no diff it cannot read whole \(FORMAT\.md 16\)$/m.test(ngg.err) && !/undefined/.test(ngg.err) && /check 7 skipped — git could not be run \(ENOENT\), so no committed version of the ledger was read to compare/.test(ngc.out) && !/not yet committed/.test(ngc.out), [ngg.code, ngg.err, ngc.out.slice(0, 600)].join(' | '));
   }
   {
     const d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. The Lot Keeps R5 In View (issue #9)\nPrinciple: Capture precedes structure.\nA capital mid-sentence Extends R1 here. Two words: In part reverses R1. Keeps R2 whole. Reason: r.\n'));
