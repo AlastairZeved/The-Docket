@@ -24,7 +24,7 @@ function outerEnv() { const e = Object.assign({}, process.env); delete e.DOCKET_
   process.env.GIT_CONFIG_COUNT = String(n + 2); }
 function docket(args, opts) {
   opts = opts || {};
-  const r = cp.spawnSync('node', [CORE].concat(args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}), timeout: opts.timeout });
+  const r = cp.spawnSync('node', (opts.node || []).concat([CORE], args), { cwd: opts.cwd || ROOT, input: opts.input, encoding: 'utf8', env: Object.assign({}, outerEnv(), opts.env || {}), timeout: opts.timeout });
   return { code: r.status, out: r.stdout, err: r.stderr, signal: r.signal };
 }
 function sh(cmd, args, cwd) { return cp.spawnSync(cmd, args, { cwd, encoding: 'utf8' }); }
@@ -66,19 +66,45 @@ process.on('exit', () => { for (const d of TEMP_DIRS) { try { fs.rmSync(d, { rec
 }
 // A temporary directory the suite owns: removed at exit, whatever the tests did with it.
 function tmpDir(prefix) { const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); TEMP_DIRS.push(d); return d; }
-// A directory the core cannot write into, for the assertions that read a refusal: its write bits cleared, and where that does not
-// bind — the witness run as root — the immutable attribute, where the filesystem has it. Answers the function that puts it back,
-// or null where neither held; the caller then says what it did not run.
-function unwritable(dir) {
-  const probe = () => { const p = path.join(dir, '.probe-' + process.pid); try { fs.writeFileSync(p, ''); fs.unlinkSync(p); return true; } catch (e) { return false; } };
-  const mode = fs.statSync(dir).mode & 0o7777;
-  fs.chmodSync(dir, 0o555);
-  if (!probe()) return () => fs.chmodSync(dir, mode);
-  const on = cp.spawnSync('chattr', ['+i', dir], { encoding: 'utf8' });
-  if (on.status === 0 && !probe()) return () => { cp.spawnSync('chattr', ['-i', dir]); fs.chmodSync(dir, mode); };
-  if (on.status === 0) cp.spawnSync('chattr', ['-i', dir]);
-  fs.chmodSync(dir, mode);
-  return null;
+// A refusal for the assertions that read one, so that they run on every runner, an unprivileged CI's included: made by the
+// filesystem where it can be — a directory's write bits cleared, or where those do not bind (the witness run as root) the
+// immutable attribute, where the filesystem has it — and otherwise injected: a preload loaded with the core fails the same calls
+// on the same paths with the code the filesystem gives. 'dir': no entry of the directory can be made, removed or renamed; 'file':
+// the file cannot be written, replaced, removed or renamed. Answers the node arguments the core runs with (none where the
+// filesystem refuses) and the function that puts the filesystem back.
+const REFUSE_PRELOAD = `const fs = require('fs'), path = require('path'), R = __RULE__;
+const at = q => typeof q === 'number' ? null : path.resolve(String(q));
+const hit = q => { const a = at(q); return a !== null && (R.kind === 'dir' ? path.dirname(a) === R.p : a === R.p); };
+const fresh = q => { try { fs.lstatSync(q); return false; } catch (e) { return true; } };
+const writes = f => typeof f === 'number' ? (f & (fs.constants.O_WRONLY | fs.constants.O_RDWR)) !== 0 : /[wa+]/.test(String(f || 'r'));
+const made = q => hit(q) && (R.kind === 'file' || fresh(q));
+const rules = {
+  openSync: (q, f) => made(q) && writes(f), writeFileSync: q => made(q), appendFileSync: q => made(q), mkdirSync: q => hit(q) && fresh(q),
+  renameSync: (a, b) => hit(a) || hit(b), unlinkSync: q => hit(q), rmSync: q => hit(q), rmdirSync: q => hit(q),
+  copyFileSync: (a, b) => made(b), linkSync: (a, b) => made(b), symlinkSync: (a, b) => made(b),
+};
+for (const name of Object.keys(rules)) {
+  const real = fs[name];
+  fs[name] = function (...args) {
+    if (!rules[name](...args)) return real.apply(this, args);
+    const e = new Error(R.code + (R.code === 'EACCES' ? ': permission denied, ' : ': operation not permitted, ') + name.replace(/Sync$/, '') + " '" + args[0] + "'");
+    e.code = R.code; e.syscall = name.replace(/Sync$/, ''); e.path = String(args[0]); throw e;
+  };
+}
+`;
+function refusing(kind, p) {
+  const probe = kind === 'dir'
+    ? () => { const q = path.join(p, '.probe-' + process.pid); try { fs.writeFileSync(q, ''); fs.unlinkSync(q); return true; } catch (e) { return false; } }
+    : () => { try { fs.appendFileSync(p, ''); return true; } catch (e) { return false; } };
+  const mode = fs.statSync(p).mode & 0o7777;
+  if (kind === 'dir') { fs.chmodSync(p, 0o555); if (!probe()) return { node: [], restore: () => fs.chmodSync(p, mode) }; }
+  const on = cp.spawnSync('chattr', ['+i', p], { encoding: 'utf8' });
+  if (on.status === 0 && !probe()) return { node: [], restore: () => { cp.spawnSync('chattr', ['-i', p]); fs.chmodSync(p, mode); } };
+  if (on.status === 0) cp.spawnSync('chattr', ['-i', p]);
+  fs.chmodSync(p, mode);
+  const pre = path.join(tmpDir('docket-refuse-'), 'refuse.js');
+  fs.writeFileSync(pre, REFUSE_PRELOAD.replace('__RULE__', JSON.stringify({ kind, p: path.resolve(p), code: kind === 'dir' ? 'EACCES' : 'EPERM' })));
+  return { node: ['--require', pre], restore: () => {} };
 }
 // The names D13 keeps out of the core's words — hosts, models, vendors — one list for every check of them; a word's boundary
 // where the name is also a word ("coheres" is not the vendor)
@@ -4924,15 +4950,12 @@ const SEC = String.fromCharCode(0xa7);
     const d = tempRepo(); fs.appendFileSync(path.join(fx(d), 'app.js'), 'const q = 14; // R2\n');
     const dd = path.join(d, '.docket'); fs.mkdirSync(dd); fs.writeFileSync(path.join(dd, '.gitignore'), '*\n');
     const H = hashOf(d, 'uw');
-    const restore = unwritable(dd);
-    if (!restore) console.error('  note: ' + dd + ' could be written as root with chmod and chattr both unavailable: the unwritable-state assertions were not run');
-    else {
-      const v = docket(['verdict', 'PASS', '--hash', H, '--session', 'uw'], { cwd: d });
-      ok('verdict under a .docket/ that cannot be written refuses, exit 2, naming the lock and the code, with no stack trace (FORMAT.md 16)', v.code === 2 && /^verdict: \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/m.test(v.err) && !/\n\s+at /.test(v.err), v.code + ' ' + v.err);
-      const s = JSON.parse(docket(['stop', '--judge', 'true'], { cwd: d, input: JSON.stringify({ session_id: 'uw' }) }).out || '{}');
-      ok('…and a stop there blocks with a block that says it cannot be counted, naming the lock and the code', s.decision === 'block' && /This block cannot be counted — \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/.test(s.reason), JSON.stringify(s).slice(0, 700));
-      restore();
-    }
+    const ref = refusing('dir', dd);
+    const v = docket(['verdict', 'PASS', '--hash', H, '--session', 'uw'], { cwd: d, node: ref.node });
+    ok('verdict under a .docket/ that cannot be written refuses, exit 2, naming the lock and the code, with no stack trace (FORMAT.md 16)', v.code === 2 && /^verdict: \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/m.test(v.err) && !/\n\s+at /.test(v.err), v.code + ' ' + v.err);
+    const s = JSON.parse(docket(['stop', '--judge', 'true'], { cwd: d, node: ref.node, input: JSON.stringify({ session_id: 'uw' }) }).out || '{}');
+    ok('…and a stop there blocks with a block that says it cannot be counted, naming the lock and the code', s.decision === 'block' && /This block cannot be counted — \.docket\/verdict\.json\.lock cannot be written \((EACCES|EPERM)\): the state has nowhere to go/.test(s.reason), JSON.stringify(s).slice(0, 700));
+    ref.restore();
     fs.rmSync(d, { recursive: true, force: true });
   }
   // F6: an append the filesystem refuses — named with its code, exit 2, the ledger unchanged and nothing left beside it (FORMAT.md 11)
@@ -4940,20 +4963,18 @@ const SEC = String.fromCharCode(0xa7);
     const d = tempRepo(), fxd = fx(d), lp = path.join(fxd, 'DECISIONS.md'), before = read(lp);
     const entry = ['append', '--title', 'Pinned notes keep their size', '--issue', '21', '--principle', 'Positions are permanent', '--body', 'A pinned note keeps its own size inside a fold. Reason: a pinned note is a landmark, and resizing a landmark moves the map.'];
     const litter = () => fs.readdirSync(fxd).filter(f => /^DECISIONS\.md\.(lock|docket-)/.test(f));
-    const restore = unwritable(fxd);
-    if (!restore) console.error('  note: ' + fxd + ' could be written as root with chmod and chattr both unavailable: the refused-append assertions were not run');
-    else {
-      const r = docket(entry, { cwd: fxd });
-      restore();
+    {
+      const ref = refusing('dir', fxd);
+      const r = docket(entry, { cwd: fxd, node: ref.node });
+      ref.restore();
       ok('append into a directory that cannot be written refuses, exit 2, naming the lock and the code, with no stack trace; the ledger is unchanged and nothing is left beside it (FORMAT.md 11)', r.code === 2 && /^append: the lock test\/fixture\/DECISIONS\.md\.lock cannot be made \((EACCES|EPERM)\); the ledger is unchanged$/m.test(r.err) && !/\n\s+at /.test(r.err) && read(lp) === before && litter().length === 0, r.code + ' ' + r.err + ' ' + litter().join(','));
     }
-    // the ledger itself immutable, where the filesystem has the attribute: the new file is written beside it, the rename refused, and the file taken away
-    const im = cp.spawnSync('chattr', ['+i', lp], { encoding: 'utf8' });
-    let held = false; try { fs.appendFileSync(lp, ''); } catch (e) { held = true; }
-    if (im.status !== 0 || !held) { if (im.status === 0) cp.spawnSync('chattr', ['-i', lp]); console.error('  note: the ledger could not be made immutable here: the refused-rename assertion was not run'); }
-    else {
-      const r = docket(entry, { cwd: fxd });
-      cp.spawnSync('chattr', ['-i', lp]);
+    // the ledger itself refused, immutable where the filesystem has the attribute: the new file is written beside it, the rename
+    // refused, and the file taken away
+    {
+      const ref = refusing('file', lp);
+      const r = docket(entry, { cwd: fxd, node: ref.node });
+      ref.restore();
       ok('append over a ledger the filesystem will not replace refuses, exit 2, naming the ledger and the code; the ledger is unchanged and the new file is taken away (FORMAT.md 11)', r.code === 2 && /^append: \S*DECISIONS\.md cannot be written \(EPERM\); the ledger is unchanged, and nothing is left beside it$/m.test(r.err) && !/\n\s+at /.test(r.err) && read(lp) === before && litter().length === 0, r.code + ' ' + r.err + ' ' + litter().join(','));
     }
     fs.rmSync(d, { recursive: true, force: true });
