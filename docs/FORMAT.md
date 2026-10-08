@@ -822,7 +822,11 @@ with no `--failures` the count is 0, which a FAIL or a STALE refuses. A `--sessi
 whose value is empty or blank is refused, exit 2, by the gate, the verdict and the
 stop alike: it names no session, and read as none it would record under another.
 The verdict refuses a `--hash` so given the same way: an option accepted and
-ignored is a silence. `.docket/` is ignored by git: the core makes it with a `.gitignore`
+ignored is a silence. A PASS releases the session it is recorded under, and one
+recorded with no `--session` names none: every other session still surfaced is
+named beneath it, `note: session <id> is still surfaced; a PASS releases it only
+with --session <id>`, and `verdict --json` prints `verdict`, `failures`,
+`session`, `blocks`, `hash` and `stillSurfaced`, those sessions (D11). `.docket/` is ignored by git: the core makes it with a `.gitignore`
 of `*` inside, whatever the project's own says, so the section constitute prints names no step for it (D26's addendum).
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,
