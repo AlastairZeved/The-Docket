@@ -2166,7 +2166,9 @@ function readAnswers(argv) {
   const refuses = o.refuses.map(str);
   refuses.forEach((r, i) => { if (!r) bad('refuses[' + i + ']', 'is empty'); oneLine('refuses[' + i + ']', r); });
   if (refuses.length < REFUSALS_MIN) bad('refuses', 'needs at least ' + REFUSALS_MIN + '; this has ' + refuses.length);
-  const lower = refuses.map(r => r.toLowerCase().replace(/\.$/, ''));
+  // a repeat is the same phrase in the role check's normal form — NFKC, case, spacing and the marks around it folded — so two
+  // spaces, a decomposed é or a second period never count one refusal twice (intake/CONSTITUTE.md, question 4)
+  const lower = refuses.map(roleText);
   const dup = lower.find((r, i) => lower.indexOf(r) !== i);
   if (dup) bad('refuses', 'repeats "' + dup + '"');
   const prefix = o.prefix === undefined ? 'R' : str(o.prefix);
