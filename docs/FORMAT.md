@@ -767,9 +767,14 @@ stands without its count and says so: that it cannot be counted, and why, so tha
 the five blocks that would surface the session cannot come, and that the maker is
 to report the line to the user verbatim and stop again.
 A lock names its holder, and one whose holder is gone is taken over, the ledger's
-lock and the state's alike; the state's held past five seconds is written through,
-with a note, except by the call at a session's start, which waits one second and
-then records no base, so that the session reads from `HEAD` as one with none does.
+lock and the state's alike. One that names no holder — a run stopped between making
+it and writing its name, or a disk too full to take the name — and one whose holder
+still runs are never taken over, since either may be a writer at work: past five
+seconds the ledger's refuses the append, and the state's is written through, with a
+note, except by the call at a session's start, which waits one second and then
+records no base, so that the session reads from `HEAD` as one with none does. The
+refusal and the note name the lock and the remedy, to remove it if no docket command
+is running, since until then every change waits its five seconds.
 `verdict` records the diff in front of the judge: a `--hash` the working tree does
 not hash to is refused, exit 2, and with none it records the diff in front of it;
 with no `--failures` the count is 0, which a FAIL or a STALE refuses. A `--session`

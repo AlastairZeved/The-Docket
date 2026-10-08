@@ -3519,8 +3519,20 @@ const SEC = String.fromCharCode(0xa7);
     fs.mkdirSync(path.dirname(lockPath), { recursive: true }); fs.writeFileSync(path.join(d, '.docket', '.gitignore'), '*\n');
     fs.writeFileSync(lockPath, mine);                                  // a live holder: this witness
     const t0 = Date.now(), v = docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'k', '--reason', held(1)], { cwd: d }), took = Date.now() - t0;
-    ok('verdict waits five seconds on a state lock a live holder keeps, then changes the state without it and says so, exit 0 (FORMAT.md 16)', v.code === 0 && took >= 4900 && v.err.includes('note: .docket/verdict.json.lock was held past 5 seconds; the state is changed without it') && recorded(d, 'FAIL', held(1)) && JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).sessions.k.blocks === 1, v.code + ' ' + took + 'ms ' + v.err);
+    ok('verdict waits five seconds on a state lock a live holder keeps, then changes the state without it and says so, exit 0 (FORMAT.md 16)', v.code === 0 && took >= 4900 && v.err.includes('note: .docket/verdict.json.lock was held past 5 seconds; the state is changed without it, and each later change waits as long while the lock stays: if no docket command is running, remove .docket/verdict.json.lock\n') && recorded(d, 'FAIL', held(1)) && JSON.parse(read(path.join(d, '.docket', 'verdict.json'))).sessions.k.blocks === 1, v.code + ' ' + took + 'ms ' + v.err);
     ok('…and leaves the lock its holder’s: a release frees its own lock and no other', read(lockPath) === mine, read(lockPath));
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+  // …and one that names no holder — a run stopped between making it and writing its name — is never taken over, since it may be a
+  // writer at work: the state is written through past the wait, and the note names the lock and the remedy
+  {
+    const d = tempRepo();
+    fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const lk6 = 1; // R2\n');
+    const H = docket(['gate', '--session', 'k'], { cwd: d }).out.split(' ')[1];
+    const lockPath = path.join(d, '.docket', 'verdict.json.lock');
+    fs.writeFileSync(lockPath, '');                                    // made, and no name written in it
+    const t0 = Date.now(), v = docket(['verdict', 'FAIL', '--hash', H, '--failures', '1', '--session', 'k', '--reason', held(1)], { cwd: d }), took = Date.now() - t0;
+    ok('verdict waits five seconds on a state lock that names no holder, leaves it in place, changes the state without it and names the lock and the remedy, exit 0 (FORMAT.md 16)', v.code === 0 && took >= 4900 && v.err.includes('note: .docket/verdict.json.lock was held past 5 seconds; the state is changed without it, and each later change waits as long while the lock stays: if no docket command is running, remove .docket/verdict.json.lock\n') && recorded(d, 'FAIL', held(1)) && readIf(lockPath) === '', v.err);
     fs.rmSync(d, { recursive: true, force: true });
   }
 

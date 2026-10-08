@@ -1716,7 +1716,7 @@ function saveState(root, st) { const p = statePath(root); docketDir(root); const
 // each read the same state, and the later write would carry the earlier away — a session's count, a surfaced mark, the last
 // PASS (D11). So each change is made under a lock beside the file, the state re-read inside it and written whole, as the
 // ledger's append is (D4), by the one lock rule both keep (takeLock). One held past the wait is written through, with a
-// note, because a stop that died on it would be allowed unjudged; the call at a session's start waits a second and records
+// note naming the lock and the remedy, because a stop that died on it would be allowed unjudged; the call at a session's start waits a second and records
 // nothing past it (`orSkip`), since its hook's five seconds are the docket's to print in (D14's addendum).
 function withState(root, change, opts) {
   const p = statePath(root), lockPath = p + '.lock', wait = opts && opts.wait !== undefined ? opts.wait : LOCK_WAIT_MS;
@@ -1730,7 +1730,7 @@ function withState(root, change, opts) {
   try { lock = takeLock(lockPath, wait); } catch (e) { throw nowhere(e, rel(root, lockPath)); }
   if (!lock) {
     if (opts && opts.orSkip) return null;
-    process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + wait / 1000 + ' seconds; the state is changed without it\n');
+    process.stderr.write('note: ' + rel(root, lockPath) + ' was held past ' + wait / 1000 + ' seconds; the state is changed without it, and each later change waits as long while the lock stays: if no docket command is running, remove ' + rel(root, lockPath) + '\n');
   }
   try { const st = loadState(root); change(st); try { saveState(root, st); } catch (e) { throw nowhere(e, rel(root, p)); } return st; }
   finally { releaseLock(lockPath, lock); }
