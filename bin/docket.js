@@ -334,10 +334,10 @@ function edgeKey(e) { return e.from + '|' + e.adverb + '|' + e.verb + '|' + e.to
 // A list item as Markdown reads its marker — `-`, `*` or `+`, or one to nine digits and `.` or `)` — that opens with a bold
 // phrase, the principle's name (FORMAT.md 10): a list written numbered is the same list, and ten digits make no item (D14's addendum)
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d{1,9}[.)])\s+\*\*([^*]+?)\*\*/;
-function principlesFromList(lines, startIdx) {
+function principlesFromList(lines, startIdx, endIdx) {
   const names = [], skipped = [];
   let started = false;
-  for (let i = startIdx; i < lines.length; i++) {
+  for (let i = startIdx; i < (endIdx === undefined ? lines.length : endIdx); i++) {
     const m = LIST_ITEM_RE.exec(lines[i]);
     if (m) { names.push({ name: m[1].trim().replace(/\.$/, ''), text: lines[i].trim(), line: i + 1 }); started = true; }
     else if (started && lines[i].trim() === '') continue;              // a blank line between items ends nothing: a loose list is one list, as a renderer shows it
@@ -355,7 +355,11 @@ function principlesOf(ledger) {
     for (let i = 0; i < lines.length; i++) {
       const m = SPEC_HEADING_RE.exec(lines[i]);
       if (m && m[1] === '1') {
-        const list = principlesFromList(lines, i + 1);
+        // the list under the first section: looked for up to the next heading of its level or above, where the section ends —
+        // a first section of prose names no principle, and a list in the second is the second's (FORMAT.md 10)
+        const level = /^#+/.exec(lines[i])[0].length, next = new RegExp('^#{1,' + level + '}\\s');
+        let end = i + 1; while (end < lines.length && !next.test(lines[end])) end++;
+        const list = principlesFromList(lines, i + 1, end);
         if (list.length) return { source: docs.prd, list, skipped: list.skipped || [] };
       }
     }

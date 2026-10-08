@@ -5545,6 +5545,12 @@ const SEC = String.fromCharCode(0xa7);
   const loose = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace(/^(- \*\*.*)$/gm, '$1\n')); });
   const lCwd = path.join(loose, 'test', 'fixture'), lp = JSON.parse(docket(['principles', '--json'], { cwd: lCwd }).out);
   r = docket(['append', '--title', 'A loose list is read whole', '--issue', '23', '--principle', 'Zero cognitive tax', '--body', 'Reason: a blank line between items ends no list a reader sees.'], { cwd: lCwd });
+  const prose = tempRepo(d => {
+    const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace(/(^- \*\*.*\n)+/m, 'The principles are written in the ledger.\n') + '\n- **A refusal, not a principle.** The last section’s list.\n');
+    const l = path.join(d, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(l, read(l).replace('**Append only.**', 'Principles:\n\n- **Capture precedes structure.** a.\n- **Zero cognitive tax.** b.\n\n**Append only.**'));
+  });
+  const sp = JSON.parse(docket(['principles', '--json'], { cwd: path.join(prose, 'test', 'fixture') }).out);
+  ok('…and the list is looked for under PRD.md’s first section alone: a first section of prose names none, so the ledger preamble’s list is read and not a later section’s', JSON.stringify((sp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Zero cognitive tax']) && /DECISIONS\.md$/.test(sp.source || ''), JSON.stringify(sp));
   ok('…and a loose list, a blank line between its items, is read whole, as a renderer shows it: its last principle is one append accepts, and check passes', JSON.stringify((lp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Positions are permanent', 'Zero cognitive tax']) && r.code === 0 && /check: ok/.test(r.out), JSON.stringify(lp) + r.out + r.err);
 }
 
