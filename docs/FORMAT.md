@@ -258,7 +258,8 @@ An **addendum** is a line under an entry of the form
 It records that something about the entry has changed without amending the
 entry: most often that the entry's stated reason no longer holds. An addendum
 is **pending** until a ruling written after it has an edge into the entry (any
-verb); the docket (`docket status`) lists every pending addendum, each on one
+verb) — `keeps`, with the clause it keeps in parentheses, answers it by keeping
+the entry as its addenda and the later rulings leave it (D52); the docket (`docket status`) lists every pending addendum, each on one
 line with its text cut at one hundred characters — over one hundred, it keeps
 ninety-nine and the mark `…`, counted as code points, a space the cut leaves at
 its end dropped before the mark (D14) — `governs <id>` prints
