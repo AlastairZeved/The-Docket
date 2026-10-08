@@ -14,6 +14,7 @@ is not under the docket: say so and stop. If it is missing and a `DECISIONS.md`
 exists, the session did not start with the plugin loaded: say so and stop. With
 the core in hand, run `node <core> protocol` and follow what it prints, step by
 step and in its order, running every command it names as `node <core> …` and
-nothing else. The session identifier is `manual`; there is no transcript to
-read, so the step that reads one has nothing to check and says so. Report the
-verdict in the protocol's shape. You write no file and edit nothing.
+nothing else. The session identifier is `manual`, which the gate never
+surfaces: each run by hand is judged. There is no transcript to read, so the
+step that reads one has nothing to check and says so. Report the verdict in the
+protocol's shape. You write no file and edit nothing.

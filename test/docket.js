@@ -3737,6 +3737,25 @@ const SEC = String.fromCharCode(0xa7);
     ok('stop: a session its gate surfaces is blocked with the residue and the relay sentence, and no judge starts (D11)', b && /^The docket surfaced this session/.test(b) && /residue: 5 blocks this session since its last PASS; located failures per verdict: 1 → 1 → 1 → 1 → 1/.test(b) && /^report this to the user verbatim, then stop again$/m.test(b) && !started(), r.out);
     r = stopIn({ session_id: 'z' }, ['--judge', judgeCmd('PASS')]);
     ok('…and the stop after it is allowed, the session surfaced, and still no judge', r.code === 0 && r.out === '' && r.err === '' && !started(), r.out);
+    // a judge run by hand is never surfaced (D11's addendum): its session, `manual`, the one agents/docket-judge.md names, is judged
+    // at every gate it runs, where its surfacing turned each later run's gate into SKIP, the stop standing, on diffs no judge read;
+    // the stop's own reading keeps D11 whatever its session is called
+    {
+      const dh = tempRepo(), hand = [];
+      for (let k = 0; k < 6; k++) {
+        fs.appendFileSync(path.join(dh, 'test', 'fixture', 'app.js'), 'const hand' + k + ' = 1; // R2\n');
+        const g = docket(['gate', '--session', 'manual'], { cwd: dh }).out;
+        hand.push(g.split('\n')[0].split(' ')[0]);
+        if (k < 5 && /^JUDGE /.test(g)) docket(['verdict', 'FAIL', '--hash', g.split(' ')[1], '--failures', '1', '--session', 'manual', '--reason', held(1)], { cwd: dh });
+      }
+      ok('a judge run by hand is never surfaced: the session `manual`, its failures never falling and then five blocks on, is judged at each of six gates, where a surfaced one answers SKIP and the protocol reads the stop as standing (D11’s addendum)', hand.join(' ') === 'JUDGE JUDGE JUDGE JUDGE JUDGE JUDGE', hand.join(' '));
+      const rh = docket(['stop', '--judge', judgeCmd('PASS')], { cwd: dh, input: JSON.stringify({ session_id: 'manual' }) }), bh = block(rh);
+      ok('…while the stop’s own reading keeps D11 whatever its session is called: a stop for a session named manual, five blocks on, is surfaced with the residue, and no judge starts', !!bh && /^The docket surfaced this session/.test(bh) && /residue: 5 blocks this session since its last PASS/.test(bh) && !started(), rh.out);
+      const g7 = docket(['gate', '--session', 'manual'], { cwd: dh }).out;
+      ok('…and the mark that stop left is not read by a gate run by hand: it judges', /^JUDGE /.test(g7), g7);
+      forget();
+      fs.rmSync(dh, { recursive: true, force: true });
+    }
     // two blocks before this stop, so the judge's three records — one stop, counted once — make the third, the plateau (D38's addendum)
     { const st3 = JSON.parse(read(sp)); st3.sessions.s = { blocks: 2, history: [1, 1], surfaced: false }; fs.writeFileSync(sp, JSON.stringify(st3)); }
     r = stopIn({ session_id: 's' }, ['--judge', judgeCmd('surface')], { JUDGE_REASON: held(1) });
@@ -5542,6 +5561,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and writes of the hook’s output hookSpecificOutput, with hookEventName and additionalContext, and decision with its reason', /hookSpecificOutput: \{ hookEventName: input\.hook_event_name, additionalContext: text \}/.test(src) && /JSON\.stringify\(\{ decision: 'block', reason \}\)/.test(src), 'the output fields moved');
   const A = read(path.join(ROOT, 'agents', 'docket-judge.md'));
   ok('the agent file sends a judge run by hand to .docket/core at the project’s root — the repository’s top, where the core writes it (D28’s addendum, D44)', /`\.docket\/core` at the project's root —\s+the top of the git repository the project directory lies in/.test(A), A);
+  ok('…and names its session, `manual`, as one the gate never surfaces (D11’s addendum)', /The session identifier is `manual`, which the gate never\s+surfaces: each run by hand is judged\./.test(A), A);
 }
 
 // ── the witness refuses a temporary directory inside a repository or beneath a ledger (D6's addendum) ──

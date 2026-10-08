@@ -740,6 +740,10 @@ its located failures have not fallen across the last two verdicts after the
 third block, with the residue printed beneath and the session marked surfaced —
 the residue's last verdict is `last`, one for the repository (below), and one
 another session recorded is named on its line as that session's, not this one's;
+neither, for the session `manual`, the one a judge run by hand records under
+(agents/docket-judge.md): `gate` never surfaces it and never reads it as surfaced,
+since each run by hand is the person's own question, while the stop's own reading
+keeps both whatever its session is called (D11's addendum);
 else `JUDGE <hash>
 <files…>`, and with `--diff` the diff beneath, each touched function whole
 (`git diff <base> --function-context` over the same files, read the same way), and beneath it each ruling cited within the window of a hunk

@@ -41,6 +41,11 @@ const CAP = 8;            // D2: at most eight rulings listed; D16: the fixture 
 const TITLE_MAX = 72;     // D7: the title rule's cut
 const BLOCK_CAP = 5;      // D11: five blocks per session since its last PASS
 const THIRD_CYCLE = 3;    // D11: after the third block, failures must decrease
+// A judge run by hand records under one session, the one agents/docket-judge.md names, and the gate it runs never surfaces it
+// (D11's addendum): the surfacing breaks the stop's loop, which asks again with no person present, while a run by hand is the
+// person's own question each time, and a surfaced session's SKIP, which the protocol reads as the stop standing, told the person
+// who asked that a diff no judge read stands. The stop's own reading keeps D11 whatever its session is called.
+const HAND_SESSION = 'manual';
 const STOP_WAIT = 700;    // D14, logged in D19 and D37: the seconds `stop` gives the judge it starts before it stops it — more than twice the longest judge measured at a stop (330, D37's addendum)
 const SNIFF_BYTES = 8000;   // git's own binary sniff: a file with a NUL in its first 8000 bytes is not text
 const REFUSALS_MIN = 3;   // a constitution names at least three refusals: one is a mood, two a pair, three a boundary
@@ -2486,8 +2491,9 @@ function residueLines(st, sess, id) {
   }
   return L;
 }
-// The gate's decision (D10, D11), `gate`'s and `stop`'s alike: SKIP; SURFACE, with the session marked surfaced here; or JUDGE.
-function gateDecide(root, id) {
+// The gate's decision (D10, D11), `gate`'s and `stop`'s alike: SKIP; SURFACE, with the session marked surfaced here; or JUDGE. A gate
+// run by hand (`byHand`, the session HAND_SESSION) neither surfaces the session nor reads it as surfaced (D11's addendum).
+function gateDecide(root, id, byHand) {
   const st = loadState(root), sess = Object.assign(freshSession(), st.sessions[id] || {});
   let d;
   try { d = governedDiff(root, sessionBase(root, st, id)); }          // from the session's base (D40)
@@ -2501,10 +2507,10 @@ function gateDecide(root, id) {
   }
   if (d.ledgers) ensureSessionBase(root, id);                         // a governed session's first call records where its diff runs from (D40's addendum)
   if (d.empty || d.hash === st.lastPassHash) return { decision: 'SKIP', reason: d.empty ? 'nothing governed changed' : 'the last PASS judged this diff', d, st, sess };   // D10
-  if (sess.surfaced) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
+  if (sess.surfaced && !byHand) return { decision: 'SKIP', reason: 'this session is surfaced until a PASS or a new session', d, st, sess };   // D11
   const h = sess.history;
   const stuck = sess.blocks >= THIRD_CYCLE && h.length >= 2 && h[h.length - 1] >= h[h.length - 2];   // failures not falling after the third block
-  if (sess.blocks >= BLOCK_CAP || stuck) {                           // D11: the mark made under the state's lock
+  if (!byHand && (sess.blocks >= BLOCK_CAP || stuck)) {               // D11: the mark made under the state's lock
     let now;
     try { now = withState(root, s => { s.sessions[id] = Object.assign(freshSession(), s.sessions[id] || {}, { surfaced: true }); }); }
     catch (e) { if (!e.docket) throw e; now = st; now.sessions[id] = Object.assign(freshSession(), st.sessions[id] || {}, { surfaced: true }); }   // the answer stands; the mark has nowhere to go
@@ -2515,7 +2521,7 @@ function gateDecide(root, id) {
 function gate(argv) {
   const root = stopRoot(process.cwd());                               // D28
   const id = sessionId(argv);
-  const g = gateDecide(root, id), d = g.d;
+  const g = gateDecide(root, id, id === HAND_SESSION), d = g.d;
   const say = (decision, extra) => { if (argv.json) out(JSON.stringify(Object.assign({ decision, session: id, hash: d.hash, files: d.touched }, extra || {}), null, 2)); };
   if (g.decision === 'SKIP') { say('SKIP', { reason: g.reason }); if (!argv.json) out('SKIP'); return 0; }
   if (g.decision === 'SURFACE') {
