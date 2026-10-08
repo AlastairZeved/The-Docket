@@ -914,7 +914,7 @@ function indexOf_(argv) {
   const sp = ledgerSpecs(ledger);
   const obj = { ledger: rel(root, ledger.path), prefixes: ledger.prefixes, contractFrom: ledger.contractFrom, baseline: ledger.hasBaseline ? ledger.baseline : null,
     rulings: ledger.rulings.map(rulingJson), sections: ledger.sections,
-    specs: { UIUX: sp.UIUX ? sp.UIUX.heads : null, PRD: sp.PRD ? sp.PRD.heads : null } };
+    specs: ['UIUX', 'PRD'].flatMap(doc => sp[doc] ? sp[doc].heads.map(h => ({ doc, num: h.num, title: h.title, line: h.line })) : []) };
   out(JSON.stringify(obj, null, 2));
   return 0;
 }

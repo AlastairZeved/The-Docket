@@ -147,7 +147,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('nine rulings: A1 and R1–R8', j.rulings.length === 9 && j.rulings.map(r => r.id).join(',') === 'A1,R1,R2,R3,R4,R5,R6,R7,R8', j.rulings.map(r => r.id).join(','));
   const root = docket(['index']);
   ok('discovery: the repository root resolves to docs/DECISIONS.md', root.code === 0 && JSON.parse(root.out).ledger === 'docs/DECISIONS.md');
-  ok('index carries the spec headings beside the ledger', j.specs.UIUX.map(h => h.num).join(',') === '2,4.5' && j.specs.PRD.map(h => h.num).join(',') === '1,2', JSON.stringify(j.specs));
+  ok('index carries the spec headings beside the ledger, the UIUX.md\'s and then the PRD.md\'s, each naming its document', j.specs.map(h => h.doc + ' ' + h.num).join(',') === 'UIUX 2,UIUX 4.5,PRD 1,PRD 2', JSON.stringify(j.specs));
   ok('index carries the contract line and the baseline', j.contractFrom.R === 8 && j.baseline['app.js'] === 3, JSON.stringify([j.contractFrom, j.baseline]));
   // ── the title rule (FORMAT.md 3; D7): heading lines of 28 and 900 characters, `### R1. ` and the title ──
   const r1 = j.rulings.find(r => r.id === 'R1'), r8 = j.rulings.find(r => r.id === 'R8'), r4 = j.rulings.find(r => r.id === 'R4'), r6 = j.rulings.find(r => r.id === 'R6');
@@ -3287,7 +3287,7 @@ const SEC = String.fromCharCode(0xa7);
       fs.appendFileSync(path.join(x, 'test', 'fixture', 'app.js'), 'const deep = 1; // UIUX ' + SEC + '4.5.1.1\n');
     });
     c = docket(['check'], { cwd: d });
-    const sp = JSON.parse(docket(['index', '--json', '--ledger', LD], { cwd: d }).out).specs.UIUX.map(h => h.num);
+    const sp = JSON.parse(docket(['index', '--json', '--ledger', LD], { cwd: d }).out).specs.filter(h => h.doc === 'UIUX').map(h => h.num);
     ok('a spec cite four levels deep reads to its third level and resolves there; a heading four levels deep is no spec heading (FORMAT.md 7, 8)', c.code === 0 && !/check 3/.test(c.out) && sp.includes('4.5.1') && !sp.includes('4.5.1.1'), c.out + ' ' + sp.join(','));
     fs.rmSync(d, { recursive: true, force: true });
     // (3) the contract line's number is the directive's own
@@ -5598,10 +5598,14 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and --json carries every edge, every date and every spec cite', E === 11 && j.edges.filter(e => / extends R2$/.test(e)).length === 10 && j.addenda && j.addenda[0].dates.length === 11 && j.specCites && j.specCites.length === 10, JSON.stringify([j.edges, j.addenda, j.specCites && j.specCites.length]));
 }
 
-// ── FORMAT.md names the index's spec headings as the object the index prints, wherever it names them (FORMAT.md 6, 7) ──
+// ── the index's spec headings are a list, each naming its document, and FORMAT.md names them as the list the index prints,
+// wherever it names them (FORMAT.md 6, 7) ──
 {
   const FM = read(path.join(ROOT, 'docs', 'FORMAT.md')), ix = JSON.parse(docket(['index'], { cwd: FIX }).out);
-  ok('index.specs is an object keyed by its document, and FORMAT.md calls it specs{} wherever it names it, never specs[]', ix.specs && typeof ix.specs === 'object' && !Array.isArray(ix.specs) && Array.isArray(ix.specs.UIUX) && (FM.match(/specs\{\}/g) || []).length >= 2 && !/specs\[\]/.test(FM), JSON.stringify(Object.keys(ix.specs || {})) + ' ' + (FM.match(/specs[\[{][\]}]/g) || []).join(' '));
+  ok('index.specs is a list of headings, each {doc, num, title, line}, and FORMAT.md calls it specs[] wherever it names it, never specs{}', Array.isArray(ix.specs) && ix.specs.length > 0 && ix.specs.every(h => Object.keys(h).join(',') === 'doc,num,title,line' && (h.doc === 'UIUX' || h.doc === 'PRD') && typeof h.num === 'string' && typeof h.title === 'string' && Number.isInteger(h.line)) && (FM.match(/specs\[\]/g) || []).length >= 2 && !/specs\{\}/.test(FM), JSON.stringify(ix.specs) + ' ' + (FM.match(/specs[\[{][\]}]/g) || []).join(' '));
+  const nu = tempRepo(d => fs.rmSync(path.join(d, 'test', 'fixture', 'UIUX.md')));
+  const nx = JSON.parse(docket(['index'], { cwd: path.join(nu, 'test', 'fixture') }).out);
+  ok('…and a document that is absent has no heading in it: the PRD.md\'s alone, with no UIUX.md beside the ledger', nx.specs.length > 0 && nx.specs.every(h => h.doc === 'PRD'), JSON.stringify(nx.specs));
 }
 
 // ── a pending addendum's text over one hundred characters keeps ninety-nine and the mark, a space the cut leaves at its end

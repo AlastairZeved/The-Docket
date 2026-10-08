@@ -147,11 +147,12 @@ An entry parses to
 | `body` | every line after the heading to the end of the entry, addendum lines included |
 
 `docket index` prints the whole parse of a ledger as
-`{ledger, prefixes, contractFrom, baseline, rulings[], sections[], specs{}}` —
+`{ledger, prefixes, contractFrom, baseline, rulings[], sections[], specs[]}` —
 `contractFrom` the header-contract line's prefixes and numbers (11), `baseline`
-the bare-cite baseline (9) or null when the comment is absent, `specs` an object
-with a `UIUX` and a `PRD` key, each the document's headings (7) or null when the
-document is absent.
+the bare-cite baseline (9) or null when the comment is absent, `specs` the
+headings (7) of the `UIUX.md` and then of the `PRD.md` beside the ledger, each
+`{doc, num, title, line}` with `doc` its document, `UIUX` or `PRD`; a document
+that is absent has none.
 
 A heading is one line to this reader and to any other: `docket append` refuses a
 title, a grounding or an edge carrying U+2028 or U+2029, the line separators
@@ -312,9 +313,9 @@ deep, `§4.5.1.1`, is no spec heading. Three levels, so that a cite resolves to 
 heading it names: `UIUX §2.2.1` is printed with its own title, and a cite of a
 subsection that does not exist fails check 3, where a grammar of two would read
 it as `§2.2`, print the parent's title beside it and pass it (D14's addendum). Both are indexed by
-`docket index`: a section under `sections[]`, a spec heading under `specs{}` — an
-object keyed by its document, `UIUX` or `PRD`; `near` prints a spec cite with
-its title (`UIUX §<x>.<y> <title>`).
+`docket index`: a section under `sections[]`, a spec heading under `specs[]`,
+naming its document, `UIUX` or `PRD`; `near` prints a spec cite with its title
+(`UIUX §<x>.<y> <title>`).
 
 ## 8. Cites
 
