@@ -80,9 +80,9 @@ function calendarDay(v) {
   t.setUTCFullYear(y, mo, d);                                          // a year below 100 is that year, not 1900 and more
   return t.getUTCFullYear() === y && t.getUTCMonth() === mo && t.getUTCDate() === d;
 }
-// The day an addendum is dated (FORMAT.md 6): the clock's, or DOCKET_TODAY's when the environment names one — a day the
-// calendar has, from the year 1000 on, or refused before anything is written: a value not of the form is no addendum line, and
-// one of it that names no day would order the ledger by its digits alone (D4's addendum)
+// The day an addendum is dated (FORMAT.md 6): the clock's day in UTC, one zone for every author, or DOCKET_TODAY's when the
+// environment names one — a day the calendar has, from the year 1000 on, or refused before anything is written: a value not of
+// the form is no addendum line, and one of it that names no day would order the ledger by its digits alone (D4's addendum)
 function today() {
   const v = process.env.DOCKET_TODAY;
   if (v === undefined || v === '') return new Date().toISOString().slice(0, 10);

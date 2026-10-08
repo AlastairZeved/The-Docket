@@ -285,7 +285,9 @@ dates say nothing is the preamble's order read, the addendum first: a ruling and
 an addendum written on one day in one session, or squashed into one commit, are
 read in that order.
 
-The date on an addendum is the tool's clock. `DOCKET_TODAY`, when the
+The date on an addendum is the tool's clock, its day in UTC: the ledger's dates
+say what was written when, so they are read in one zone whoever writes them, and
+an evening west of Greenwich is already the next day. `DOCKET_TODAY`, when the
 environment names a date, replaces it: a hook for a test that must be repeatable,
 not a way to write a ruling into the past. A value that is not a day of the
 calendar from the year 1000 on, written `YYYY-MM-DD`, is refused, exit 2, before
