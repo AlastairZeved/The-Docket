@@ -5954,6 +5954,105 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('the packs that score a change with check and spec-check run them given --untracked: decisions F1, F3 and F4, design F1 and F2, code F2', (packs[0].match(/How scored: `docket check --untracked`/g) || []).length === 3 && (packs[1].match(/How scored: `docket spec-check --untracked` \([ab]\)/g) || []).length === 2 && /How scored: `docket check --untracked`; exit code decides/.test(packs[2]) && !/How scored: `docket (spec-)?check`/.test(packs.join(' ')), packs.map(p => (p.match(/How scored: `docket [^`]*`/g) || []).join(' / ')).join(' | '));
 }
 
+// ── the repository's own pages: what the README claims, the manifests, CLAUDE.md and docs/PACKS.md ──
+// The README opens with its reader header and ends with what was measured and then what was not, every line there naming
+// the rulings it rests on and every number in it one those rulings hold (D49: claim no more than you measured); it names
+// no repository but this one; its version badge is the manifest's; the manifests lead with the judge (D49); and CLAUDE.md
+// and docs/PACKS.md say what D6 and D12 give them to say.
+{
+  const readme = read(path.join(ROOT, 'README.md')), ledger = read(path.join(ROOT, 'docs', 'DECISIONS.md'));
+  const plugin = JSON.parse(read(path.join(ROOT, '.claude-plugin', 'plugin.json')));
+  const market = JSON.parse(read(path.join(ROOT, '.claude-plugin', 'marketplace.json')));
+  const header = /^# [^\n]+\n\n(\*\*Reader\.\*\* [\s\S]+?)\n\n/.exec(readme);
+  ok('the README opens with its reader header: its title, then Reader, Purpose and Source in that order, the reader with what they know and what they do not', !!header && /^\*\*Reader\.\*\* [\s\S]*?\bknow\b[\s\S]*?\bdo not know\b[\s\S]*?\*\*Purpose\.\*\* \S[\s\S]*?\*\*Source\.\*\* \S/.test(header[1]), readme.slice(0, 300));
+  const heads = readme.match(/^## .+$/gm) || [];
+  ok('the README ends with Measured Results, then Known Limits', heads.slice(-2).join(' | ') === '## Measured Results | ## Known Limits', heads.slice(-3).join(' | '));
+  // each ruling's whole text — heading, body and addenda — and every number a line there states, figures and number words
+  const text = {}; let cur = null;
+  for (const l of ledger.split('\n')) { const m = /^### (D\d+)\./.exec(l); if (m) cur = m[1]; if (cur) text[cur] = (text[cur] || '') + l + '\n'; }
+  const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'thousand'];
+  const NUM = new RegExp('(?<![\\p{L}\\p{N}_.])\\d+(?:[.:-]\\d+)*(?![\\p{L}\\p{N}_])|(?<![\\p{L}\\p{N}_])(?:' + WORDS.join('|') + ')(?![\\p{L}\\p{N}_])', 'giu');
+  const at = readme.indexOf('\n## Measured Results\n'), lines = at < 0 ? [] : readme.slice(at).split(/\n- /).slice(1), bad = [];
+  for (const b of lines) {
+    const ids = ((/^\*\*[^*\n]+\*\*/.exec(b) || [''])[0].match(/\bD\d+\b/g) || []);
+    if (!ids.length || ids.some(id => !text[id])) { bad.push('"' + b.slice(0, 60) + '…" names no ruling the ledger holds in its bold lead'); continue; }
+    const held = ids.map(id => text[id]).join('\n');
+    for (const m of b.matchAll(NUM)) {
+      const t = m[0], re = new RegExp('(?<![\\p{L}\\p{N}_.])' + t.replace(/\./g, '\\.') + '(?![\\p{L}\\p{N}_])', 'iu');
+      if (!re.test(held)) bad.push(t + ' in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold');
+    }
+    // a count is held whole: "four stops of five" is in the ruling as written, not its two numbers apart
+    const N = '(?:\\d+|' + WORDS.join('|') + ')', COUNT = new RegExp('(?<![\\p{L}\\p{N}_])' + N + '(?:\\s+\\p{L}+)?\\s+of\\s+' + N + '(?![\\p{L}\\p{N}_])', 'giu');
+    const flat = held.replace(/\s+/g, ' ').toLowerCase();
+    for (const m of b.matchAll(COUNT)) if (!flat.includes(m[0].replace(/\s+/g, ' ').toLowerCase())) bad.push('the count "' + m[0] + '" in "' + b.slice(0, 50) + '…", which ' + ids.join(', ') + ' does not hold as written');
+  }
+  ok('every line under Measured Results and Known Limits names in its bold lead the rulings it rests on, and every number in it, figure or word, is one those rulings hold, a count as written', lines.length >= 10 && !bad.length, bad.join('\n'));
+  // a repository is named by a link, a clone or a marketplace's source; every link is held to the four kinds the README makes —
+  // this repository, its owner's account, a static badge, Node's site — so a host no list could name is caught as well
+  const OWN = /^(?:https:\/\/github\.com\/)?AlastairZeved\/The-Docket(?:\.git)?$/;
+  const links = Array.from(readme.matchAll(/\bhttps?:\/\/[^\s)<>\]"'`]+/g), m => m[0]);
+  const sources = Array.from(readme.matchAll(/\b(?:marketplace add|clone)\s+([^\s`]+\/[^\s`]+)/g), m => m[1]);
+  const KINDS = [OWN, /^https:\/\/github\.com\/AlastairZeved$/, /^https:\/\/img\.shields\.io\/badge\/[\w%.-]+$/, /^https:\/\/nodejs\.org\/$/];
+  const other = links.filter(u => !KINDS.some(k => k.test(u))).concat(sources.filter(s => !OWN.test(s)));
+  ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, and every clone and marketplace source is AlastairZeved/The-Docket', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
+  const badge = /img\.shields\.io\/badge\/version-((?:[^-)\s]|--)+)-/.exec(readme);
+  ok('the README’s version badge is the plugin manifest’s version', !!badge && badge[1].replace(/--/g, '-') === plugin.version, (badge ? badge[1] : 'no version badge') + ' against ' + plugin.version);
+  const descs = [plugin.description, market.description].concat((market.plugins || []).map(p => p.description));
+  ok('the plugin’s description and the marketplace’s two lead with the judge, and give the hook before an edit after it (D49)', descs.length === 3 && descs.every(d => typeof d === 'string' && d.indexOf('judge') >= 0 && d.indexOf('judge') < d.toLowerCase().indexOf('before an edit')), descs.join('\n'));
+  const claudeMd = read(path.join(ROOT, 'CLAUDE.md'));
+  ok('CLAUDE.md opens with its reader header and says what D6 gives it to say: the repository governs itself, work here with claude --plugin-dir ., run the witness before you stop', /^# CLAUDE\.md\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(claudeMd) && /governs itself \(D6\)/.test(claudeMd) && /^    claude --plugin-dir \.$/m.test(claudeMd) && /Before you stop, run both/.test(claudeMd) && /^    node test\/docket\.js /m.test(claudeMd) && /^    node bin\/docket\.js /m.test(claudeMd), claudeMd.slice(0, 300));
+  const packsMd = read(path.join(ROOT, 'docs', 'PACKS.md')), form = '<pack> · F<n> · <file:line> · <what> · <fix route>';
+  ok('docs/PACKS.md opens with its reader header and gives the located-failure form the core holds a verdict to', /^# PACKS\.md[^\n]*\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(packsMd) && packsMd.includes('    ' + form + '\n') && read(CORE).includes(form), packsMd.slice(0, 300));
+  const shipped = fs.readdirSync(path.join(ROOT, 'packs')).filter(f => f.endsWith('.md'));
+  const off = shipped.filter(f => { const t = read(path.join(ROOT, 'packs', f)); return !/^[a-z][a-z0-9-]*\.md$/.test(f) || !/^Domain: \S/m.test(t) || !/^\*\*F1(?: — |\*\* — )/m.test(t) || !/\n## Located failure\n(?![\s\S]*\n#)/.test(t); });
+  ok('every shipped pack is written as docs/PACKS.md says: a name the core reads, a Domain line, F1 in one of its two bold forms, and the located failure last', shipped.length === 4 && !off.length, off.join(', '));
+}
+
+// test/install.sh, driven by a stand-in host: the install is the means, and the list printed in the project it went into,
+// with a judged stop, is the measure — an install that succeeded beside a hook that printed nothing is no pass (D50)
+{
+  const stubDir = tmpDir('inst-host-'), state = path.join(stubDir, 'state');
+  fs.writeFileSync(path.join(stubDir, 'host.js'), [
+    "const fs = require('fs'), a = process.argv.slice(2), mode = process.env.STAND_IN_MODE || 'ok', st = process.env.STAND_IN_STATE;",
+    "const say = o => process.stdout.write(JSON.stringify(o) + '\\n');",
+    "if (a[0] === '--version') { process.stdout.write('9.9.9 (stand-in)\\n'); process.exit(0); }",
+    "if (a[0] === 'plugin') {",
+    "  const sub = a.slice(1).join(' ');",
+    "  if (/^(marketplace )?list\\b/.test(sub)) { process.stdout.write(fs.readFileSync(st, 'utf8')); process.exit(0); }",
+    "  if (/^marketplace add /.test(sub) && mode === 'refused') { process.stderr.write('marketplace not found\\n'); process.exit(1); }",
+    "  if (/^install /.test(sub) && mode === 'leak') fs.appendFileSync(st, 'the-docket@the-docket (user)\\n');",
+    "  process.exit(0);",
+    "}",
+    "if (a[0] === '-p') {",
+    "  if (/^\\/constitute/.test(a[1])) {",
+    "    const content = [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM\\n\\nName: Loan sheet' }];",
+    "    if (mode === 'wrote') content.push({ type: 'tool_use', name: 'Bash', input: { command: 'node /p/bin/docket.js constitute --answers a.json' } });",
+    "    say({ type: 'assistant', message: { content } });",
+    "  } else {",
+    "    if (mode !== 'silent') say({ type: 'system', subtype: 'hook_response', hook_event: 'PreToolUse', output: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: 'Governed here (DECISIONS.md, ±20 lines of app.js:12):\\n  R4  Fold similarity' } }) });",
+    "    say({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'app.js' } }] } });",
+    "    if (mode !== 'unjudged') { fs.mkdirSync('.docket', { recursive: true }); fs.writeFileSync('.docket/verdicts.jsonl', '{\"verdict\":\"PASS\"}\\n'); }",
+    "  }",
+    "  say({ type: 'result', result: 'done' });",
+    "}"
+  ].join('\n') + '\n');
+  fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\nexec node "' + path.join(stubDir, 'host.js') + '" "$@"\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
+  const run = mode => { fs.writeFileSync(state, 'the-docket-other (user)\n');
+    return cp.spawnSync('sh', [path.join(ROOT, 'test', 'install.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('inst-'), STAND_IN_MODE: mode, STAND_IN_STATE: state }) }); };
+  let r = run('ok');
+  ok('install.sh installs from this repository by default, prints the host tool as it reports its version and the date, and passes a run whose hook printed the governed list and whose stop was judged, exit 0', r.status === 0 && /^installing the-docket@the-docket from AlastairZeved\/The-Docket, at each scratch project's local scope\non the host's command-line tool, version 9\.9\.9 \(stand-in\), \d{4}-\d\d-\d\d\n/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout) && /\(e\) edit, stop  1 of 1/.test(r.stdout) && /plugin state as the run found it: yes$/m.test(r.stdout) && r.stderr === '', r.status + '\n' + r.stdout + r.stderr);
+  r = run('silent');
+  ok('…and an install that succeeded beside a hook that printed nothing in the scratch project is no pass, a verdict recorded or not: (e) 0 of 1, exit 1', r.status === 1 && /\(e\) run 1  the pre-edit hook printed the governed list: no /.test(r.stdout) && /a verdict recorded: yes/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('unjudged');
+  ok('…nor a hook that printed beside a stop no judge recorded for and nothing blocked: (e) 0 of 1, exit 1', r.status === 1 && /printed the governed list: yes\s+the stop judged: no /.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('wrote');
+  ok('…nor a constitute whose maker ran the write before any confirm: (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: yes  a write ran: yes/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('refused');
+  ok('…and an install the host refused stops the measurement, named with its source and the host’s words, exit 1', r.status === 1 && /install\.sh: the install into the scratch project failed \(source AlastairZeved\/The-Docket\):\nmarketplace not found/.test(r.stderr) && !/\(k\) run 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('leak');
+  ok('…and a run that leaves the machine’s own plugin state changed says so and fails, its runs passed or not, exit 1', r.status === 1 && /plugin state as the run found it: no$/m.test(r.stdout) && /\(e\) edit, stop  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+}
+
 // the run leaves the build's own state as it found it (dockState, above)
 { const now = dockState(), had = new Set(DOCK0), has = new Set(now);
   ok('the witness leaves every .docket/ in the tree it witnesses as it found it: each call that records ran in a tree of its own', now.join('\n') === DOCK0.join('\n'),
