@@ -197,7 +197,12 @@ const SEC = String.fromCharCode(0xa7);
   ok('the 28-character heading line keeps its whole title', ('### R1. ' + r1.heading).length === 28 && r1.title === 'Capture before shape', r1.title);
   ok('the 900-character heading line is cut at the last word boundary before 72, with …: 66 code points, the word before the cut whole', ('### R8. ' + r8.heading).length === 900 && r8.title.endsWith('…') && Array.from(r8.title).length === 66 && r8.title === 'The frame that was never typed into is discarded on blur, and the…' && !r8.title.includes(' ('), r8.title);
   ok('the title is cut at the first " (" before the 72-character rule', r4.title === 'Fold similarity: shape held, size uniform' && r4.meta === 'supersedes R3', r4.title + ' | ' + r4.meta);
-  ok('issue is read from the meta', r6.issue === 12 && r4.issue === null);
+  ok('issue is read from the meta', r6.issue === '12' && r4.issue === null);
+  { const iss = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. Zero-padded (issue #007)\nPrinciple: Zero cognitive tax.\nReason: r.\n\n### R10. Long (issue #99999999999999999999)\nPrinciple: Zero cognitive tax.\nReason: r.\n'));
+    const ij = JSON.parse(docket(['index'], { cwd: path.join(iss, 'test', 'fixture') }).out), i9 = ij.rulings.find(x => x.id === 'R9'), i10 = ij.rulings.find(x => x.id === 'R10');
+    const iq = docket(['query', 'R9', 'R10'], { cwd: path.join(iss, 'test', 'fixture') });
+    ok('an issue number is kept as its digits are written: #007 is "007", and twenty digits are twenty, in the index and in a print (FORMAT.md 4)', i9 && i9.issue === '007' && i10 && i10.issue === '99999999999999999999' && iq.out.includes('· issue #007') && iq.out.includes('· issue #99999999999999999999'), JSON.stringify([i9 && i9.issue, i10 && i10.issue]) + ' ' + iq.out.slice(0, 300));
+    fs.rmSync(iss, { recursive: true, force: true }); }
   // ── edges (FORMAT.md 5) ──
   const r7 = j.rulings.find(r => r.id === 'R7');
   ok('a body edge carries adverb, target and qualifier', r7.edges.length === 1 && r7.edges[0].adverb === 'partially' && r7.edges[0].verb === 'reverses' && r7.edges[0].to === 'R6' && r7.edges[0].qualifier === 'relational plane only', JSON.stringify(r7.edges));
@@ -218,7 +223,7 @@ const SEC = String.fromCharCode(0xa7);
   const cj = JSON.parse(docket(['index'], { cwd: path.join(code, 'test', 'fixture') }).out);
   const r9 = cj.rulings.find(r => r.id === 'R9');
   ok('the title cut ignores a " (" inside a code span, then strips the backticks', r9 && r9.title === 'Read fn (x) before the (y) call', r9 && r9.title);
-  ok('the meta is the first parenthetical outside code', r9 && r9.meta === 'issue #21' && r9.issue === 21, r9 && r9.meta);
+  ok('the meta is the first parenthetical outside code', r9 && r9.meta === 'issue #21' && r9.issue === '21', r9 && r9.meta);
   ok('an edge inside a code span is not an edge; the one in prose is', r9 && r9.edges.length === 1 && r9.edges[0].verb === 'refines' && r9.edges[0].to === 'R2', r9 && JSON.stringify(r9.edges));
   ok('…and check accepts the entry under the contract', docket(['check'], { cwd: code }).code === 0, docket(['check'], { cwd: code }).out);
 }
@@ -629,7 +634,7 @@ const SEC = String.fromCharCode(0xa7);
   // a non-ASCII heading keeps its code points through the title rule and prints in the window
   const acc = tempRepo(d => { fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. Ré-tune the déjà-vu fold (issue #35)\nPrinciple: Zero cognitive tax.\nReason: r.\n'); fs.writeFileSync(path.join(d, 'test', 'fixture', 'acc.js'), 'const déjà = 1; // R9 — déjà\n'); });
   const aj = JSON.parse(docket(['index'], { cwd: path.join(acc, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9');
-  ok('a non-ASCII heading parses whole', aj && aj.title === 'Ré-tune the déjà-vu fold' && aj.issue === 35, aj && aj.title);
+  ok('a non-ASCII heading parses whole', aj && aj.title === 'Ré-tune the déjà-vu fold' && aj.issue === '35', aj && aj.title);
   const an = docket(['near'], { cwd: acc, input: nearInput(path.join(acc, 'test', 'fixture', 'acc.js'), 'déjà = 1') });
   ok('near: the non-ASCII title prints, and the cite after a non-ASCII identifier resolves', an.out === 'Governed here (test/fixture/DECISIONS.md, ±20 lines of acc.js:1):\n  R9  Ré-tune the déjà-vu fold  · issue #35\nName the ruling you rely on before you edit.\n', an.out);
   // a CRLF ledger stays CRLF through every write
@@ -652,7 +657,7 @@ const SEC = String.fromCharCode(0xa7);
   // --json on near: the window as an object; silence stays silence
   const nj = docket(['near', '--json'], { input: nearInput(APP, 'makeToolbar(') });
   const njo = nj.code === 0 && nj.out ? JSON.parse(nj.out) : null;
-  ok('near --json: the one-match window as an object', njo && njo.ledger === 'test/fixture/DECISIONS.md' && njo.file === 'app.js' && njo.mode === 'one' && njo.anchors.join(',') === '41' && njo.rulings[0].id === 'R6' && njo.rulings[0].title === 'The toolbar replaces the long-press menu' && njo.rulings[0].issue === 12 && njo.more === 0 && Array.isArray(njo.edges) && njo.edges.some(e => /^R7 partially reverses R6/.test(e)) && njo.notice === null, nj.out);
+  ok('near --json: the one-match window as an object', njo && njo.ledger === 'test/fixture/DECISIONS.md' && njo.file === 'app.js' && njo.mode === 'one' && njo.anchors.join(',') === '41' && njo.rulings[0].id === 'R6' && njo.rulings[0].title === 'The toolbar replaces the long-press menu' && njo.rulings[0].issue === '12' && njo.more === 0 && Array.isArray(njo.edges) && njo.edges.some(e => /^R7 partially reverses R6/.test(e)) && njo.notice === null, nj.out);
   ok('near --json: the text and the object list the same rulings in the same order', njo && njo.rulings.map(x => x.id).join(',') === expected('near-41.txt').split('\n').filter(l => /^  [AR]\d+  /.test(l)).map(l => l.trim().split(/\s+/)[0]).join(','), nj.out);
   const njw = JSON.parse(docket(['near', '--json'], { input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: APP, content: 'x' } }) }).out);
   ok('near --json: a whole-file write says so and carries the +more count', njw.mode === 'whole' && njw.region === 'whole file app.js' && njw.rulings.length === 8 && njw.more === 1, JSON.stringify(njw.region) + ' ' + njw.more);
@@ -764,7 +769,7 @@ const SEC = String.fromCharCode(0xa7);
   // a heading that is only its parenthetical: an empty title, and the meta still read
   const tl = tempRepo(d => fs.appendFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. (issue #40; refines R4)\nPrinciple: Zero cognitive tax.\nReason: r.\n'));
   const tlj = JSON.parse(docket(['index'], { cwd: path.join(tl, 'test', 'fixture') }).out).rulings.find(x => x.id === 'R9');
-  ok('a heading that is only its parenthetical has an empty title and keeps its issue and edge (FORMAT.md 3, 4)', tlj && tlj.title === '' && tlj.issue === 40 && tlj.edges.length === 1 && tlj.edges[0].to === 'R4' && tlj.grounding === 'issue #40', JSON.stringify(tlj && [tlj.title, tlj.issue, tlj.edges]));
+  ok('a heading that is only its parenthetical has an empty title and keeps its issue and edge (FORMAT.md 3, 4)', tlj && tlj.title === '' && tlj.issue === '40' && tlj.edges.length === 1 && tlj.edges[0].to === 'R4' && tlj.grounding === 'issue #40', JSON.stringify(tlj && [tlj.title, tlj.issue, tlj.edges]));
   r = docket(['check'], { cwd: tl });
   ok('…and check reads the edge and the meta: check 5 accepts the edge, and the one thing check 6 fails is the missing title (FORMAT.md 11)', r.code === 1 && !/check 5/.test(r.out) && r.out.split('\n').filter(l => /check 6: R9/.test(l)).length === 1 && /^test\/fixture\/DECISIONS\.md:\d+  check 6: R9: title is empty — a bound entry is named in words \(FORMAT\.md 3, 11\)$/m.test(r.out), r.out);
   const gtl = docket(['governs', 'R4'], { cwd: path.join(tl, 'test', 'fixture') });
@@ -1474,7 +1479,7 @@ const SEC = String.fromCharCode(0xa7);
     fs.writeFileSync(path.join(sd, 'a.js'), '// ``R99`` is quoted, as `R98` is\n// R1 here\n');
     sh('git', ['init', '-q'], sd); sh('git', ['add', '-A'], sd);
     const ix = JSON.parse(docket(['index', '--json'], { cwd: sd }).out), sc = docket(['check'], { cwd: sd }), byId = id => ix.rulings.find(r => r.id === id);
-    ok('a code span is a run of backticks closed by the next run of as many: ``supersedes R1`` and ``a `keeps R1` b`` make no edge, ``R99`` is no cite, and ``x (y)`` in a heading is not its meta (FORMAT.md 3, 5, 8)', byId('R2').edges.length === 0 && sc.code === 0 && byId('R3').title === 'Use x (y) in a title' && byId('R3').issue === 3, JSON.stringify(byId('R2').edges) + ' | ' + byId('R3').title + ' | ' + sc.out);
+    ok('a code span is a run of backticks closed by the next run of as many: ``supersedes R1`` and ``a `keeps R1` b`` make no edge, ``R99`` is no cite, and ``x (y)`` in a heading is not its meta (FORMAT.md 3, 5, 8)', byId('R2').edges.length === 0 && sc.code === 0 && byId('R3').title === 'Use x (y) in a title' && byId('R3').issue === '3', JSON.stringify(byId('R2').edges) + ' | ' + byId('R3').title + ' | ' + sc.out);
     fs.rmSync(sd, { recursive: true, force: true });
   }
   { // a name the repository holds prints on one line: its line breaks replaced, a failure one line (FORMAT.md 13)

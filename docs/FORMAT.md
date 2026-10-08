@@ -141,7 +141,7 @@ An entry parses to
 | `heading` | the heading text after `<id>. `, verbatim, backticks and bold kept |
 | `title` | the heading reduced by the title rule (3) |
 | `meta` | the first parenthetical of the heading (4), or empty |
-| `issue` | the number in `issue #<n>` inside `meta`, or empty |
+| `issue` | the digits of `issue #<n>` inside `meta`, as written (a string), or empty |
 | `edges[]` | every edge in the heading and body (5) |
 | `addenda[]` | every addendum line under the entry (6) |
 | `body` | every line after the heading to the end of the entry, addendum lines included |
@@ -199,7 +199,8 @@ heading's text, so an edge written there is read, as one anywhere in the heading
 is (5). Its **clauses** are separated by `;`. The
 first clause that is not an edge (5) is the entry's **grounding**: `issue #12`,
 or a phrase naming the context the ruling answers. `issue` is the number in the
-first `issue #<n>` found in the meta. `append` refuses, before writing, an
+first `issue #<n>` found in the meta, kept as its digits are written: `#007` is
+`007`, and a number of any length is kept whole. `append` refuses, before writing, an
 `--issue` that holds `;`, `(` or `)` and an edge qualifier that holds `;`, since
 either would split or close the meta it writes; the same `--edge` given twice
 is written once.

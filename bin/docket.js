@@ -471,7 +471,7 @@ function parseLedger(text, ledgerPath) {
       bodyLines.forEach((l, k) => { const m = bodyFenced[k] ? null : PRINCIPLE_LINE_RE.exec(l); if (m) pls.push({ line: start + 2 + k, name: m[1].trim().replace(/\.$/, '') }); });
       rulings.push({
         id, prefix: hm[1], n: Number(hm[2]), line: start + 1, heading, title: titleOf(heading), meta, grounding,
-        issue: issueM ? Number(issueM[1]) : null, edges, addenda, body: bodyLines.join('\n'), bodyLines,
+        issue: issueM ? issueM[1] : null, edges, addenda, body: bodyLines.join('\n'), bodyLines,
         principle: pls.length && pls[0].name ? pls[0].name : null, principleLines: pls.map(p => p.line), endLine: j,
         hasReason: assertsReason(bodyLines), mentionsReason: mentionsReason(bodyLines),
       });
