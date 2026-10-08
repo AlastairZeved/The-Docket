@@ -823,7 +823,7 @@ whose value is empty or blank is refused, exit 2, by the gate, the verdict and t
 stop alike: it names no session, and read as none it would record under another.
 The verdict refuses a `--hash` so given the same way: an option accepted and
 ignored is a silence. `.docket/` is ignored by git: the core makes it with a `.gitignore`
-of `*` inside, whatever the project's own says, and a constituted project is told to ignore it too.
+of `*` inside, whatever the project's own says, so the section constitute prints names no step for it (D26's addendum).
 
 `docket stop` is the stop: a host runs it when the maker declares the work done,
 with its hook input on stdin — of which it reads the session's identifier, whether
