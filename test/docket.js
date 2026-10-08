@@ -13,12 +13,14 @@ function ok(name, cond, detail) {
   failed++;
   console.error(`FAIL  ${name}${detail === undefined ? '' : '\n      ' + String(detail).split('\n').join('\n      ')}`);
 }
-// The environment a check the witness starts inherits: the caller's, less every switch of the core's (DOCKET_*). A base names a
+// The environment a check the witness starts inherits: the caller's, less every switch of the core's (DOCKET_*) and the host's
+// project directory (CLAUDE_PROJECT_DIR), the one other variable the core reads: a session that exports it names a tree outside a
+// repository the core then walks, and a check the witness runs in a bare directory would read that tree. A base names a
 // commit of the repository a CI step checks, and the witness's checks run in scratch repositories that hold none of its commits;
 // a judge's environment names the session it judges, its root, its stop and its judge, whose writes the core refuses (D37) — and
 // code F1 has the judge run the repository's checks under it; a measured run's names its trail. Each is the caller's run's and
 // never the witness's: a test that wants one passes it, and every process the witness starts is given this environment.
-function outerEnv() { const e = Object.assign({}, process.env); for (const k of Object.keys(e)) if (/^DOCKET_/.test(k)) delete e[k]; return e; }
+function outerEnv() { const e = Object.assign({}, process.env); for (const k of Object.keys(e)) if (/^DOCKET_/.test(k) || k === 'CLAUDE_PROJECT_DIR') delete e[k]; return e; }
 // The witness's scratch repositories are its own: a signing setting in the person's git config, with a signer that cannot run
 // here, would fail every commit it makes, so every git it starts signs nothing — the settings added after any the caller set
 { const n = Number(process.env.GIT_CONFIG_COUNT) || 0;
@@ -953,6 +955,9 @@ const SEC = String.fromCharCode(0xa7);
   fs.mkdirSync(path.join(bare, 'sub')); fs.writeFileSync(path.join(bare, 'sub', 'DECISIONS.md'), '# L\n\n### Q1. One (issue #1)\nReason: r.\n');
   r = docket(['status'], { cwd: bare });
   ok('status in a bare directory (no git, no project variable) stays silent: a directory the host does not name is not searched', r.code === 0 && r.out === '' && r.err === '', r.out);
+  { const was = process.env.CLAUDE_PROJECT_DIR; process.env.CLAUDE_PROJECT_DIR = bare;   // as a host session that exports it would run the witness
+    try { r = docket(['status'], { cwd: bare }); } finally { if (was === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = was; }
+    ok('…and so when the witness’s own environment names that directory: the host’s project variable the caller exports is not passed to a check the witness starts, which would read the tree it names', r.code === 0 && r.out === '' && r.err === '', r.out); }
   r = docket(['status'], { cwd: bare, env: { CLAUDE_PROJECT_DIR: bare } });
   ok('…and named by the host, its ledgers below are listed', r.code === 0 && / below it: sub\/DECISIONS\.md /.test(r.out), r.out);
   r = docket(['status'], { cwd: tmpDir('docket-none-') });
