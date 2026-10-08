@@ -4990,6 +4990,23 @@ const SEC = String.fromCharCode(0xa7);
     ok('check 2 fails a UTF-16 ledger alone in its tree, ' + (tracked ? 'tracked' : 'in a directory with no repository') + ': no text file leads to it, and it is read where it stands (D45’s addendum)', r.code === 1 && /^DECISIONS\.md:1  check 2: the ledger is not UTF-8 text — a UTF-16 byte order mark opens it; save it as UTF-8 \(FORMAT\.md 1, D45\)$/m.test(r.out), r.code + ' ' + r.out + r.err);
     fs.rmSync(d, { recursive: true, force: true });
   }
+  // a byte that begins no UTF-8 character — a Latin-1 é — is read as U+FFFD: check 2 names its line and byte, and every write of
+  // append refuses the ledger, its bytes as they were, where each had rewritten that byte as three others; the same ledger in UTF-8
+  // passes check 2 and takes the addendum (D45's addendum)
+  {
+    const head = 'Preamble.\n\nPrinciples:\n\n- **One.** a.\n\n### R1. Caf', tail = ' rule (issue #1)\nPrinciple: One.\nReason: a.\n';
+    const run = bytes => { const d = tmpDir('latin1-'), lp = path.join(d, 'DECISIONS.md'); fs.writeFileSync(lp, bytes); fs.writeFileSync(path.join(d, 'a.js'), 'const a = 1; // R1\n');
+      sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'l'], d);
+      const c = docket(['check'], { cwd: d }), w = [docket(['append', '--title', 'Two', '--issue', '2', '--principle', 'One', '--body', 'Reason: r.'], { cwd: d }),
+        docket(['append', '--addendum', 'R1', '--text', 'More.'], { cwd: d }), docket(['append', '--baseline'], { cwd: d })];
+      return { c, w, same: fs.readFileSync(lp).equals(bytes) }; };
+    const bad = run(Buffer.concat([Buffer.from(head), Buffer.from([0xE9]), Buffer.from(tail)])), at = Buffer.byteLength(head) + 1;
+    const good = run(Buffer.from(head + 'é' + tail));
+    ok('check 2 fails a ledger holding a byte that begins no UTF-8 character, at its line, naming the byte; append, --addendum and --baseline refuse it, exit 2, and leave its bytes as they were; the same ledger in UTF-8 passes check 2 and takes the addendum (FORMAT.md 1, D45’s addendum)',
+      bad.c.code === 1 && bad.c.out.split('\n').includes('DECISIONS.md:7  check 2: the ledger is not UTF-8 text — byte ' + at + ' begins no UTF-8 character; save it as UTF-8 (FORMAT.md 1, D45)')
+      && bad.w.every(r => r.code === 2 && r.err.includes('is not UTF-8 text — byte ' + at + ', on line 7, begins no UTF-8 character')) && bad.same
+      && !/not UTF-8/.test(good.c.out) && good.w[1].code === 0, [bad.c.out.slice(0, 200), bad.w.map(r => r.code + ':' + r.err.slice(0, 120)).join(' | '), bad.same, good.c.out.slice(0, 200), good.w[1].code + ':' + good.w[1].err.slice(0, 160)].join(' || '));
+  }
   {
     const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), '### R6. The toolbar replaces the long-press menu\nNotes on R6.\n'));   // a copy of a ledger's entry (D5's addendum)
     fs.appendFileSync(path.join(fx(d), 'decisions-notes.md'), 'More on R6.\n');

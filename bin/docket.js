@@ -74,6 +74,16 @@ function die(msg, code) {
 }
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
 function readText(p) { return fs.readFileSync(p, 'utf8'); }
+// The first byte of `buf` that begins no UTF-8 character, as { byte, line } (1-based), or null when all of it is UTF-8. Read
+// lossily, such a byte is U+FFFD, and written back it is three other bytes: the valid prefix reads back as itself, so the first
+// byte where the read-back differs is the first that is not UTF-8 (FORMAT.md 1, D45's addendum)
+function badUtf8(buf) {
+  const back = Buffer.from(buf.toString('utf8'), 'utf8');
+  let i = 0; while (i < buf.length && i < back.length && buf[i] === back[i]) i++;
+  if (i === buf.length && i === back.length) return null;
+  let line = 1; for (let j = 0; j < i; j++) if (buf[j] === 0x0A) line++;
+  return { byte: i + 1, line };
+}
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
 function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }
 function isDir(p) { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } }
@@ -1145,7 +1155,9 @@ function runCheck(root, opts) {
     // D45: a ledger is UTF-8 text; one saved as UTF-16, or holding a NUL byte, reads as no entries at all and would pass as
     // ungoverned — it fails here, at its first line, named
     { let b = null; try { b = fs.readFileSync(lp); } catch (e) { b = null; }
-      if (b && ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) || b.includes(0))) fail(lp, 1, 2, 'the ledger is not UTF-8 text' + ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) ? ' — a UTF-16 byte order mark opens it' : ' — it holds a NUL byte') + '; save it as UTF-8 (FORMAT.md 1, D45)'); }
+      if (b && ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) || b.includes(0))) fail(lp, 1, 2, 'the ledger is not UTF-8 text' + ((b[0] === 0xFF && b[1] === 0xFE) || (b[0] === 0xFE && b[1] === 0xFF) ? ' — a UTF-16 byte order mark opens it' : ' — it holds a NUL byte') + '; save it as UTF-8 (FORMAT.md 1, D45)');
+      else { const bad = b && badUtf8(b);                               // a byte that begins no UTF-8 character: read as U+FFFD, where it stands (D45's addendum)
+        if (bad) fail(lp, bad.line, 2, 'the ledger is not UTF-8 text — byte ' + bad.byte + ' begins no UTF-8 character; save it as UTF-8 (FORMAT.md 1, D45)'); } }
     for (const e of empty ? [] : files) {                              // a spec cite with its space missing is a typo named, not a bare cite counted (FORMAT.md 8)
       const ls = splitLines(fileText(e)), fenced = fencedLines(ls);
       ls.forEach((l, i) => {
@@ -1476,6 +1488,11 @@ function flags(argv, name) { const r = []; for (let i = 0; i < argv.raw.length; 
 // A CRLF ledger stays CRLF through every write (FORMAT.md 1): the line ending is read once, from the file.
 // Atomic within the directory: a reader sees the ledger before the write or after it, never half of it.
 function writeLedger(ledger, text) {
+  // a byte that begins no UTF-8 character was read as U+FFFD, and written back it would be three other bytes, in a line this entry
+  // does not touch: refused, the ledger unchanged (FORMAT.md 1; D4, D45's addendum)
+  { let b = null; try { b = fs.readFileSync(ledger.path); } catch (e) { b = null; }
+    const bad = b && badUtf8(b);
+    if (bad) die('append: ' + ledger.path + ' is not UTF-8 text — byte ' + bad.byte + ', on line ' + bad.line + ', begins no UTF-8 character; a write would rewrite it, in a line this entry does not touch, and the ledger is append only: save it as UTF-8 (FORMAT.md 1; D4, D45)', 2); }
   const crlf = (ledger.text.match(/\r\n/g) || []).length, lf = (ledger.text.match(/(^|[^\r])\n/g) || []).length;
   if (crlf && lf) die('append: ' + ledger.path + ' ends some lines with CRLF and some with LF; a write would have to give the whole file one ending, rewriting lines this entry does not touch, and the ledger is append only (FORMAT.md 1; D4)', 2);
   if (crlf) text = text.replace(/\r?\n/g, '\r\n');
