@@ -618,7 +618,7 @@ function loadContext(root, opts) {
     if (isSelfCopy(f)) { vendored.push(rel(root, f)); continue; }      // D9: the vendored witness is not a governed file
     if (!lp) continue;
     if (!ledgers.has(lp)) ledgers.set(lp, loadLedger(lp));
-    entries.push({ path: f, ledger: lp, rel: rel(root, f), link });
+    entries.push({ path: f, ledger: lp, rel: rel(root, f), link, drifted: isCoreCopy(f) });
   }
   seedLedgerText(entries, ledgers);                                   // one read per file, so one version per run
   return { root, ledgers, files: entries, vendored, fromGit, untracked: !!opts.includeUntracked };
@@ -636,6 +636,20 @@ function isSelfCopy(filePath) {
   if (path.resolve(filePath) === path.resolve(__filename)) return path.basename(path.dirname(__filename)) !== 'bin';
   if (selfText === null) selfText = normEol(readText(__filename));
   try { return normEol(readText(filePath)) === selfText; } catch (e) { return false; }
+}
+// A docket core of some version opens as this file opens: its first three lines this file's, the third naming the program.
+function coreOpening(t) { return t.split('\n', 3).join('\n'); }
+// A docket.js outside bin/ that opens as this program opens and differs after it is a copy of another version of the core — a
+// witness vendored before the plugin moved on. It is governed like any file, so its cites fail, and each failure line names it
+// and the command that vendors again (FORMAT.md 8). A core at bin/ is its own repository's, which its own ledger governs (D6).
+function isCoreCopy(filePath) {
+  if (path.basename(filePath) !== 'docket.js' || path.basename(path.dirname(filePath)) === 'bin' || path.resolve(filePath) === path.resolve(__filename)) return false;
+  if (selfText === null) selfText = normEol(readText(__filename));
+  try { const t = normEol(readText(filePath)); return t !== selfText && coreOpening(t) === coreOpening(selfText); } catch (e) { return false; }
+}
+function vendorAgain(root, file) {
+  const at = path.basename(path.dirname(file)) === 'test' ? rel(root, path.dirname(path.dirname(file))) || '.' : null;
+  return ' — ' + rel(root, file) + ' is a copy of another version of the docket\'s core: vendor again' + (at ? ' (docket vendor ' + at + ')' : '');
 }
 // the session start's bound is read at every pass over a file, not at its first read alone (D14's addendum)
 function fileText(entry) { inTime(); if (entry.text === undefined) entry.text = readText(entry.path); return entry.text; }
@@ -1023,7 +1037,8 @@ function runCheck(root, opts) {
   opts = opts || {};
   const ctx = opts.ctx || loadContext(root);
   const failures = [], info = [];
-  const fail = (file, line, k, message) => failures.push({ file: rel(root, file), line, k, message });
+  const drifted = new Set((ctx.files || []).filter(e => e.drifted).map(e => e.path));
+  const fail = (file, line, k, message) => failures.push({ file: rel(root, file), line, k, message: drifted.has(file) ? message + vendorAgain(root, file) : message });
   for (const v of ctx.vendored || []) info.push(v + ': the vendored witness, a copy of this program — not read as a governed file (D9)');
   for (const [lp, ledger] of ctx.ledgers) {
     const files = ctx.files.filter(e => e.ledger === lp);
@@ -1969,8 +1984,7 @@ function vendorInto(dir) {
   // line naming the program — so a project's own test file, or this repository's suite, is never written over.
   if (replaced) {
     const theirs = normEol(readText(dest)), mine = normEol(readText(__filename));
-    const opens = t => t.split('\n', 3).join('\n');
-    if (opens(theirs) !== opens(mine)) die('vendor: ' + rel(process.cwd(), dest) + ' exists and is not a copy of the docket\'s core — move it aside first; the witness goes to test/docket.js', 2);
+    if (coreOpening(theirs) !== coreOpening(mine)) die('vendor: ' + rel(process.cwd(), dest) + ' exists and is not a copy of the docket\'s core — move it aside first; the witness goes to test/docket.js', 2);
   }
   if (exists(path.dirname(dest)) && !isDir(path.dirname(dest))) die('vendor: ' + rel(process.cwd(), path.dirname(dest)) + ' exists and is not a directory; the witness goes to test/docket.js', 2);
   fs.mkdirSync(path.dirname(dest), { recursive: true });

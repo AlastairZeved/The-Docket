@@ -378,8 +378,11 @@ comments cite the plugin's own ledger and its fixture's examples, which resolve
 to nothing under the ledger it serves, so no check reads it for cites or for
 the bare-§ count, `near` prints nothing for an edit to it, and `check` says so
 in an info line. Identity is the text itself, line endings normalised, which no
-marker could forge; a copy that has drifted from the running core is not
-exempt, and its cites failing is the sign to vendor again.
+marker could forge; a copy that has drifted from the running core — a
+`docket.js` outside `bin/` that opens as the core opens, its first three lines
+the core's, and differs after — is not exempt: its cites fail, and each of its
+failure lines says it is a copy of another version of the core and gives the
+command that vendors again.
 
 A fence is closed before the entry ends. One that is not quotes every line to
 the end of the ledger, cites included, and `docket append` refuses a body that

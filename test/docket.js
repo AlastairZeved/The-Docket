@@ -2205,6 +2205,12 @@ const SEC = String.fromCharCode(0xa7);
     const w = cp.spawnSync('node', [path.join(d, 'test', 'docket.js')], { cwd: d, encoding: 'utf8', env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('the vendored witness, run bare over the constituted triad, exits 0 — not "the files exist": the check passes', w.status === 0 && /^witness: ok \(1 ledger, 0 spec rows\)$/m.test(w.stdout), w.status + ' ' + w.stdout + w.stderr);
     ok('…and the copy did not read itself: the info line says so', /the vendored witness, a copy of this program/.test(w.stdout), w.stdout);
+    // a copy that has drifted from the running core is no witness: its cites fail, and each failure line says to vendor again (FORMAT.md 8)
+    const vt = path.join(d, 'test', 'docket.js'), vkeep = read(vt);
+    fs.writeFileSync(vt, vkeep.replace('const WINDOW = 20;', 'const WINDOW = 21;'));
+    const dr = docket(['check'], { cwd: d, env: { CLAUDE_PROJECT_DIR: '' } }), drl = (dr.out || '').split('\n').filter(l => /^test\/docket\.js:\d+  check /.test(l));
+    ok('a vendored witness that has drifted from the running core fails on its cites, each failure line saying it is a copy of another version of the core and how to vendor again (FORMAT.md 8)', dr.code === 1 && drl.length > 0 && drl.every(l => / — test\/docket\.js is a copy of another version of the docket's core: vendor again \(docket vendor \.\)$/.test(l)) && !/the vendored witness, a copy of this program/.test(dr.out), dr.out);
+    fs.writeFileSync(vt, vkeep);
     const near = cp.spawnSync('node', [path.join(d, 'test', 'docket.js'), 'near'], { cwd: d, encoding: 'utf8', input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'docs/PRD.md', old_string: '## ' + SEC + '2 The reader' } }), env: Object.assign({}, outerEnv(), { CLAUDE_PROJECT_DIR: '' }) });
     ok('near in the constituted project is silent on a spec document, as the grammar says', near.status === 0 && near.stdout === '', near.stdout);
     fs.writeFileSync(path.join(d, 'app.js'), 'const x = 1; // R1: the constitution\nconst y = 2;\n');
