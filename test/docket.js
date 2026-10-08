@@ -13,10 +13,12 @@ function ok(name, cond, detail) {
   failed++;
   console.error(`FAIL  ${name}${detail === undefined ? '' : '\n      ' + String(detail).split('\n').join('\n      ')}`);
 }
-// The environment a check the witness starts inherits: the caller's, less DOCKET_BASE. A base names a commit of the repository a
-// CI step checks, and the witness's checks run in scratch repositories that hold none of its commits; a test that wants a base
-// passes one.
-function outerEnv() { const e = Object.assign({}, process.env); delete e.DOCKET_BASE; return e; }
+// The environment a check the witness starts inherits: the caller's, less every switch of the core's (DOCKET_*). A base names a
+// commit of the repository a CI step checks, and the witness's checks run in scratch repositories that hold none of its commits;
+// a judge's environment names the session it judges, its root, its stop and its judge, whose writes the core refuses (D37) — and
+// code F1 has the judge run the repository's checks under it; a measured run's names its trail. Each is the caller's run's and
+// never the witness's: a test that wants one passes it, and every process the witness starts is given this environment.
+function outerEnv() { const e = Object.assign({}, process.env); for (const k of Object.keys(e)) if (/^DOCKET_/.test(k)) delete e[k]; return e; }
 // The witness's scratch repositories are its own: a signing setting in the person's git config, with a signer that cannot run
 // here, would fail every commit it makes, so every git it starts signs nothing — the settings added after any the caller set
 { const n = Number(process.env.GIT_CONFIG_COUNT) || 0;
@@ -825,10 +827,10 @@ const SEC = String.fromCharCode(0xa7);
   ok('append: a --body carrying a Principle: line with no space after the colon is refused, as one with a space is', r.code === 2 && /^append: --body may not carry a Principle: line/m.test(r.err), r.err);
   // a reader that closes stdout early: no stack trace, and the exit is the command's own (D6's addendum)
   const many = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'noisy.js'), Array.from({ length: 3000 }, (_, i) => `// R${90 + i} cited nowhere`).join('\n') + '\n')); // above the pipe's buffer: the reader's exit meets a blocked write
-  const ep = cp.spawnSync('bash', ['-c', 'node "$1" check | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: many, encoding: 'utf8' });
+  const ep = cp.spawnSync('bash', ['-c', 'node "$1" check | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: many, encoding: 'utf8', env: outerEnv() });
   ok('check with its reader gone after one line ends quietly, no stderr, and its exit is the check’s own: 1, for a ledger that fails (FORMAT.md 13, D6’s addendum)', ep.status === 0 && ep.stderr === '' && /status=1$/m.test(ep.stdout) && /check 1: cite R90/.test(ep.stdout), ep.stdout + ep.stderr);
   const wide = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'wide.js'), Array.from({ length: 3000 }, (_, i) => `const w${i} = ${i}; // R2`).join('\n') + '\n'));
-  const ep0 = cp.spawnSync('bash', ['-c', 'node "$1" governs R2 | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: path.join(wide, 'test', 'fixture'), encoding: 'utf8' });
+  const ep0 = cp.spawnSync('bash', ['-c', 'node "$1" governs R2 | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: path.join(wide, 'test', 'fixture'), encoding: 'utf8', env: outerEnv() });
   ok('…and a command that succeeds, its reader gone after one line of an output past the pipe’s buffer, exits 0, quietly', ep0.status === 0 && ep0.stderr === '' && /status=0$/m.test(ep0.stdout) && /^R2 /.test(ep0.stdout), ep0.stdout + ep0.stderr);
   // a baseline pair that is not <file>=<count> is a check 4 failure at the comment's line, and gives no allowance (FORMAT.md 9)
   const nanb = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=abc -->'));
@@ -1323,7 +1325,7 @@ const SEC = String.fromCharCode(0xa7);
     raceLast = race1;
     const raceSh = cp.spawnSync('bash', ['-c',
       'pids=""; for n in $(seq 1 ' + RACERS + '); do node "$1" append --title "Racer $n" --issue "6$n" --principle "Zero cognitive tax" --body "Reason: r$n." >/dev/null 2>&1 & pids="$pids $!"; done; for p in $pids; do wait $p; echo "exit=$?"; done',
-      'x', CORE], { cwd: race1Cwd, encoding: 'utf8' });
+      'x', CORE], { cwd: race1Cwd, encoding: 'utf8', env: outerEnv() });
     const raceCodes = raceSh.stdout.split('\n').filter(Boolean).map(l => Number(l.replace('exit=', '')));
     const raceIdx = JSON.parse(docket(['index'], { cwd: race1Cwd }).out);
     const raceTitles = raceIdx.rulings.filter(r => /^Racer /.test(r.title)).map(r => r.title).sort().join(',');
@@ -2521,6 +2523,20 @@ const SEC = String.fromCharCode(0xa7);
         ok('…and the witness’s own checks do not inherit a DOCKET_BASE from the environment it runs in: CI names one for the repository it checks, which a scratch repository does not hold', inherited.code === 0 && /^check: ok/m.test(inherited.out) && !/does not hold/.test(inherited.out), inherited.out); }
       fs.rmSync(dir, { recursive: true, force: true });
     }
+    // the core's other switches, which a judge's environment carries — the stop names its session and its judge to the judge it
+    // starts, and code F1 has that judge run the repository's checks — and a measured run's (the trail)
+    {
+      const dir = tempRepo(), set = { DOCKET_JUDGE: 'j', DOCKET_SESSION: 'j', DOCKET_TRAIL: '1' }, had = {};
+      fs.mkdirSync(path.join(dir, '.docket'), { recursive: true });
+      fs.appendFileSync(path.join(dir, 'test', 'fixture', 'app.js'), 'const j = 1; // R2\n');
+      for (const k of Object.keys(set)) { had[k] = process.env[k]; process.env[k] = set[k]; }
+      const a = docket(['append', '--title', 'Appended under a judge', '--issue', '9', '--principle', 'Capture precedes structure', '--body', 'Reason: r.', '--ledger', LED], { cwd: dir, env: { DOCKET_TODAY: '2026-09-23' } });
+      const g = docket(['gate'], { cwd: dir });
+      for (const k of Object.keys(set)) { if (had[k] === undefined) delete process.env[k]; else process.env[k] = had[k]; }
+      const st = JSON.parse(readIf(path.join(dir, '.docket', 'verdict.json')) || '{}'), ss = st.sessions || {};
+      ok('…nor any other switch of the core’s: run under a judge’s environment and a measured one, the witness’s append writes, its gate records the default session, and its tree keeps no trail', a.code === 0 && /^### R\d+\. Appended under a judge \(issue #9\)$/m.test(read(path.join(dir, LED))) && !!ss.default && !ss.j && !fs.existsSync(path.join(dir, '.docket', 'trail.log')), a.err + g.out + JSON.stringify(ss));
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
     // DOCKET_BASE unheld, and no earlier version of the ledger at all: the skip names the revision (FORMAT.md 13)
     {
       const dir = tempRepo();
@@ -2671,7 +2687,7 @@ const SEC = String.fromCharCode(0xa7);
       ok('intake --json prints one object: the intake, its file and its text, byte for byte (--json on every subcommand)', r.code === 0 && (() => { try { const j = JSON.parse(r.out); return j.intake === 'rule' && j.file === 'intake/RULE.md' && j.text === read(path.join(ROOT, 'intake', 'RULE.md')); } catch (e) { return false; } })(), r.code + ' ' + r.out.slice(0, 80) + r.err);
       const vd = tempRepo();
       r = docket(['vendor', '.'], { cwd: vd });
-      const vr = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'intake', 'rule'], { cwd: vd, encoding: 'utf8' });
+      const vr = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'intake', 'rule'], { cwd: vd, encoding: 'utf8', env: outerEnv() });
       ok('the vendored witness carries no intake and says so rather than printing nothing, exit 2', r.code === 0 && vr.status === 2 && /intake\/RULE\.md is not beside this file’s bin\/ — the intakes live in the plugin; the vendored witness at test\/docket\.js carries none/.test(vr.stderr.replace(/'/g, '’')), vr.status + ' ' + vr.stderr);
       fs.rmSync(vd, { recursive: true, force: true });
     }
@@ -3708,7 +3724,7 @@ const SEC = String.fromCharCode(0xa7);
       const sd = tmpDir('core space-'), spaced = path.join(sd, 'docket.js');
       fs.copyFileSync(CORE, spaced);
       fs.appendFileSync(path.join(d, 'test', 'fixture', 'app.js'), 'const q1 = 1; // R2\n');
-      const rs = cp.spawnSync('node', [spaced, 'stop', '--judge', judgeCmd('PASS')], { cwd: d, input: JSON.stringify({ session_id: 'x' }), encoding: 'utf8' });
+      const rs = cp.spawnSync('node', [spaced, 'stop', '--judge', judgeCmd('PASS')], { cwd: d, input: JSON.stringify({ session_id: 'x' }), encoding: 'utf8', env: outerEnv() });
       ok('stop: a core whose path the shell would split is written quoted in the prompt, and the judge that runs it as written records', rs.status === 0 && rs.stdout === '' && read(path.join(jd, 'prompt')).includes('Run `node ' + JSON.stringify(spaced) + ' protocol`'), rs.stdout + rs.stderr);
       forget();
     }
@@ -3827,8 +3843,8 @@ const SEC = String.fromCharCode(0xa7);
     r = docket(['pack', 'code', 'nosuch']);
     ok('…and among several names, prints nothing and names the one to correct', r.code === 2 && r.out === '' && /no pack named nosuch;/.test(r.err), r.code + ' ' + r.out.slice(0, 80) + ' ' + r.err);
     const vd = tempRepo(); docket(['vendor', '.'], { cwd: vd });
-    const vp = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'protocol'], { cwd: vd, encoding: 'utf8' });
-    const vk = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'pack', '--list'], { cwd: vd, encoding: 'utf8' });
+    const vp = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'protocol'], { cwd: vd, encoding: 'utf8', env: outerEnv() });
+    const vk = cp.spawnSync('node', [path.join(vd, 'test', 'docket.js'), 'pack', '--list'], { cwd: vd, encoding: 'utf8', env: outerEnv() });
     ok('the vendored witness carries no protocol and no packs, and says so for each, exit 2', vp.status === 2 && /judge\/PROTOCOL\.md is not beside this file/.test(vp.stderr.replace(/’/g, "'")) && vk.status === 2 && /packs\/ is not beside this file/.test(vk.stderr.replace(/’/g, "'")), vp.stderr + vk.stderr);
     fs.rmSync(vd, { recursive: true, force: true });
     // transcript: a JSON-lines message log, the assistant text and the tool calls in order
