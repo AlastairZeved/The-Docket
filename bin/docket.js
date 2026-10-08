@@ -340,7 +340,7 @@ function principlesFromList(lines, startIdx) {
   for (let i = startIdx; i < lines.length; i++) {
     const m = LIST_ITEM_RE.exec(lines[i]);
     if (m) { names.push({ name: m[1].trim().replace(/\.$/, ''), text: lines[i].trim(), line: i + 1 }); started = true; }
-    else if (started && lines[i].trim() === '') break;
+    else if (started && lines[i].trim() === '') continue;              // a blank line between items ends nothing: a loose list is one list, as a renderer shows it
     else if (started && /^\s+\S/.test(lines[i])) names[names.length - 1].text += ' ' + lines[i].trim();   // a wrapped bullet: the indented line continues it
     else if (started && /^\s*(?:[-*+]|\d{1,9}[.)])\s/.test(lines[i])) skipped.push(i + 1);   // an item with no bolded name: no principle to cite, and the list goes on
     else if (started) break;

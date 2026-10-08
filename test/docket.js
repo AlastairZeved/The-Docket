@@ -5542,6 +5542,10 @@ const SEC = String.fromCharCode(0xa7);
   const ten = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace('- **Zero cognitive tax.**', '1234567890. **Zero cognitive tax.**')); });
   const tp = JSON.parse(docket(['principles', '--json'], { cwd: path.join(ten, 'test', 'fixture') }).out);
   ok('…and ten digits make no item, as they make none for a renderer: the list ends before it', JSON.stringify((tp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Positions are permanent']), JSON.stringify(tp));
+  const loose = tempRepo(d => { const q = path.join(d, 'test', 'fixture', 'PRD.md'); fs.writeFileSync(q, read(q).replace(/^(- \*\*.*)$/gm, '$1\n')); });
+  const lCwd = path.join(loose, 'test', 'fixture'), lp = JSON.parse(docket(['principles', '--json'], { cwd: lCwd }).out);
+  r = docket(['append', '--title', 'A loose list is read whole', '--issue', '23', '--principle', 'Zero cognitive tax', '--body', 'Reason: a blank line between items ends no list a reader sees.'], { cwd: lCwd });
+  ok('…and a loose list, a blank line between its items, is read whole, as a renderer shows it: its last principle is one append accepts, and check passes', JSON.stringify((lp.list || []).map(p => p.name)) === JSON.stringify(['Capture precedes structure', 'Positions are permanent', 'Zero cognitive tax']) && r.code === 0 && /check: ok/.test(r.out), JSON.stringify(lp) + r.out + r.err);
 }
 
 // ── an addendum dated by hand with no day of the calendar is read as written and named in an info line, never failed (FORMAT.md 6) ──

@@ -411,7 +411,9 @@ first section of `PRD.md` when a `PRD.md` sits beside the ledger, else the list
 in the ledger preamble that follows a line containing the word `Principles` —
 bulleted or numbered, its items marked as Markdown marks them, `-`, `*` or `+`,
 or one to nine digits and `.` or `)`; ten digits make no item, as they make none
-for a renderer, so the list read is the list a reader sees. When neither exists, `principles` prints that it found none
+for a renderer, so the list read is the list a reader sees. Blank lines between its
+items do not end it, as they end no list a renderer shows; a line that is neither
+an item nor indented under one does. When neither exists, `principles` prints that it found none
 and exits 1, and `append` refuses every entry until one exists. Each item
 begins with a bold phrase, which is the principle's name:
 
