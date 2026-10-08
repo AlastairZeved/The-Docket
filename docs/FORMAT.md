@@ -395,9 +395,13 @@ The ledger preamble may carry one comment
 
     <!-- docket: bare-cites <file>=<n> <file>=<n> … -->
 
-with paths relative to the ledger's home (1); a path that holds a space, a double
-quote, a backslash or `>` is written as a JSON string, `"Design Notes.md"=1`, as
-`append --baseline` writes it. When the comment is present, a
+with paths relative to the ledger's home (1), written as check writes a path; a
+path that holds a space, a double quote, a backslash, `>`, `=` or `,` is written
+as a JSON string, `"Design Notes.md"=1`, as `append --baseline` writes it. A pair
+whose count is not a whole number, an unquoted path holding `=` or `,` (pairs run
+together, `app.js=5,other.js=1`), and a path written otherwise than check writes
+it (`./app.js`, `../up.js`) each fail check 4 at the comment; a well-formed path
+naming no file the ledger governs is an info line, its allowance counting nothing. When the comment is present, a
 file's bare-cite count may not exceed its allowance, and a file not listed has
 an allowance of 0 (check 4); the comment may list no file at all, and then every
 file's allowance is 0. When the comment is absent, counts are reported and

@@ -433,9 +433,18 @@ function parseLedger(text, ledgerPath) {
         const q = /^("(?:[^"\\]|\\.)*")=(\S*)$/.exec(kv), eq = q ? -1 : kv.lastIndexOf('=');
         let key = null; try { key = q ? JSON.parse(q[1]) : eq > 0 ? kv.slice(0, eq) : null; } catch (e) { key = null; }
         const count = q ? q[2] : kv.slice(eq + 1);
+        // A key is a path as check writes it, relative to the ledger's home: an unquoted one holding "=" or "," is pairs run
+        // together, app.js=5,other.js=1, and "./app.js", "a/../app.js", "../up.js" or "/abs.js" names a file no count is kept
+        // under — each a fault at the comment, as a pair that is not a count is (FORMAT.md 9).
+        const norm = key === null ? null : path.posix.normalize(key), outside = norm !== null && (norm === '..' || norm.startsWith('../') || path.posix.isAbsolute(norm));
+        const misread = key === null ? null
+          : !q && /[=,]/.test(key) ? 'is pairs run together: pairs are separated by spaces, and a path holding "=" or "," is written as a JSON string'
+          : norm !== key || outside ? 'names its file as check does not: a path relative to the ledger\'s home, as check writes it' + (outside ? '' : ', ' + norm)
+          : null;
         // One file, one allowance: a repeated key would let the later number raise a reviewed allowance
         // in silence, as a second baseline comment or a second contract line would (FORMAT.md 9, 11).
-        if (key && Object.prototype.hasOwnProperty.call(baseline, key)) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: ' + key + ' is listed twice; a file carries one allowance (FORMAT.md 9)' });
+        if (misread) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: "' + kv + '" ' + misread + ' (FORMAT.md 9)' });
+        else if (key && Object.prototype.hasOwnProperty.call(baseline, key)) directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: ' + key + ' is listed twice; a file carries one allowance (FORMAT.md 9)' });
         else if (key && /^\d+$/.test(count)) baseline[key] = Number(count);
         else directiveFaults.push({ k: 4, line: li + 1, message: 'bare-cites baseline: "' + kv + '" is not <file>=<count> (FORMAT.md 9)' });   // a pair that is not a count is no allowance, and check says so
       }
@@ -489,7 +498,7 @@ function parseLedger(text, ledgerPath) {
 }
 // A pair of the bare-cites comment as it is written and read (FORMAT.md 9): a path holding a space, a quote, a backslash or ">"
 // is a JSON string, so the writer, the reader and check 7's record of a rise agree on one spelling
-function baselinePair(p, n) { return (/[\s"\\>]/.test(p) ? JSON.stringify(p).replace(/>/g, '\\u003e') : p) + '=' + n; }
+function baselinePair(p, n) { return (/[\s"\\>=,]/.test(p) ? JSON.stringify(p).replace(/>/g, '\\u003e') : p) + '=' + n; }
 function parseSpec(text) {
   const heads = [];
   splitLines(unBom(text)).forEach((l, i) => { const m = SPEC_HEADING_RE.exec(l); if (m) heads.push({ num: m[1], title: stripMarks(m[2]), line: i + 1 }); });
@@ -1140,6 +1149,10 @@ function runCheck(root, opts) {
     }
     // 4. bare-§ ratchet — its baseline first: a second comment or a malformed pair (FORMAT.md 9)
     for (const f of ledger.directiveFaults) if (f.k === 4) fail(lp, f.line, 4, f.message);
+    if (ledger.hasBaseline && !empty) {                                // a key naming no file this ledger governs counts nothing: said, not failed
+      const named = new Set(files.map(e => rel(ledger.home, e.path)));
+      for (const k of Object.keys(ledger.baseline)) if (!named.has(k)) info.push(rel(root, lp) + ':' + ledger.baselineLine + ': the bare-cites baseline lists ' + k + ', which is no file this ledger governs; its allowance counts nothing (FORMAT.md 9)');
+    }
     for (const e of empty ? [] : files) {
       if (isSpecDoc(e, ledger)) continue;
       const n = bareCitesIn(fileText(e));

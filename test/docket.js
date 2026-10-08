@@ -836,6 +836,16 @@ const SEC = String.fromCharCode(0xa7);
   const noeq = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=3 styles.css -->'));
   r = docket(['check'], { cwd: noeq });
   ok('check 4: a bare word in the baseline is a malformed pair, and the well-formed pair beside it still counts', r.code === 1 && /check 4: bare-cites baseline: "styles\.css" is not <file>=<count>/.test(r.out) && !/allowance 0 for app\.js/.test(r.out), r.out);
+  for (const [pairs, said] of [['app.js=5,other.js=1', 'is pairs run together: pairs are separated by spaces'], ['./app.js=3', 'names its file as check does not: a path relative to the ledger\'s home, as check writes it, app.js'], ['x/../app.js=3', 'names its file as check does not: a path relative to the ledger\'s home, as check writes it, app.js'], ['../app.js=3', 'names its file as check does not: a path relative to the ledger\'s home, as check writes it (FORMAT.md 9)']]) {
+    const mb = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites ' + pairs + ' -->'));
+    r = docket(['check'], { cwd: mb });
+    ok('check 4: the baseline pair ' + JSON.stringify(pairs) + ' fails at the comment, quoted: it ' + said.split(':')[0] + ' (FORMAT.md 9)', r.code === 1 && r.out.split('\n').some(l => /^test\/fixture\/DECISIONS\.md:\d+  check 4: bare-cites baseline: "/.test(l) && l.includes('"' + pairs + '" ' + said)) && /check 4: bare-§ cites: 3 > allowance 0 for app\.js/.test(r.out), r.out);
+    fs.rmSync(mb, { recursive: true, force: true });
+  }
+  { const qb = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '<!-- docket: bare-cites app.js=3 -->', '<!-- docket: bare-cites app.js=3 "a=b,c.js"=0 gone.js=0 -->'));
+    r = docket(['check'], { cwd: qb });
+    ok('…while a quoted path holding "=" and "," is a pair, and a well-formed path naming no governed file is an info line, not a failure', r.code === 0 && !/check 4/.test(r.out) && /^info  test\/fixture\/DECISIONS\.md:21: the bare-cites baseline lists gone\.js, which is no file this ledger governs; its allowance counts nothing \(FORMAT\.md 9\)$/m.test(r.out) && /the bare-cites baseline lists a=b,c\.js, which is no file/.test(r.out), r.out);
+    fs.rmSync(qb, { recursive: true, force: true }); }
   // check 2's message when a prefix does not open at 1
   const op = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', '### A1. Long-press menu order', '### A2. Long-press menu order'));
   r = docket(['check'], { cwd: op });
