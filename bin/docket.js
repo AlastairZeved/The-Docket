@@ -2900,12 +2900,12 @@ function pack(argv) {
 // that writes the ledger on its second line is still the maker's call (protocol step 5): a first line alone hid both.
 // A call or a result over TRANSCRIPT_LINES lines prints that many in all: its first TRANSCRIPT_HEAD, the count between,
 // and the rest from its end — its head names what ran, and a runner prints its verdict last — so the mark stands for two
-// lines or more and the cut never prints more than it keeps out; and a line over TRANSCRIPT_WIDTH characters is cut,
-// marked (D14, D42). A line that is not JSON, or a file no line of which is a message, is printed as it is. `--last <n>` keeps
+// lines or more and the cut never prints more than it keeps out, save the lines of a call that name a ledger document, each
+// kept in its place (D51); and a line over TRANSCRIPT_WIDTH characters is cut, marked (D14, D42). A line that is not JSON, or a file no line of which is a message, is printed as it is. `--last <n>` keeps
 // the last n assistant turns.
 const TRANSCRIPT_LINES = 40, TRANSCRIPT_HEAD = 10, TRANSCRIPT_WIDTH = 400;
 const LEDGER_NAME_RE = /DECISIONS[^\s\/"'`]*\.md/i;                     // a ledger document's name, as the ledger documents are named (FORMAT.md 1, 8)
-// A call's line that names a ledger document is never cut away (D14's addendum): the one thing step 5 reads the transcript for is
+// A call's line that names a ledger document is never cut away (D14's addendum, D51): the one thing step 5 reads the transcript for is
 // a write of the ledger among the maker's calls, and a cut that dropped it read the write as no call of the maker's. `keep` is
 // that name's pattern for a call, and nothing for a result, which is not the maker's call.
 function transcriptItem(label, text, keep) {

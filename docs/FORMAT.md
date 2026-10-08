@@ -567,7 +567,7 @@ between and its last twenty-nine, so the mark stands for two lines or more (D42)
 save that a call's line naming a ledger document (`DECISIONS*.md`, 1) is kept in
 its place among the marks, a run of one line printed rather than marked, since a
 write of the ledger among the maker's calls is what step 5 reads there (D14's
-addendum); and a line of one over four hundred characters is cut, marked (D14) —
+addendum, D51); and a line of one over four hundred characters is cut, marked (D14) —
 a call's line that names a ledger document past the cut keeping its head, a mark
 and the stretch that ends at the last such name — the maker's own text printed
 whole; `transcript --last <n>`, n a positive whole number written
