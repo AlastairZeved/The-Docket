@@ -269,14 +269,13 @@ Which was written first is read from history (D21): the line holding the edge
 was added in a commit that descends from the one that added the addendum's line
 (a commit that changes only a line's whitespace or its ending, such as a
 renormalisation to CRLF or back, adds no line: each keeps the commit that wrote it),
-or in that same commit — the preamble's order, the addendum first and the ruling
-second — or it is not committed yet. An in-edge older than the addendum does not
-resolve it: supersession is clause-level (D3), so a ruling that once named an
-entry, superseding one clause or extending it, has not moved the law past the
-clause a later addendum is about. With no history to read — no repository, or a
-ledger never committed — a later entry's edge into the entry resolves it.
+or it is not committed yet while the addendum's line is. An in-edge older than
+the addendum does not resolve it: supersession is clause-level (D3), so a ruling
+that once named an entry, superseding one clause or extending it, has not moved
+the law past the clause a later addendum is about.
 Where history holds no order between the two — one commit holds both, neither
-is committed, or there is no history — the ledger's own dates are read first:
+is committed, or there is no history to read: no repository, or a ledger never
+committed — the ledger's own dates are read first:
 entries are appended, so an entry was written by the earliest date an addendum
 carries under it or under any entry after it, and an edge from one written by a
 day before the addendum's is older than it and answers nothing. Only where the

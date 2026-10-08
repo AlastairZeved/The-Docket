@@ -1754,11 +1754,10 @@ function withState(root, change, opts) {
 }
 // An addendum is pending until a ruling written after it has an edge into its entry (FORMAT.md 6, D21). Which came
 // first is read from history: the edge's line was added in a commit that descends from the one that added the
-// addendum's line, or in that same commit (the preamble's order: the addendum, then the ruling), or it is not committed
-// yet. An in-edge older than the addendum answered something else: supersession is clause-level (D3), and a ruling that
-// once named an entry has not moved the law past the clause a later addendum is about. With no history to read — no
-// repository, or a ledger never committed — a later entry's edge resolves it, as before. Where history holds no order —
-// one commit, neither line committed, no history — the ledger's own dates are read first: entries are appended, so an
+// addendum's line, or it is not committed yet while the addendum's line is. An in-edge older than the addendum answered
+// something else: supersession is clause-level (D3), and a ruling that once named an entry has not moved the law past the
+// clause a later addendum is about. Where history holds no order — one commit, neither line committed, no history to read
+// (no repository, or a ledger never committed) — the ledger's own dates are read first: entries are appended, so an
 // entry was written by the earliest date an addendum carries under it or under any entry after it, and an edge from one
 // written by a day before the addendum's is older than it (D21's addendum); where they say nothing, the preamble's order.
 function blameCommits(ledgerPath) {
