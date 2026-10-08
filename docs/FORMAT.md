@@ -27,7 +27,7 @@ holds, so when it names a directory the file does not lie under, the filesystem
 root is the bound. A ledger file with no entries governs nothing, and still ends
 the walk: nothing above it is consulted, so an empty ledger placed in a subtree
 declares that subtree ungoverned — none of the seven checks runs on its files —
-and `check` says so with an info line. Such a ledger holds no line that begins
+and `check` says so with an info line and in its summary (8). Such a ledger holds no line that begins
 `### `, fenced or not (a fence quotes cites, not headings, 8): one that does
 reads as though it rules and would rule
 nothing — its headings fail the grammar (2), or a bare CR began them — and check 2
@@ -351,7 +351,10 @@ never closed quotes every line after it: in the ledger that is check 2's failure
 A ledger's **governed tree** is every git-tracked text file that resolves to it (1),
 cited or not; `check`'s summary counts those, which is why the number is larger
 than the number of files that carry a cite, and why a ledger with no entries
-still has a governed tree to name while governing nothing in it.
+still has a governed tree to name while governing nothing in it. The summary
+says those apart: how many ledgers have no entries, and how many files under
+them, the ledgers aside, are ungoverned — `check: ok (3 ledgers, 42 governed-tree
+files; 1 with no entries, 2 files under it ungoverned)`.
 
 A **governed file** is a text file with at least one cite that resolves. A
 **ledger document** — the ledger itself or a copy of one: a file named

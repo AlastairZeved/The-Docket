@@ -365,6 +365,7 @@ const SEC = String.fromCharCode(0xa7);
   const emptyL = tempRepo(d => { fs.writeFileSync(path.join(d, 'test', 'fixture', 'DECISIONS.md'), '# Empty\n'); edit(d, 'test/fixture/app.js', 'UIUX ' + SEC + '4.5 the minimum', 'UIUX ' + SEC + '9.9 the minimum'); });
   r = docket(['check'], { cwd: emptyL });
   ok('check: an empty ledger fails nothing and governs nothing — none of the seven checks runs on its files, and an info line says so (FORMAT.md 1)', r.code === 0 && new RegExp('^info  test/fixture/DECISIONS\\.md: no entries; its subtree is ungoverned and no check runs on its ' + (governedOf(emptyL).files - 1) + ' files$', 'm').test(r.out) && !/check 3/.test(r.out), r.out + r.err);
+  ok('…and its summary counts the tree and says the files under the entry-less ledger apart, as ungoverned, so the two lines agree (FORMAT.md 8)', r.out.trimEnd().split('\n').pop() === 'check: ok (1 ledger, ' + governedOf(emptyL).files + ' governed-tree files; 1 with no entries, ' + (governedOf(emptyL).files - 1) + ' files under it ungoverned)', r.out);
   const emptied = tempRepo();
   fs.writeFileSync(path.join(emptied, 'test', 'fixture', 'DECISIONS.md'), '# Emptied after the commit\n');
   r = docket(['check'], { cwd: emptied });
@@ -1087,8 +1088,12 @@ const SEC = String.fromCharCode(0xa7);
   };
   const governedTree = trackedAll.filter(f => fs.statSync(f).isFile() && isText(f) && walkUp(f));
   const ledgerSet = new Set(governedTree.map(walkUp));
+  // a ledger with no entry heading governs none of its tree: the summary says how many, and the files under them, the ledgers aside
+  const emptyLedgers = [...ledgerSet].filter(lp => !/^### [A-Za-z]+\d+\. /m.test(fs.readFileSync(lp, 'utf8')));
+  const idleFiles = governedTree.filter(f => emptyLedgers.includes(walkUp(f)) && !emptyLedgers.includes(f)).length;
+  const entryLess = emptyLedgers.length ? '; ' + emptyLedgers.length + ' with no entries, ' + idleFiles + ' file' + (idleFiles === 1 ? '' : 's') + ' under ' + (emptyLedgers.length === 1 ? 'it' : 'them') + ' ungoverned' : '';
   const rootCheck = docket(['check']);
-  ok('check at the root ends with its exact summary line — the ledger count and the governed-tree file count, both recomputed here', rootCheck.code === 0 && rootCheck.out.trimEnd().split('\n').pop() === 'check: ok (' + ledgerSet.size + ' ledgers, ' + governedTree.length + ' governed-tree files)' && ledgerSet.size === 3 && governedTree.length > 10, rootCheck.out);   // three: docs/, test/fixture/, and the entry-less templates/
+  ok('check at the root ends with its exact summary line — the ledger count and the governed-tree file count, both recomputed here', rootCheck.code === 0 && rootCheck.out.trimEnd().split('\n').pop() === 'check: ok (' + ledgerSet.size + ' ledgers, ' + governedTree.length + ' governed-tree files' + entryLess + ')' && ledgerSet.size === 3 && governedTree.length > 10, rootCheck.out);   // three: docs/, test/fixture/, and the entry-less templates/
   const rootWitness = docket([]);
   ok('the witness at the root ends with its exact summary line: every ledger the walk finds (docs/, test/fixture/, and the entry-less templates/), no spec rows beside docs/DECISIONS.md', rootWitness.code === 0 && rootWitness.out.trimEnd().split('\n').pop() === 'witness: ok (' + ledgerSet.size + ' ledgers, 0 spec rows)', rootWitness.out);
   const rootIdx = JSON.parse(docket(['index']).out);

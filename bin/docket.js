@@ -1054,6 +1054,15 @@ function principles(argv) {
 function flag(argv, name) { const i = argv.raw.indexOf(name); return i >= 0 && i + 1 < argv.raw.length ? argv.raw[i + 1] : null; }
 function has(argv, name) { return argv.raw.includes(name); }
 
+// The success line (FORMAT.md 8): the governed tree counts every file that resolves to a ledger, an entry-less ledger's among
+// them, and those are said apart in the same line, so the count never calls governed what the info line above it calls ungoverned.
+function checkOk(ctx) {
+  const nl = ctx.ledgers.size, nf = ctx.files.length;
+  const empty = [...ctx.ledgers].filter(([, l]) => !l.rulings.length).map(([lp]) => lp);
+  const idle = ctx.files.filter(e => empty.includes(e.ledger) && e.path !== e.ledger).length;
+  return 'check: ok (' + nl + ' ledger' + (nl === 1 ? '' : 's') + ', ' + nf + ' governed-tree file' + (nf === 1 ? '' : 's')
+    + (empty.length ? '; ' + empty.length + ' with no entries, ' + idle + ' file' + (idle === 1 ? '' : 's') + ' under ' + (empty.length === 1 ? 'it' : 'them') + ' ungoverned' : '') + ')';
+}
 // Returns { failures: [{file, line, k, message}], info: [string] } for every ledger under root.
 function runCheck(root, opts) {
   opts = opts || {};
@@ -1326,7 +1335,7 @@ function check(argv) {
   if (argv.json) { out(JSON.stringify({ ok: res.failures.length === 0, failures: res.failures, info: res.info }, null, 2)); return res.failures.length ? 1 : 0; }
   for (const f of res.failures) out(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const i of res.info) out('info  ' + shown(i));
-  if (!res.failures.length) out('check: ok (' + res.ctx.ledgers.size + ' ledger' + (res.ctx.ledgers.size === 1 ? '' : 's') + ', ' + res.ctx.files.length + ' governed-tree file' + (res.ctx.files.length === 1 ? '' : 's') + ')');
+  if (!res.failures.length) out(checkOk(res.ctx));
   return res.failures.length ? 1 : 0;
 }
 
@@ -2216,8 +2225,7 @@ function constitute(argv) {
     '', 'For the repository\'s agent-instructions file — the host names it; add this yourself:', section, ''];
   for (const f of res.failures) L.push(shown(f.file) + ':' + f.line + '  check ' + f.k + ': ' + f.message);
   for (const i of res.info) L.push('info  ' + shown(i));
-  const nl = res.ctx.ledgers.size, nf = res.ctx.files.length;
-  L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : 'check: ok (' + nl + ' ledger' + (nl === 1 ? '' : 's') + ', ' + nf + ' governed-tree file' + (nf === 1 ? '' : 's') + ')');
+  L.push(res.failures.length ? 'check: ' + res.failures.length + ' failure(s) — the constitution is written; fix before you build on it' : checkOk(res.ctx));
   out(L.join('\n'));
   return res.failures.length ? 1 : 0;
 }
