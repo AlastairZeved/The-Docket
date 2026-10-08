@@ -2250,7 +2250,12 @@ const SEC = String.fromCharCode(0xa7);
     { const r = constitute(Object.assign({}, ANSWERS, { feeling: 'calm, e.g. unhurried' }));
       ok('…and a feeling’s abbreviation is no stop: "calm, e.g. unhurried" is one phrase, and the constitution is written', r.code === 0, r.code + ' ' + r.err);
       fs.rmSync(r.dir, { recursive: true, force: true }); }
-    for (const role of ['a people manager', 'users researcher', 'the public defender', 'a non-technical founder']) {
+    for (const [role, as] of [['non technical', 'non-technical'], ['nontechnical', 'non-technical'], ['Non\u2011technical', 'non-technical'], ['non\u00adtechnical', 'non-technical'], ['non-\u200btechnical', 'non-technical'], ['general-audience', 'general audience'], ['General\u00a0Audience', 'general audience'], ['Everyone!', 'everyone'], ['\u201ceveryone\u201d', 'everyone'], ['everybody', 'everyone'], ['anybody', 'anyone'], ['Anybody with a laptop', 'anyone'], ['any user', 'all users'], ['every user who cooks', 'all users'], ['busy  people', 'people'], ['ＥＶＥＲＹＯＮＥ', 'everyone']]) {
+      const r = constitute(Object.assign({}, ANSWERS, { who: { role, knows: 'k', doesntKnow: 'd' } }));
+      ok('constitute reads the role as a reader sees it: ' + JSON.stringify(role) + ' is refused as "' + as + '", exit 2, writing nothing', r.code === 2 && r.err.startsWith('constitute: who.role "') && r.err.includes('" is refused — a role names a person, not a crowd; "' + as + '" is one of: ') && !fs.existsSync(path.join(r.dir, 'docs')), r.code + ' ' + r.err);
+      fs.rmSync(r.dir, { recursive: true, force: true });
+    }
+    for (const role of ['a people manager', 'users researcher', 'the public defender', 'a non-technical founder', 'a non\u2011technical founder', 'an everyday cook', 'a user researcher']) {
       const r = constitute(Object.assign({}, ANSWERS, { who: { role, knows: 'k', doesntKnow: 'd' } }));
       ok('…while "' + role + '" — a crowd’s word before a person’s noun — is a role, and the constitution is written', r.code === 0 && fs.existsSync(path.join(r.dir, 'docs', 'DECISIONS.md')), r.code + ' ' + r.err);
       fs.rmSync(r.dir, { recursive: true, force: true });

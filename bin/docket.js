@@ -2028,19 +2028,32 @@ function sentenceCount(s) {
 // its last word names a crowd, whatever qualifies it ("non-technical users", "busy people", "the general public"). A role that holds a
 // crowd's word in front of a person's noun — "a people manager", "users researcher", "the public defender", "a
 // non-technical founder" — names a person and is not this shape check's to refuse; the semantic line is the intake's (D13).
+// The role and the list are read alike, as a reader sees them: case folded, an invisible mark dropped, a hyphen or a dash of any
+// kind read as the space it stands for, punctuation at either end dropped, and "non" joined to the word it negates — so
+// "non technical", "nontechnical", non-technical with a non-breaking or a soft hyphen, "general-audience" and "Everyone!" are
+// the list's own; and the pronoun
+// crowds beside the list open a crowd as the list's do, each refused as the phrase it reads as.
 const CROWD_OPENERS = ['everyone', 'anyone', 'all users', 'someone curious', 'general audience'], CROWD_NOUNS = ['users', 'people', 'public'];
+const CROWD_ALIASES = { everybody: 'everyone', anybody: 'anyone', 'any user': 'all users', 'any users': 'all users', 'every user': 'all users' };
+function roleText(t) {
+  return t.normalize('NFKC').toLowerCase().replace(/\p{Cf}/gu, '').replace(/[\p{Pd}\u2212]/gu, ' ')
+    .replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, '').replace(/\s+/g, ' ').replace(/\bnon /g, 'non');
+}
 function invalidRole(role) {
   const strip = t => t.replace(/^(a|an|the)\s+/, '');
-  const raw = role.toLowerCase().replace(/[.]+$/, '').trim(), forms = [raw, strip(raw)];
+  let raw = roleText(role);
+  for (const [alias, as] of Object.entries(CROWD_ALIASES)) if (raw === alias || raw.startsWith(alias + ' ') || raw.startsWith(alias + ',')) raw = as + raw.slice(alias.length);
+  const forms = [raw, strip(raw)];
   const words = raw.split(/[\s,]+/).filter(Boolean), last = words[words.length - 1];
   for (const bad of INVALID_ROLES) {
-    for (const b of [bad, strip(bad)]) for (const f of forms) {
+    for (const b of [roleText(bad), strip(roleText(bad))]) for (const f of forms) {
       if (f === b || f.startsWith(b + ',')) return bad;
       if (f.startsWith(b + ' ') && /^(who|that|which|whom|whose)\b/.test(f.slice(b.length + 1))) return bad;
       if (CROWD_OPENERS.includes(bad) && f.startsWith(b + ' ')) return bad;
     }
-    if (CROWD_NOUNS.includes(strip(bad)) && last === strip(bad)) return bad;
   }
+  // A crowd's noun last is read after every phrase, so the refusal names the phrase the role reads as: "all users", not "users".
+  for (const bad of INVALID_ROLES) if (CROWD_NOUNS.includes(strip(bad)) && last === strip(bad)) return bad;
   return null;
 }
 function readAnswers(argv) {
