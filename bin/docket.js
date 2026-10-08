@@ -2367,7 +2367,17 @@ function diffsFrom(root, base, rels, untracked, runs) {
     if (add.status !== 0) refuse('git add -N failed — ' + (String(add.stderr || (add.error && add.error.message) || '').trim().split('\n')[0] || 'exit ' + add.status));
   }
   try {
-    return runs.map(extra => { const r = cp.spawnSync('git', GIT_DIFF.concat([base, '--no-renames'], extra, ['--'], rels), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 }); return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' }; });
+    // git matches every pathspec it is given against every path it walks, so a run naming each governed file cost their count
+    // squared, out of the stop's bound (D37's addendum). The paths the diff moves are listed once, over the whole tree, and each
+    // run names the governed ones among them: the same diff, byte for byte, at a cost that grows with the tree and the change.
+    const all = cp.spawnSync('git', GIT_DIFF.concat([base, '--no-renames', '--relative', '--name-only', '-z', '--']), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 });
+    if (all.status !== 0) return runs.map(() => ({ status: all.status === null ? 1 : all.status, stdout: '', stderr: all.stderr || '' }));
+    const want = new Set(rels), moved = all.stdout.split('\0').filter(p => want.has(p));
+    return runs.map(extra => {
+      if (!moved.length) return { status: 0, stdout: '', stderr: '' };
+      const r = cp.spawnSync('git', GIT_DIFF.concat([base, '--no-renames'], extra, ['--'], moved), { cwd: root, env, encoding: 'utf8', maxBuffer: 1 << 28 });
+      return { status: r.status === null ? 1 : r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+    });
   } finally { if (tmp) { try { fs.rmSync(tmp, { force: true }); } catch (e) { /* the copy is the reading's own */ } } }
 }
 // The diff the judge reads and the gate hashes (D40): `git diff <base>` — the session's base, HEAD when it has none — over
@@ -2755,19 +2765,24 @@ function stop(argv) {
   // The judge runs with the stop's session as its default, so a verdict that names none is this session's (D11)
   // and the stop's root (D44); its prompt names the session as the stop keys it
   const token = crypto.randomBytes(8).toString('hex');                // this stop's mark on the records its judge makes: one stop counts once (D38's addendum)
-  const r = cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root, DOCKET_STOP: token, DOCKET_JUDGE: id }), encoding: 'utf8', timeout: waitS * 1000, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 });   // 64 MiB: a judge's whole record, many times over (D14's addendum)
+  // The bound is the stop's whole run, not the judge's alone: the host stops a hook at its own timeout, thirty seconds past the
+  // bound, and a hook it stops is allowed. So the time the stop spent before the judge starts, the gate reading the diff among
+  // it, comes out of the judge's, and a stop that has spent its bound starts none (D37's addendum, FORMAT.md 16).
+  const left = waitS * 1000 - Math.round(process.uptime() * 1000);
+  const r = left > 0 ? cp.spawnSync('/bin/sh', ['-c', 'exec ' + judge], { cwd, input: judgePrompt(path.resolve(__filename), perm, Object.assign({}, input, { session_id: id })), env: Object.assign({}, process.env, { DOCKET_SESSION: id, DOCKET_ROOT: root, DOCKET_STOP: token, DOCKET_JUDGE: id }), encoding: 'utf8', timeout: left, killSignal: 'SIGKILL', maxBuffer: 64 * 1024 * 1024 }) : { status: null, signal: null, stdout: '', stderr: '', error: { code: 'EBOUND' } };   // 64 MiB: a judge's whole record, many times over (D14's addendum)
   const secs = Math.round((Date.now() - start) / 1000);
   const unread = !!(r.error && r.error.code === 'EPIPE');             // it ended before it read its whole prompt: started, ended, its status its own
   // how the judge ended, as it ended (D37's addendum): one still running at the bound is stopped there; one that had ended while a
   // process it left held its output open is named as ended, the stop having waited the bound out on that process; one whose
   // output passed what the stop keeps was stopped for it — each was started, and none is named as one that could not be
   const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT'), bound = waitS + ' second' + (waitS === 1 ? '' : 's');
-  const ended = timedOut && r.status === null ? 'was stopped at the bound, ' + bound
+  const ended = left <= 0 ? 'was not started: the stop had spent its bound, ' + bound + ', reading the diff'
+    : timedOut && r.status === null ? 'was stopped at the bound, ' + bound
     : timedOut ? 'ended' + (r.status === 0 ? '' : ', exit ' + r.status) + ', and a process it left held its output open until the bound, ' + bound
     : r.error && r.error.code === 'ENOBUFS' ? 'was stopped when its output passed the 64 MiB the stop keeps of it, after ' + secs + ' second' + (secs === 1 ? '' : 's')
     : r.error && !unread ? 'could not be started (' + (r.error.code || r.error.message) + ')'
     : 'ended after ' + secs + ' second' + (secs === 1 ? '' : 's') + (r.status === 0 ? '' : r.status === null ? ', on ' + r.signal : ', exit ' + r.status) + (unread ? ', before it read its prompt' : '');
-  try { docketDir(root); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + (r.error && r.error.code === 'ETIMEDOUT' ? '' : ' (its bound: ' + waitS + ' seconds)') + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
+  try { docketDir(root); fs.writeFileSync(path.join(root, '.docket', 'judge.log'), '$ ' + judge + '\nthe judge ' + ended + (r.error && (r.error.code === 'ETIMEDOUT' || r.error.code === 'EBOUND') ? '' : ' (its bound: ' + waitS + ' seconds)') + '\n' + (r.stdout || '') + (r.stderr || '')); } catch (e) { /* the log is a person's; the stop decides without it */ }
   const st = loadState(root), l = st.last;
   if (st.sessions[id] && st.sessions[id].surfaced) return blockStop(surfacedReason(st, st.sessions[id], tail, id));   // surfaced while the judge ran (D11)
   if (st.lastPassHash === d.hash) return allow();                                                // the judge's PASS

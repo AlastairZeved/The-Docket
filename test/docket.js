@@ -3661,6 +3661,25 @@ const SEC = String.fromCharCode(0xa7);
     ok('stop: a judge that ends in an error with no record is blocked the same way, its exit named, its error in the log', b && /: it ended after \d+ seconds?, exit 3, so this stop cannot stand/.test(b) && /the host would not start the agent/.test(read(path.join(d, '.docket', 'judge.log'))), r.out);
     { const t0 = Date.now(); r = stopIn({ session_id: 'q3' }, ['--judge', judgeCmd('slow'), '--wait', '1']); const took = Date.now() - t0;
       ok('stop: a judge still running at the bound is stopped there, and the stop says so rather than wait on it', block(r) && /: it was stopped at the bound, 1 second, so this stop cannot stand/.test(block(r)) && took < 10000, took + 'ms ' + r.out); }
+    // The bound is the stop's whole run: a gate slowed by a git that sleeps a second at each diff spends a stop's two seconds
+    // before any judge starts, and leaves a judge what remains of six, not six after it (D37's addendum, FORMAT.md 16)
+    { const realGit = sh('sh', ['-c', 'command -v git'], d).stdout.trim(), slowBin = tmpDir('slowgit-');
+      fs.writeFileSync(path.join(slowBin, 'git'), '#!/bin/sh\ncase " $* " in *" diff "*) sleep 1 ;; esac\nexec ' + JSON.stringify(realGit) + ' "$@"\n', { mode: 0o755 });
+      const slow = { PATH: slowBin + path.delimiter + process.env.PATH };
+      forget(); r = stopIn({ session_id: 'q4' }, ['--judge', judgeCmd('slow'), '--wait', '2'], slow);
+      ok('stop: a stop that has spent its bound reading the diff starts no judge, and blocks, saying so — the host never times it out, which would allow it (FORMAT.md 16)', block(r) && /: it was not started: the stop had spent its bound, 2 seconds, reading the diff, so this stop cannot stand/.test(block(r)) && !started(), r.out);
+      forget(); const t0 = Date.now(); r = stopIn({ session_id: 'q5' }, ['--judge', judgeCmd('slow'), '--wait', '6'], slow); const took = Date.now() - t0;
+      ok('…and the judge it starts is stopped when the stop\'s bound runs out, the gate\'s time counted, not the bound after it', block(r) && /: it was stopped at the bound, 6 seconds, so this stop cannot stand/.test(block(r)) && started() && took < 8000, took + 'ms ' + r.out);
+      fs.rmSync(slowBin, { recursive: true, force: true }); }
+    // the gate's diff names no file the diff does not move: git matches each pathspec against each path, and a run naming every
+    // governed file costs their count squared (D37's addendum)
+    { const pd = tempRepo(), logBin = tmpDir('loggit-'), LOG = path.join(logBin, 'calls'); fs.appendFileSync(path.join(pd, 'test', 'fixture', 'app.js'), 'const moved = 1; // R2\n');
+      const realGit = sh('sh', ['-c', 'command -v git'], pd).stdout.trim();
+      fs.writeFileSync(path.join(logBin, 'git'), '#!/bin/sh\nprintf "%s\\037" "$@" >> ' + JSON.stringify(LOG) + '\necho >> ' + JSON.stringify(LOG) + '\nexec ' + JSON.stringify(realGit) + ' "$@"\n', { mode: 0o755 });
+      const g = docket(['gate', '--session', 'pq'], { cwd: pd, env: { PATH: logBin + path.delimiter + process.env.PATH } });
+      const diffs = read(LOG).split('\n').map(l => l.split('\x1f').slice(0, -1)).filter(a => a.includes('diff') && a.includes('--')).map(a => a.slice(a.lastIndexOf('--') + 1));
+      ok('the gate\'s diff runs name only the governed files the diff moves, the whole tree listed once with none named — never every governed file, whose count git would square (FORMAT.md 16)', g.code === 0 && /^JUDGE /.test(g.out) && diffs.length >= 2 && diffs.every(ps => ps.every(p => p === 'test/fixture/app.js')) && diffs.some(ps => ps.length === 0) && diffs.some(ps => ps.length === 1), JSON.stringify(diffs) + ' ' + g.out.slice(0, 200));
+      fs.rmSync(pd, { recursive: true, force: true }); fs.rmSync(logBin, { recursive: true, force: true }); }
     r = stopIn({ session_id: 'x' }, ['--judge', judgeCmd('FAIL')], { JUDGE_REASON: held(1) });
     b = block(r);
     ok('stop: the judge’s FAIL is the block, with the recorded lines and the route through the law (D35)', r.code === 0 && b && /recorded FAIL for this stop’s diff \(test\/fixture\/app\.js\), 1 located failure:\ncode · F3 · test\/fixture\/app\.js:41 · R2 keeps positions read-only; this diff writes one · reason holds: the lot still reads positions \(test\/fixture\/app\.js:40\) · change the code\nChange the code, or supersede the ruling through \/rule\./.test(b), r.out);

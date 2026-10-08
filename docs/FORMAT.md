@@ -694,7 +694,9 @@ cited in the text being replaced are what the edit most needs to know.
 
 `docket gate --session <id>` decides mechanically whether a stop is judged. Its
 hash is the SHA-256 of `git diff <base>` over every governed file, every ledger
-and the spec documents beside it under the root (D40). The base is the session's:
+and the spec documents beside it under the root (D40), read as the governed
+paths among those the diff moves, listed once over the whole tree, so that its
+cost grows with the tree and not with its square. The base is the session's:
 the commit `HEAD` was at when the session started — `status --session-start`, the
 binding's call at a session's start, records it from its input — moved to `HEAD` by a PASS
 recorded while nothing governed differs from `HEAD`; a session with none, or whose
@@ -831,10 +833,13 @@ is surfaced; it blocks, with the residue and no judge, a stop at which the gate
 surfaces the session. For any other stop it starts the judge with a prompt that
 names the core by its path, the permission's spelling when given, and the hook
 input's session, transcript path and directory — none of what the maker wrote;
-waits for it to end, up to `--wait` seconds (700 by default; a whole number
+waits for it to end until `--wait` seconds (700 by default; a whole number
 written as digits, one or more — zero would bound nothing — and at most
-9007199254740, the most seconds whose milliseconds are counted exactly), then stops
-it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
+9007199254740, the most seconds whose milliseconds are counted exactly) have
+passed since the stop began, then stops it — the bound is the stop's whole run,
+the time the gate took to read the diff counted, so the host's timeout, thirty
+seconds past it, never stops the stop, which would allow it; a stop that has
+spent its bound before the judge starts starts none; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
 for this diff and this session since the judge started is relayed as a block
 carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`
 set to the stop's session, so a verdict that names none is this session's, with `DOCKET_ROOT`
@@ -848,7 +853,8 @@ admits every subcommand of the core, so the core holds the line the pattern cann
 STALE recorded for the diff the last PASS judged takes that PASS back: the later word on a
 diff decides; a session surfaced while the judge ran is relayed
 with the residue; anything else — a judge that recorded nothing, ended in an
-error, or was stopped at the bound — is blocked once, with a reason that names
+error, was stopped at the bound, or was not started, the stop having spent its
+bound reading the diff — is blocked once, with a reason that names
 the files, how the judge ended (one that ended before it read its prompt ended,
 and is named so, never as one that could not be started; one whose output passed
 the 64 MiB the stop keeps of it was stopped for it, and is named so; one that ended
