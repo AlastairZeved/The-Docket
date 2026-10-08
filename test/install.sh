@@ -14,17 +14,25 @@
 #                   reads it (a mention in prose is not the block); the maker ran no command that writes — no
 #                   constitute with --answers, no append with a write flag outside a dry run, each read in the
 #                   segments the shell runs, as test/judge.sh reads them (a quoted body naming --dry-run is no dry
-#                   run); and the project holds no ledger, no PRD.md and no UIUX.md: the intake halts at its confirm
-#                   block, and only the person confirms (D18).
+#                   run); and the project holds no file but git's and the host's own settings, .git/ and .claude/,
+#                   as test/constitute.sh counts its directory: the intake halts at its confirm block, and only the
+#                   person confirms (D18).
 #   (e) edit, stop  the fixture copied as a governed project, committed; the maker is asked for one edit in a
 #                   governed region, the toolbar's offset in the function R6 governs, and has no shell, so the edit
 #                   goes through the host's edit tool, the one the pre-edit hook is bound to. pass = the maker made one
-#                   edit call, the pre-edit hook PRINTED for it in the scratch project — the host's own record of that
-#                   hook's response carries the governed list, "Governed here" — and the stop was judged: a line of the
+#                   edit call and app.js changed, the pre-edit hook PRINTED for it in the scratch project — the host's
+#                   own record of that hook's response carries the governed list, "Governed here" with a ruling under
+#                   it, where the notice of a window that cites none is no list — the installed plugin's own core ran
+#                   there, its path in the project's .docket/core, and the stop was judged: a line of the
 #                   project's .docket/verdicts.jsonl records a verdict, PASS, FAIL or STALE, or the stop blocked with
 #                   one, its reason relaying what the judge recorded. A block saying the judge recorded no verdict is no
 #                   judgement, and an install that succeeded beside a hook that printed nothing is no pass: the install
 #                   is the means, and the list printed in the project the plugin was installed into is the measure.
+#                   The run prints the verdict the judge recorded, how long the judge ran as the core's judge.log
+#                   says, and the core that ran, with the SHA-256 of its docket.js, hooks.json and plugin.json and
+#                   whether each is this checkout's.
+#
+# A machine whose plugin state already lists the-docket is refused: an install over one cannot be measured as fresh.
 #
 # INSTALL_SOURCE names the marketplace (default AlastairZeved/The-Docket, the published repository; a path to a clone
 # measures an unpublished tree, and the record says which ran). INSTALL_KEEP=1 keeps the scratch directory and names it.
@@ -42,6 +50,9 @@ if [ -n "${INSTALL_KEEP:-}" ]; then echo "install.sh: keeping $WORK"; else trap 
 # leaves either changed has touched more than its scratch project.
 state() { { claude plugin marketplace list 2>&1; claude plugin list 2>&1; } | sed 's/[[:space:]]*$//'; }
 BEFORE=$(state)
+if printf '%s\n' "$BEFORE" | grep -Eq '(^|[^[:alnum:]_-])the-docket([^[:alnum:]_-]|$)'; then
+  echo "install.sh: the host already lists the-docket among its marketplaces or plugins; remove it first — an install over it is not a fresh one" >&2; exit 1
+fi
 
 setup() {                          # $1 project dir: the marketplace declared and the plugin installed, at its local scope
   ( cd "$1" && claude plugin marketplace add "$SRC" --scope local >"$1.add" 2>&1 && claude plugin install the-docket@the-docket --scope local -y >>"$1.add" 2>&1 )
@@ -58,6 +69,20 @@ hook_said() { node -e '
     }
     process.stdout.write(String(n));
   ' "$1" "$2" "$3" 2>/dev/null || echo 0; }
+# The number of the host's records of a pre-edit hook whose answer is a governed list: "Governed here (…):" and a ruling's id
+# indented on the line after it, read in the context the hook's JSON answer carries or in its text — the notice of a window
+# that cites no ruling is no list
+listed() { node -e '
+    const fs = require("fs"); let n = 0;
+    for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
+      let o; try { o = JSON.parse(line); } catch (e) { continue; }
+      if (!o || o.type !== "system" || o.subtype !== "hook_response" || o.hook_event !== "PreToolUse") continue;
+      const raw = String(o.output || "") + String(o.stdout || ""); let said = raw;
+      try { const j = JSON.parse(String(o.output || o.stdout || "")); said = String(((j || {}).hookSpecificOutput || {}).additionalContext || ""); } catch (e) { /* text */ }
+      if (/^Governed here \([^)\n]*\):\n {2}[A-Z][A-Za-z]*\d+ /m.test(said)) n++;
+    }
+    process.stdout.write(String(n));
+  ' "$1" 2>/dev/null || echo 0; }
 # The number of the maker's calls of the host's edit tools
 edits() { node -e '
     const fs = require("fs"); let n = 0;
@@ -74,6 +99,30 @@ recorded() { node -e '
     for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict)) hit = true; }
     process.stdout.write(hit ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no; }
+# The verdicts the verdict log records, in order, joined by commas; "none" when it records none
+verdicts() { node -e '
+    const fs = require("fs"); let t = "", v = [];
+    try { t = fs.readFileSync(process.argv[1], "utf8"); } catch (e) { /* none */ }
+    for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict)) v.push(o.verdict); }
+    process.stdout.write(v.join(",") || "none");
+  ' "$1" 2>/dev/null || echo none; }
+# How the core's judge.log says the judge ended — "ended after 22 seconds" — or "not logged"
+judge_ran() { node -e '
+    const fs = require("fs"); let t = "";
+    try { t = fs.readFileSync(process.argv[1], "utf8"); } catch (e) { /* none */ }
+    const m = /^the judge ([^\n(]*?)\s*(?:\(|$)/m.exec(t);
+    process.stdout.write(m ? m[1] : "not logged");
+  ' "$1" 2>/dev/null || echo "not logged"; }
+# The core that ran in the project, as its .docket/core names it, and its plugin's three files by SHA-256 against this
+# checkout's: one line, "none" when no core was recorded
+provenance() { node -e '
+    const fs = require("fs"), path = require("path"), crypto = require("crypto"), [crumb, repo] = process.argv.slice(1);
+    let core = ""; try { core = fs.readFileSync(crumb, "utf8").trim(); } catch (e) { /* none */ }
+    if (!core) { process.stdout.write("none"); process.exit(0); }
+    const root = path.dirname(path.dirname(core)), sha = f => { try { return crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"); } catch (e) { return "unreadable"; } };
+    const files = [["bin/docket.js", core], ["hooks/hooks.json", path.join(root, "hooks", "hooks.json")], [".claude-plugin/plugin.json", path.join(root, ".claude-plugin", "plugin.json")]];
+    process.stdout.write(core + " — " + files.map(([rel, f]) => { const h = sha(f); return rel + " " + h + (h === sha(path.join(repo, rel)) ? " (this checkout'"'"'s)" : " (not this checkout'"'"'s)"); }).join(", "));
+  ' "$1" "$2" 2>/dev/null || echo none; }
 # A command's segments as the shell runs them, as test/judge.sh reads them: split at |, ; and & and a line break outside
 # quotes, a backslash and the character after it kept together; bare, the text inside quotes left out, so a flag is read
 # where the shell reads one and not in a quoted body. A command whose quotes do not close is split at every separator.
@@ -125,11 +174,12 @@ setup "$K" || { echo "install.sh: the install into the scratch project failed (s
 My four answers, so you need not ask them one by one: 1) What it is: a sign-out sheet that lends a laptop to a pupil for one lesson. 2) Who it is for: a school librarian who knows the catalogue and does not know how a web app is built. 3) The feeling: the loan takes one breath. 4) We will not: store a pupil's name after the loan ends; send reminders; track where a laptop goes." \
     --output-format stream-json --verbose --include-hook-events --permission-mode acceptEdits --allowedTools "Bash(node *docket.js*)" --max-turns 12 ) > "$WORK/k.jsonl" 2> "$WORK/k.err"
 reached=no; assistant_text "$WORK/k.jsonl" | grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' && reached=yes   # at a line's start, markup before it or not
-wrote=$(ran_write "$WORK/k.jsonl"); files=no
-for f in DECISIONS.md PRD.md UIUX.md docs/DECISIONS.md docs/PRD.md docs/UIUX.md; do [ -e "$K/$f" ] && files=yes; done
+wrote=$(ran_write "$WORK/k.jsonl")
+written=$(cd "$K" && find . -path ./.git -prune -o -path ./.claude -prune -o -type f -print | sed 's#^\./##' | sort)
+files=no; [ -n "$written" ] && files=yes
 teardown "$K"
 k_pass=0; [ "$reached" = yes ] && [ "$wrote" = no ] && [ "$files" = no ] && k_pass=1
-printf '  (k) run 1  confirm block reached: %-3s  a write ran: %-3s  a triad file written: %s\n' "$reached" "$wrote" "$files"
+printf '  (k) run 1  confirm block reached: %-3s  a write ran: %-3s  a file written: %s%s\n' "$reached" "$wrote" "$files" "$( [ -n "$written" ] && printf ' (%s)' "$(printf '%s\n' "$written" | head -n 3 | tr '\n' ' ' | sed 's/ $//')" )"
 
 # (e) edit, stop
 E="$WORK/e-project"; mkdir -p "$E" && cp -a "$REPO/test/fixture/." "$E/" && ( cd "$E" && git init -q . && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m fixture ) \
@@ -138,17 +188,21 @@ setup "$E" || { echo "install.sh: the install into the scratch project failed (s
 ( cd "$E" && claude -p "In app.js, in makeToolbar, change the bar's offset above the selection from 48 to 56, the one number on the line that sets bar.style.top. Make that one change with one call of the edit tool, and do nothing else." \
     --output-format stream-json --verbose --include-hook-events --permission-mode acceptEdits --disallowedTools "Bash" --max-turns 12 ) > "$WORK/e.jsonl" 2> "$WORK/e.err"
 made=$(edits "$WORK/e.jsonl")
-prints=$(hook_said "$WORK/e.jsonl" PreToolUse 'Governed here')
+prints=$(listed "$WORK/e.jsonl")
+changed=no; ( cd "$E" && git diff --quiet -- app.js ) || changed=yes
 printed=no; [ "$prints" -gt 0 ] && printed=yes
 logged=$(recorded "$E/.docket/verdicts.jsonl")
 blocked=no; [ "$(hook_said "$WORK/e.jsonl" Stop '^(?=[\s\S]*"decision" *: *"block")(?=[\s\S]*judge recorded (FAIL|STALE) for this stop)')" -gt 0 ] && blocked=yes
 judged=no; { [ "$logged" = yes ] || [ "$blocked" = yes ]; } && judged=yes
+said=$(verdicts "$E/.docket/verdicts.jsonl"); ran=$(judge_ran "$E/.docket/judge.log"); prov=$(provenance "$E/.docket/core" "$REPO")
 teardown "$E"
-e_pass=0; [ "$made" = 1 ] && [ "$printed" = yes ] && [ "$judged" = yes ] && e_pass=1
-printf '  (e) run 1  edit calls: %s  the pre-edit hook printed the governed list: %-3s (%s time(s))  the stop judged: %-3s (a verdict recorded: %s, a block relaying one: %s)\n' "$made" "$printed" "$prints" "$judged" "$logged" "$blocked"
+e_pass=0; [ "$made" = 1 ] && [ "$changed" = yes ] && [ "$printed" = yes ] && [ "$prov" != none ] && [ "$judged" = yes ] && e_pass=1
+printf '  (e) run 1  edit calls: %s  app.js changed: %-3s  the pre-edit hook printed the governed list: %-3s (%s time(s))  the stop judged: %-3s (a verdict recorded: %s, a block relaying one: %s)\n' "$made" "$changed" "$printed" "$prints" "$judged" "$logged" "$blocked"
+printf '             the verdicts recorded: %s; the judge %s\n' "$said" "$ran"
+printf '             the core that ran: %s\n' "$prov"
 
 AFTER=$(state); same=yes; [ "$BEFORE" = "$AFTER" ] || same=no
 printf '\n  (k) constitute  %s of 1   the confirm block reached, nothing written\n' "$k_pass"
-printf '  (e) edit, stop  %s of 1   one edit, the pre-edit hook printed for it in the scratch project, and the stop judged\n' "$e_pass"
+printf '  (e) edit, stop  %s of 1   one edit, the pre-edit hook printed for it in the scratch project by the installed core, and the stop judged\n' "$e_pass"
 printf "  the machine's own plugin state as the run found it: %s\n" "$same"
 [ "$k_pass" = 1 ] && [ "$e_pass" = 1 ] && [ "$same" = yes ] && exit 0 || exit 1
