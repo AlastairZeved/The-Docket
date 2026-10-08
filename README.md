@@ -1,140 +1,84 @@
-<!-- HEADER -->
-<br />
-<div align="center">
+# The Docket
 
-  <h3 align="center">TheDocket</h3>
+**Reader.** A builder who works with a coding agent — Claude Code — on one git repository across many sessions, and
+who has watched the agent undo a decision that was already made. They know git, the command line and how their
+agent's sessions run; they do not know how a plugin binds to a repository, or how a ledger of rulings is written.
+**Purpose.** Install the docket on a repository, record its first ruling, and know what its judge has been measured
+to do and what it has not. **Source.** The rulings in `docs/DECISIONS.md`, cited by number (`D1`, `D2`, …); every
+number under Measured Results is quoted from the ruling its line names.
 
-  <p align="center">
-    A repo's decisions, kept where the code can find them.
-    <br />
-    <a href="https://github.com/AlastairZeved/the-docket"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/AlastairZeved/the-docket/issues/new?labels=bug">Report Bug</a>
-    ·
-    <a href="https://github.com/AlastairZeved/the-docket/issues/new?labels=enhancement">Request Feature</a>
-  </p>
-</div>
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](.claude-plugin/plugin.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)](https://nodejs.org/)
 
-<!-- BADGES -->
-<div align="center">
+**Contents** — [What it is](#what-it-is) · [The problem](#the-problem) · [The five jobs](#the-five-jobs) ·
+[The two-second demo](#the-two-second-demo) · [The ledger](#the-ledger) · [Install](#install) · [Use](#use) ·
+[Tests](#tests) · [FAQ](#faq) · [Contributing](#contributing) · [License and contact](#license-and-contact) ·
+[Measured Results](#measured-results) · [Known Limits](#known-limits)
 
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![Version][version-shield]][version-url]
-[![Node][node-shield]][node-url]
+## What it is
 
-</div>
+A ledger is a markdown file of numbered rulings. Each ruling is one decision, with the principle it was resolved
+against, its reason, and what it does to earlier rulings: a later ruling *supersedes* an earlier one, often a single
+clause of it, and never edits it away. The docket makes that file something the agent doing the work — the *maker*,
+on this page — cannot walk past.
 
-<br />
+When the maker says a piece of work is done, a judge reads the diff against the rulings and decides whether the stop
+stands. A FAIL blocks the stop, and the maker is told which ruling, where, and the way out. Before each edit, a hook
+has already printed the rulings that govern the lines about to change: that is the judge's first half, the list
+against which a claim like "this follows R6" can be checked at the stop.
 
-<!-- READER + PURPOSE HEADER -->
-> **Who this is for.** A builder who uses a coding agent on one project across many sessions, and who has watched the agent undo a decision that was already made — because nothing made it read the *why* first.
->
-> **What you already know.** You keep decisions somewhere, or you mean to. You know a coding agent starts every session from the code as it is, not the argument that made it that way.
->
-> **What you will not need to know.** You do not need to have used a decision log before, or to know how a plugin binds to a repo. This page starts there.
->
-> **Purpose.** After reading, you can install TheDocket on a repository and record your first ruling, and the next edit to that region will print what governs it before it changes.
+Everything it enforces is plain text in your repository. Uninstall the plugin and the rulings still govern, because
+the witness that checks them is a node script your repository owns and your CI runs (D9).
 
----
+## The problem
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#the-problem">The Problem</a></li>
-        <li><a href="#the-five-jobs">The Five Jobs</a></li>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li><a href="#screenshots">Screenshots</a></li>
-    <li><a href="#the-ledger">The Ledger</a></li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-        <li><a href="#run-locally">Run Locally</a></li>
-        <li><a href="#running-tests">Running Tests</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#known-limits">Known Limits</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#faq">FAQ</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-  </ol>
-</details>
+A coding agent starts every session from the code as it is, not from the argument that made it that way. A decision
+that was argued, measured and recorded gets undone three weeks later by an agent that never saw the argument — or by
+you, in a later stretch, after you forgot it existed.
 
----
+The usual answer is memory: an agent-instructions file, an auto-memory, a notes document. Each stores facts. None
+stores a ruling — numbered, with its principle, with the clause of an earlier ruling it reverses, cited from the code
+that implements it. A memory cannot say "R7 partially reverses R6 (relational plane only)". A memory is never red in
+CI.
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+## The five jobs
 
-Every ruling this plugin enforces is a plain numbered line in a markdown file in
-your repository. Nothing lives in the plugin. Uninstall TheDocket and the
-constitution still governs, because the witness that checks it is a node script
-your repo owns and your CI runs.
+| When | Job | What happens |
+|---|---|---|
+| at "done" | **Did this break a ruling?** | The stop hook starts a judge: a headless session of its own that can read files and run the docket's core, and can write nothing. It scores the session's diff against the rulings and the packs — files of features the judge scores, one per domain: code, design, prose, decisions (D12). A FAIL, or a STALE for a ruling whose reason the diff has made untrue, blocks the stop with located lines (D37). |
+| before an edit | **What governs this region?** | A hook prints the rulings cited within twenty lines of the edit, nearest first, with the edges among them. It informs and never blocks (D1, D2). |
+| at a decision | **Record it where it will be found.** | `/rule` asks five questions, refuses a vague answer, prints the entry under RULING — PLEASE CONFIRM, and writes nothing until you type `confirm` (D8, D18). |
+| at a new project | **A spine before the first line.** | `/constitute` asks four gated questions and, on your `confirm`, writes `docs/PRD.md`, `docs/UIUX.md` and `docs/DECISIONS.md`, vendors the witness as `test/docket.js`, and prints a CI step (D9). |
+| across time | **What changed in the law?** | `/docket query`, `/docket governs`, `/docket diff`. |
 
-### The Problem
+At each session's start the hook prints the docket itself: the last rulings, the rulings cited nowhere, the addenda
+no later ruling has answered, the last verdict, and what the witness says.
 
-Coding agents have no memory of *why*. Every session starts from the code as it
-is, not the argument that made it that way. So a decision that was argued,
-measured and recorded gets quietly undone three weeks later, by an agent that
-never saw the argument, or by you in a later stretch who forgot it existed.
+## The two-second demo
 
-The conventional answer is memory: a `CLAUDE.md`, an auto-memory file, a notes
-document. All of them store *facts*. None store *rulings* — numbered, with the
-principle they resolved against, with what they supersede, cited from the code
-that implements them. A memory cannot say "B91 partially reverses B84 for the
-relational plane only." A memory is never red in CI.
+Each output below comes from this repository's fixture, `test/fixture/`: a small note-taking page with nine rulings,
+which the tests copy into scratch projects. Its ruling R6 keeps a toolbar.
 
-TheDocket makes the record something the agent cannot skip.
-
-### The Five Jobs
-
-| # | Job | When | What happens |
-|---|-----|------|--------------|
-| 1 | **What governs this region?** | before an edit | A hook prints the rulings cited around the edit, with their edges, as context. It never blocks. |
-| 2 | **Did this break a ruling?** | at "done" | A read-only judge scores the diff against the ledger and the packs. It can block the stop. |
-| 3 | **Record it where it will be found.** | at a decision | `/rule` demands issue, principle and every ruling it touches, then appends it in the contract format. |
-| 4 | **A spine before the first line.** | at a new project | `/constitute` asks four gated questions and writes the triad plus the vendored witness and a CI step. |
-| 5 | **What changed in the law?** | across time | `docket diff`, `docket query`, `docket governs`. |
-
-Plus **the docket** itself, printed at session start: what is pending — addenda
-unresolved, rulings cited nowhere, the last verdict — so a resumed stretch opens
-with *confirmed / open / blocked*.
-
-### Built With
-
-* [Node.js](https://nodejs.org/) — the core is one dependency-free file
-* [Markdown](https://commonmark.org/) — the ledger, the packs, the intakes
-* [Git](https://git-scm.com/) — the witness reads `git show HEAD:` to detect an edited ruling
-* [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — the host binding: hooks, skills, subagents
-
-The core (`bin/docket.js`, `packs/`, `intake/`, `templates/`, `docs/FORMAT.md`,
-`judge/PROTOCOL.md`) names no host, no model and no vendor. The Claude Code
-binding is three thin files that point at core files.
-
----
-
-<!-- SCREENSHOTS -->
-## Screenshots
-
-The two-second demo: the governed list appears before the diff.
+**At "done": the stop blocked.** The toolbar's removal planted in `app.js`, and the maker asked to stop. This is what
+the maker is told, and what you see in the session:
 
 ```text
-> edit the toolbar in test/fixture/app.js
+The docket's judge recorded FAIL for this stop's diff (app.js), 2 located failures:
+code · F3 · app.js:40 · R6 keeps the toolbar as the replacement for the long-press menu; this diff removes makeToolbar and leaves hideToolbar (app.js:203) and .toolbar (styles.css:9) with nothing to build the bar · reason holds: a menu that must be held open still hides the note it acts on; the long-press menu still exists in openMenu (app.js:63) · restore makeToolbar in app.js, or supersede R6 through /rule
+code · F5 · app.js:40 · the diff removes the cites "R6" and "R4" from makeToolbar and no entry or addendum accounts for the removal · reason holds: R4 shape-held, size-uniform fold and R6 toolbar still bind the code (app.js:78) · restore the cites with makeToolbar, or add the ruling or addendum that explains the removal through /rule
+Change the code, or supersede the ruling through /rule. This stop cannot stand; the stop that follows this block in the same turn is allowed.
+```
 
+Each line is one located failure, its fields joined by ` · `: the pack, the feature, the file and line, what the
+judge found, whether the ruling's reason still holds with the line that shows it, and the way out. The two lines are
+the ones a judge recorded on this plant in the calibration run of 2026-10-02 (D25); the block around them is the
+core relaying them, reproduced with a stand-in for the judge, since a live judge words its lines afresh each run.
+`sh test/judge.sh` runs the case live (Tests, below).
+
+**Before the edit: what governs it.** For an edit of `makeToolbar`, at line 41 of the fixture's `app.js`:
+
+```text
 Governed here (test/fixture/DECISIONS.md, ±20 lines of app.js:41):
   R6  The toolbar replaces the long-press menu  · issue #12
   R4  Fold similarity: shape held, size uniform
@@ -145,338 +89,250 @@ Also cited: UIUX §4.5 The minimum.
 Name the ruling you rely on before you edit.
 ```
 
-The gate, at "done":
-
-```text
-Failures    code · F3 · app.js:1112 · R6 keeps the toolbar; this diff removes it · fix route: amend via /rule, or change the code
-Verdict     FAIL
-```
-
-The docket, at session start:
-
-```text
-Last ruling   D18  The judge test: four runs, four verdicts (2026-09-11)
-Cited nowhere D2, D7, D14
-Addenda       D8 (2026-09-11)
-Last verdict  PASS  sha256:1f4c…
-Witness       PASS  7/7 checks
-```
-
----
-
-<!-- THE LEDGER -->
-## The Ledger
-
-A ruling is a heading and a body. Existing entries parse loosely; entries
-written through `docket append` satisfy a header contract.
-
-```markdown
-### R6. The toolbar replaces the long-press menu (issue #12; supersedes R4)
-
-Reason: the long-press menu hid the primary actions behind a gesture that no
-test could reach and no spec could cite. The toolbar is visible at rest and
-each control cites the ruling that put it there.
-
-> Addendum 2026-09-11: the toolbar collapses to icons below 480px; the actions
-> are unchanged, only their labels are withheld.
-```
-
-Edges use a fixed verb list — `supersedes`, `overrides`, `retires`, `reverses`,
-`waives`, `extends`, `keeps`, `re-tunes`, `refines`, `replaces`, `corrects`,
-`revises` — and every edge must target an earlier ruling. Supersession is
-clause-level and forward-only: a ruling that supersedes one clause of an earlier
-one does not mark the earlier one dead. That is why `governs <id>` shows the
-chain in and out with each edge's clause text, and the reader judges.
-
----
-
-<!-- GETTING STARTED -->
-## Getting Started
-
-### Prerequisites
-
-* **Node 20 or newer**
-
-  ```bash
-  node --version   # v20.x or newer
-  ```
-
-* **A Claude Code session** on `2.1.250` or newer, for the hooks and skills.
-
-* **Git**, with an identity set — the witness uses `git show HEAD:` to detect a
-  changed ruling.
-
-### Installation
-
-Install as a Claude Code plugin:
+The host hands this to the maker as context before the edit runs. To print it yourself, from a clone:
 
 ```bash
-# In a Claude Code session
-/plugin marketplace add AlastairZeved/the-docket
-/plugin install the-docket@the-docket
+printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/test/fixture/app.js","old_string":"function makeToolbar(sel) {"}}' "$PWD" | node bin/docket.js near
 ```
+
+**At a session's start: the docket.** The same project, after the blocked stop above:
+
+```text
+Docket — DECISIONS.md (9 rulings; prefixes A, R)
+Last rulings:
+  R8  The frame that was never typed into is discarded on blur, and the…  · issue #16
+  R7  The relational plane keeps its long-press menu  · issue #14
+  R6  The toolbar replaces the long-press menu  · issue #12
+Cited nowhere: none
+Addenda pending:
+  R2 (2026-09-11): the render pass now rounds to the device pixel for drawing only; reading still writes nothing, and…
+Last verdict: FAIL at 2026-10-08T07:03:38.667Z (2 located failures)
+Judge's report: .docket/judge.log — the last judge's own words, a check it could not run named there
+Witness: FAIL (1)
+  UIUX.md:9  spec-check a: --line is #7a8fa6 in the spec but #7a8fa7 at styles.css:5
+```
+
+The witness's failure is the fixture's own: its stylesheet disagrees with its spec by one hex digit on purpose, so
+that `spec-check`, which reads the spec's colour tokens against the CSS, has something to find.
+
+## The ledger
+
+A ruling is a heading and a body. The fixture's R6 and R7, as they are written there:
+
+```markdown
+### R6. The toolbar replaces the long-press menu (issue #12)
+On the spatial plane a toolbar above the selection carries every action the long-press menu carried, and the menu is gone there. Reason: zero cognitive tax; a menu that must be held open hides the note it acts on.
+
+### R7. The relational plane keeps its long-press menu (issue #14)
+This partially reverses R6 (relational plane only): where notes are related by lines rather than placed, the long-press menu stays, because a toolbar above a line has nothing to sit above. The spatial plane keeps the toolbar. Reason: the toolbar's reason (it shows the note it acts on) does not hold for a line.
+```
+
+An edge — R7's "partially reverses R6" — uses one of a fixed list of verbs: `supersedes`, `overrides`, `retires`,
+`reverses`, `waives`, `extends`, `keeps`, `re-tunes`, `refines`, `replaces`, `corrects`, `revises`; and it must point
+at an earlier ruling. Supersession is clause-level: R7 does not mark R6 dead, which is why `governs R6` lists R7's
+edge with the clause it states, and the reader judges. A ruling whose reason has changed gets a dated addendum
+beneath it, as R2 has one in the fixture:
+
+```markdown
+> Addendum 2026-09-11: the render pass now rounds to the device pixel for drawing only; reading still writes nothing, and the rule stands as written.
+```
+
+A ledger that already exists is read as it is. Entries written through `docket append` — which `/rule` runs on your
+confirm — also satisfy a header contract (D4). The whole grammar is `docs/FORMAT.md`.
+
+## Install
+
+**You need** Node 20 or newer, git, and Claude Code's command-line tool, `claude`. The stop hook starts the judge as
+`claude -p`, so `claude` must be on the PATH your sessions run hooks with.
+
+From the project you want governed:
+
+```bash
+claude plugin marketplace add AlastairZeved/The-Docket
+claude plugin install the-docket@the-docket
+```
+
+Both commands declare the plugin for every project of yours; give each `--scope local` to declare it for this
+project alone, which is how `test/install.sh` installs it (D50). No allow rule and no `.gitignore` line is needed: the
+judge is given its one permission by the hook that starts it (D37), and the docket's own state, `.docket/`, ignores
+itself.
 
 Or load it for one session, from a clone:
 
 ```bash
-git clone https://github.com/AlastairZeved/the-docket.git
-cd the-docket
-claude --plugin-dir .
+git clone https://github.com/AlastairZeved/The-Docket.git
+claude --plugin-dir ./The-Docket
 ```
 
-### Run Locally
+A repository with no ledger is left alone: nothing prints at an edit, and no judge starts at a stop. Start one with
+`/constitute`, or keep your own `DECISIONS.md` — the docket finds the nearest one above each file (D5).
 
-The repo governs itself, so the way to work in it is the way the plugin works:
+## Use
 
-```bash
-# Clone the project
-git clone https://github.com/AlastairZeved/the-docket.git
+**Record a ruling.** `/rule` asks five questions, in order, and refuses a vague answer: what changed; the issue; the
+principle, from your ledger's own list; every ruling it touches, with a verb; and the ruling in prose, with its
+reason, the range it holds over, and the measurement underneath it. It prints the entry under RULING — PLEASE
+CONFIRM, as `docket append --dry-run` would write it, and stops. Only your `confirm`, in a turn of your own, writes it
+(D8, D18). A maker blocked by the judge cannot amend the ruling it failed.
 
-# Go to the project directory
-cd the-docket
+**Start a project with a spine.** `/constitute` asks four questions: what it is, as one verb on one object; who it
+is for, as a role with one thing they know and one they do not — "general audience", "everyone", "users" and the like
+are refused; the feeling that must survive every change, which may not be a feature; and at least three things it
+will refuse to do. On your `confirm` it writes the triad, vendors the witness, runs the check and prints the CI step.
 
-# Run the witness
-node test/docket.js
-
-# Work in it — the hooks run on this repo through the plugin dir
-claude --plugin-dir .
-```
-
-### Running Tests
-
-The mechanical witness, which CI also runs:
-
-```bash
-node test/docket.js
-```
-
-The witness checks seven things, each with a planted failure in a temp copy:
-
-1. every cite in a git-tracked text file names a ruling that exists
-2. numbering is contiguous per prefix
-3. every `UIUX §x` / `PRD §x` cite resolves to a heading
-4. the bare-`§` ratchet does not exceed its recorded baseline
-5. every supersession edge targets an earlier ruling
-6. entries after the contract line satisfy the header contract
-7. no existing entry's heading or body changed against `HEAD`
-
-The two model-dependent suites, which need the CLI and credentials:
-
-```bash
-# The wedge: does the model cite a ruling from the injected list?
-sh test/cites.sh
-
-# The judge: four planted runs — FAIL, PASS, STALE, and a halt at /rule
-sh test/judge.sh
-```
-
-Neither script is in CI, because they need credentials. Both are runnable by
-anyone with the CLI. Their results are recorded in the ledger, under `D16` and
-`D18`.
-
----
-
-<!-- USAGE -->
-## Usage
-
-### Record a ruling
+**Read the law.**
 
 ```text
-/rule
+/docket                     the docket
+/docket query toolbar       every ruling that matches, with its edges and addenda
+/docket governs R6          edges in and out with their clauses, addenda, the code that cites it
+/docket diff HEAD~1 HEAD    rulings, edges and addenda added; any existing entry changed, listed first
 ```
 
-Five questions, refused if vague: what changed; the issue; the principle, from
-the list spliced at load; every ruling it touches, with a verb; and the ruling
-in prose, with its reason. It prints `RULING — PLEASE CONFIRM` and waits. Only
-the human confirms — the maker that was blocked by the judge cannot amend the
-ruling it failed.
-
-### Start a project with a spine
-
-```text
-/constitute
-```
-
-Four gated questions with refusal rules. "General audience", "everyone" and
-"non-technical" are refused; a purpose must be a specific verb on a specific
-object; the feeling must survive every iteration and may not be a feature; and
-the project must name at least three things it will refuse to do. It writes
-`docs/PRD.md`, `docs/UIUX.md` and `docs/DECISIONS.md`, vendors the witness as
-`test/docket.js`, and prints a CI step.
-
-### Inspect the law
-
-```text
-/docket status
-/docket query toolbar
-/docket governs R6
-/docket diff HEAD~1 HEAD
-```
-
-### Use it from a script
-
-Every subcommand takes `--json`. The judge reads `docket index`, which is the
-whole parse: an edge list, never a status table.
+**From a script.** Every subcommand takes `--json`; `docket help` lists them all.
 
 ```bash
 node bin/docket.js index | node -e 'const j=JSON.parse(require("fs").readFileSync(0));console.log(j.rulings.length)'
-node bin/docket.js governs R6
 node bin/docket.js check && node bin/docket.js status
 ```
 
----
+## Tests
 
-<!-- KNOWN LIMITS -->
-## Known Limits
+What CI runs on every push, and what you run before you stop:
 
-* **A forged verdict is a visible call, not an impossibility.** Within one
-  session the maker could run `docket verdict` itself. The judge is the only
-  party the harness runs at Stop, and a forged verdict is a visible Bash call in
-  the transcript. The boundary is tool permission, not cryptography.
-* **The judge is an LLM pass over prose rulings.** It can cite, it cannot
-  rewrite, and its features are files you can read. That is the whole defence
-  against drift.
-* **Cost.** One subagent per stop that touched a governed file, at most five per
-  session between passes. A one-line change to an ungoverned file spawns
-  nothing.
-* **The judge's accuracy is the host's subagent's accuracy.** The protocol
-  chooses no model, so the results recorded under `D18` state which host and which
-  date produced them. They are results on that host, on that date — not a
-  general claim.
+```bash
+node test/docket.js     # the witness of the core: one scenario over the fixture, exit 1 on any failure
+node bin/docket.js      # the docket's check of this repository's own ledger and cites (D6)
+```
 
----
+`docket check` runs seven checks, each failure one line naming its file and line: every cite names a ruling that
+exists; numbering runs without a gap; every `UIUX §x` and `PRD §x` cite names a heading; the bare-`§` count stays
+within its recorded allowance; every edge points at an earlier ruling; entries after the contract line satisfy the
+header contract; and no committed entry was edited (`docs/FORMAT.md`, section 13).
 
-<!-- ROADMAP -->
-## Roadmap
+Four scripts measure what depends on the host and its model. Each needs `claude` and credentials, so none runs in
+CI; each prints what it measured, and its result is recorded in the ledger:
 
-* [x] The witness: `docket check`, seven checks, CI red on a dangling cite
-* [x] The hook: what governs this region, printed before the edit
-* [x] `/rule`, `/constitute`, `/docket`, and the docket at session start
-* [x] The judge: a headless session the Stop hook starts, scoring before it reads the trace
-* [x] The packs: code, design, prose, decisions
-* [ ] The substrate: the ~15% of a spatial tool that is reusable as a template
-* [ ] A second host binding: the same core, a second thin layer
+```bash
+sh test/cites.sh        # the hook: does the maker name and keep the ruling it was shown? (D17)
+sh test/constitute.sh   # the intake: refuses a crowd for a reader, halts at its confirm block (D18)
+sh test/judge.sh        # the judge: six planted cases, and the calibration gate (D15, D19, D25)
+sh test/install.sh      # the plugin installed fresh from this repository, then an edit and a stop (D50)
+```
 
-See the [open issues](https://github.com/AlastairZeved/the-docket/issues) for the
-full list of proposed features and known issues.
-
----
-
-<!-- CONTRIBUTING -->
-## Contributing
-
-Contributions are what make the open source community such an amazing place to
-learn, inspire, and create. Any contributions you make are **greatly
-appreciated**.
-
-If you have a suggestion that would make this better, please fork the repo and
-create a pull request. You can also simply open an issue with the tag
-"enhancement". Don't forget to give the project a star! Thanks again!
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-A change that alters a ruled number must name the ruling it supersedes and give
-the measurement that forced the change. The witness will fail otherwise.
-
-### Code of Conduct
-
-This project follows a simple rule: argue with the evidence, not the person.
-A finding is dismissed by a command whose output reproduces its absence, never
-by argument.
-
----
-
-<!-- FAQ -->
 ## FAQ
 
 <details>
 <summary>Does my law live in the plugin?</summary>
 
-No. The law is files in your repository — `docs/PRD.md`, `docs/UIUX.md`,
-`docs/DECISIONS.md`. The plugin can be uninstalled and the constitution still
-governs, because the witness is a node script your repo owns and your CI runs.
-A product that holds your law hostage is the failure this design exists to
-avoid.
+No. It is files in your repository — `docs/PRD.md`, `docs/UIUX.md`, `docs/DECISIONS.md`, or a ledger of your own.
+The witness is vendored into your repository as `test/docket.js` (D9), so your CI goes on checking the ledger after
+the plugin is gone.
 
 </details>
 
 <details>
 <summary>Why is supersession clause-level and not a status column?</summary>
 
-Because in a real ledger a later ruling supersedes one clause of an earlier one,
-or waives it for one case. A computed "superseded" status would declare a ruling
-dead while most of it still binds. The index is an edge list; the reader judges.
+Because a later ruling usually supersedes one clause of an earlier one, or waives it for one case. A "superseded"
+status would mark a ruling dead while most of it still binds. The index is a list of edges, and the reader judges
+(D3).
 
 </details>
 
 <details>
-<summary>What if the model ignores the hook?</summary>
+<summary>What if the maker ignores the hook?</summary>
 
-The hook is informational, by rule. The gate is the judge, and the judge is the
-gate whether or not the hook is read. If the measured wedge result is low, the
-README and the marketplace description lead with job 2, the judge, and present
-the hook as its first half.
+The judge still reads the stop. The hook informs and never blocks (D1); the judge is the gate whether or not the list
+was read. That the list changes what a maker does has not been shown — see Measured Results — which is why this page
+leads with the judge (D49).
 
 </details>
 
 <details>
 <summary>Will the judge block every stop?</summary>
 
-No. It scores only when the diff since the last pass touches a governed file or
-the ledger. A one-line change to an ungoverned file spawns nothing. And if
-located failures do not decrease after the third cycle, it surfaces the residue
-once, tells the maker to relay it verbatim, then answers `SKIP` until a pass or
-a new session. A judge that never passes and one that always passes are both
-broken.
+No. A judge starts only when the session's diff touches a governed file — one that cites a ruling — a ledger, or a
+spec document beside one (D10, D40). A change to anything else starts nothing. A session is blocked at most five
+times between passes; when its located failures stop going down, the residue goes to you once and the judge stands
+down until a PASS or a new session (D11).
 
 </details>
 
 <details>
-<summary>Can I use this without Claude Code?</summary>
+<summary>Can I use it without Claude Code?</summary>
 
-The core is host-agnostic: it speaks stdin JSON, stdout text, exit codes and
-markdown. `docs/PROTOCOL-BINDING.md` is one page on binding a second host: pipe
-the edit event into `docket near` before an edit, show `docket status` at
-session start, and at "done" run `docket stop`, which starts a read-only judge
-on `judge/PROTOCOL.md` with the command your host gives it.
+The core reads JSON on stdin and writes text, exit codes and markdown, and names no host or model (D13).
+`docs/PROTOCOL-BINDING.md` binds a second host in three calls: before an edit, at a session's start, and at the stop.
+No second host has been bound yet.
 
 </details>
 
----
+## Contributing
 
-<!-- LICENSE -->
-## License
+This repository is governed by its own docket (D6): work in it with `claude --plugin-dir .`, and the hook, the judge
+and the skills run on it as they would on yours. `CLAUDE.md` says the same to an agent. Before you open a pull
+request, run `node test/docket.js` and `node bin/docket.js`; CI runs both.
 
-Distributed under the MIT License. See `LICENSE` for more information.
+A decision is a new entry written through `/rule`, never an edit to an old one: `docket check` fails an edited entry
+(D4). A change to a number a ruling set needs a ruling that names the one it supersedes, with the measurement that
+forced it (D14). A new pack follows `docs/PACKS.md`. A finding is settled by a command whose output shows it, not by
+argument.
 
----
+## License and contact
 
-<!-- CONTACT -->
-## Contact
+MIT — see `LICENSE`. Issues and pull requests: [AlastairZeved/The-Docket](https://github.com/AlastairZeved/The-Docket),
+maintained by [@AlastairZeved](https://github.com/AlastairZeved).
 
-Alastair Zeved — [@AlastairZeved](https://github.com/AlastairZeved)
+## Measured Results
 
-Project Link: [https://github.com/AlastairZeved/the-docket](https://github.com/AlastairZeved/the-docket)
+Each result is a dated record in the ledger, made headless on the host's command-line tool, on scratch copies of the
+fixture, with no model named in the run. A result holds for that host, that date and those runs — not in general.
 
----
+- **The judge at the stop (D19, D25).** Six scenarios, each a run of `test/judge.sh`: a planted violation of R6, a
+  clean rename, a ruling whose reason the diff makes untrue, an unlogged change to a ruled number, an amendment
+  through `/rule`, and a ledger entry the maker wrote itself. The latest record, of 2026-10-02 on "version 2.1.287
+  (Claude Code)", printed "every outcome: met": each planted case blocked with the verdict and the line the protocol gives
+  it, the clean rename passed, and the amendment halted at its confirm block with the ledger unchanged. Every judge
+  recorded at its first attempt, and each ended between 23 and 35 seconds after it started. The first record, of
+  2026-09-24, held at four stops of five.
+- **The stale reading (D25).** In that record's two further runs of the stale case, it met its outcome in 1 of 2; in
+  each of the two runs recorded before it, in 2 of 2.
+- **The intake (D18).** One run of each measure beside an empty project, 2026-09-23: told the reader was a general
+  audience, `/constitute` refused it and wrote nothing, one of one; given four acceptable answers, it printed
+  CONSTITUTION — PLEASE CONFIRM and wrote nothing, one of one.
+- **The fresh install (D50).** On 2026-10-08, on "version 2.1.294 (Claude Code)": the plugin added from this
+  repository's marketplace and installed into a scratch project's local scope, at version 0.1.0. `/constitute`
+  reached its confirm block and wrote nothing, one of one. An edit in a governed region printed "Governed here" from
+  the installed hook, and the stop's judge recorded a PASS and ended 22 seconds after it started, one of one.
+- **The hook (D17, D49).** Asked to edit a governed region, the maker named a ruling from the hook's list in three of
+  three runs; told to remove the toolbar, it named R6 and left the toolbar in place in three of three (2026-09-21).
+  This is not evidence the list was read: the fixture's code names its rulings in its own comments, no run turned the
+  hook off, a re-run scored citing two of three, and in two live runs the harness itself denied the edit the obeying
+  measure reads as declined.
 
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/AlastairZeved/the-docket.svg?style=for-the-badge
-[contributors-url]: https://github.com/AlastairZeved/the-docket/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/AlastairZeved/the-docket.svg?style=for-the-badge
-[forks-url]: https://github.com/AlastairZeved/the-docket/network/members
-[stars-shield]: https://img.shields.io/github/stars/AlastairZeved/the-docket.svg?style=for-the-badge
-[stars-url]: https://github.com/AlastairZeved/the-docket/stargazers
-[issues-shield]: https://img.shields.io/github/issues/AlastairZeved/the-docket.svg?style=for-the-badge
-[issues-url]: https://github.com/AlastairZeved/the-docket/issues
-[license-shield]: https://img.shields.io/github/license/AlastairZeved/the-docket.svg?style=for-the-badge
-[license-url]: https://github.com/AlastairZeved/the-docket/blob/main/LICENSE
-[version-shield]: https://img.shields.io/badge/version-0.1.0-blue?style=for-the-badge
-[version-url]: https://github.com/AlastairZeved/the-docket/releases
-[node-shield]: https://img.shields.io/badge/node-20%2B-brightgreen?style=for-the-badge
-[node-url]: https://nodejs.org/
+## Known Limits
+
+- **The maker can record a verdict (D11).** The maker's session may run the core — `/rule` and `/docket` do — and a
+  PASS the maker records passes the diff in front of it as one you record does. What stands in the way is the
+  permission to run the core and the call's place in the maker's transcript, where you can read it: the boundary is
+  permission and visibility, not cryptography.
+- **The judge's permission is a text pattern (D37).** It admits any node command whose text names a `docket.js`, not
+  the core alone. The core refuses the judge `append`, `constitute` and `vendor`; nothing refuses another script of
+  that name.
+- **The stale reading is the weakest (D19, D25, D27).** Whether a ruling's reason still holds after the diff is the
+  judge's hardest call: the latest record met the stale case in 1 of 2 further runs, and the first named it the least
+  reliable of the five. Every answer the judge gives about a reason carries the line that shows it; read that line.
+- **A judge that ends with no record blocks once (D11, D38).** It names how the judge ended and keeps its output in
+  `.docket/judge.log`; the next stop in the same turn is allowed. That block counts toward the session's cap, 5
+  blocks since the last PASS, as a FAIL does.
+- **A stop can take minutes (D42).** The judge is bounded at seven hundred seconds, and the stop hook's timeout is
+  seven hundred and thirty. Each judged stop is a headless session of its own, and uses your account as one does.
+- **The judge runs on the host's default model (D13, D43).** The binding names no model, so the judge most likely
+  shares the maker's model, and its blind spots. A second model is yours to set in the host.
+- **What the calibration covers (D25).** Six planted cases on one fixture, read through the code pack and the
+  decisions pack. The design and prose packs' features are read by the judge and driven by no planted case.
+- **The hook's effect is not shown (D17, D49).** No measurement of the hook has had a control; it informs and never
+  blocks, and the judge does not depend on it.
+- **One host (D13).** Every measurement ran on Claude Code's command-line tool. `docs/PROTOCOL-BINDING.md` binds
+  the core to another host, and none has been bound or measured.
