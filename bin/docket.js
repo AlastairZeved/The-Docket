@@ -293,6 +293,9 @@ function metaOf(heading) {
 }
 
 function clausesOf(meta) { return meta.split(';').map(s => s.trim()).filter(Boolean); }
+// An entry's principle line, as append's guard, the index and check 6 all read it: a body line beginning `Principle:`, a space
+// after it or not, outside fenced blocks (FORMAT.md 5, 11); a second is check 6's failure, since two leave the reader to guess.
+const PRINCIPLE_LINE_RE = /^Principle:(.*)$/;
 // The body states its reason when `Reason:` appears outside code spans and fenced blocks (FORMAT.md 5, 11).
 function assertsReason(lines) {
   const fenced = fencedLines(lines);
@@ -451,11 +454,12 @@ function parseLedger(text, ledgerPath) {
       const clauses = clausesOf(meta);
       const grounding = clauses.find(c => !isEdgeClause(c)) || '';
       const bodyFenced = fencedLines(bodyLines);                       // FORMAT.md 5: a Principle: line inside a fence is quoted
-      const pm = bodyLines.map((l, k) => bodyFenced[k] ? null : /^Principle:\s*(.+?)\s*$/.exec(l)).find(Boolean);
+      const pls = [];
+      bodyLines.forEach((l, k) => { const m = bodyFenced[k] ? null : PRINCIPLE_LINE_RE.exec(l); if (m) pls.push({ line: start + 2 + k, name: m[1].trim().replace(/\.$/, '') }); });
       rulings.push({
         id, prefix: hm[1], n: Number(hm[2]), line: start + 1, heading, title: titleOf(heading), meta, grounding,
         issue: issueM ? Number(issueM[1]) : null, edges, addenda, body: bodyLines.join('\n'), bodyLines,
-        principle: pm ? pm[1].replace(/\.$/, '') : null, endLine: j,
+        principle: pls.length && pls[0].name ? pls[0].name : null, principleLines: pls.map(p => p.line), endLine: j,
         hasReason: assertsReason(bodyLines),
       });
       i = j; continue;
@@ -1145,7 +1149,8 @@ function runCheck(root, opts) {
         if (!clauses.length || isEdgeClause(clauses[0])) fail(lp, r.line, 6, r.id + ': meta must open with a grounding (issue #n or a context), not an edge');
         for (const c of clauses.slice(1)) if (!isEdgeClause(c)) fail(lp, r.line, 6, r.id + ': meta clause is not an edge: "' + c + '"');
       }
-      if (!r.principle) fail(lp, r.line, 6, r.id + ': no "Principle:" line');
+      if (r.principleLines.length > 1) fail(lp, r.line, 6, r.id + ': ' + r.principleLines.length + ' "Principle:" lines (' + r.principleLines.map(n => 'line ' + n).join(', ') + '): an entry names one principle, and two leave the reader to guess (FORMAT.md 11)');
+      else if (!r.principle) fail(lp, r.line, 6, r.id + (r.principleLines.length ? ': its "Principle:" line names no principle' : ': no "Principle:" line'));
       else if (!prin.list.length) fail(lp, r.line, 6, r.id + ': names a principle but no principles list was found');
       else if (!principleNamed(prin.list, r.principle)) fail(lp, r.line, 6, r.id + ': principle "' + r.principle + '" is not in the list (' + prin.list.map(p => p.name).join(' · ') + ')');
       if (!r.hasReason) fail(lp, r.line, 6, r.id + ': body has no "Reason:"');   // quoted in code, it is not stated (FORMAT.md 5)
@@ -1518,7 +1523,7 @@ function entryArgs(argv) {
   if (!assertsReason(splitLines(body))) die('append: --body must state the reason as a sentence beginning "Reason:" (outside code spans and fenced blocks)', 2);
   if (splitLines(body).some(l => ADDENDUM_RE.test(l))) die('append: --body may not carry an addendum line; an addendum is written by append --addendum and dated by the tool (FORMAT.md 6)', 2);
   if (splitLines(body).some(isBoundary)) die('append: --body may not carry an entry or section heading line — a body opens no entry; the heading is the tool\'s to write (FORMAT.md 2, 7, 11)', 2);
-  { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && /^Principle:\s/.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }
+  { const bl = splitLines(body), bf = fencedLines(bl); if (bl.some((l, k) => !bf[k] && PRINCIPLE_LINE_RE.test(l))) die('append: --body may not carry a Principle: line; the tool writes it from --principle, and two would leave the reader to guess (FORMAT.md 11)', 2); }
   return { title, issue, principle, body, edges };
 }
 function buildEntry(argv, root, ledger) {

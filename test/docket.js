@@ -755,6 +755,15 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 6: a Principle: line inside a fenced block is not the principle line', r.code === 1 && /check 6: R8: no "Principle:" line/.test(r.out), r.out);
   r = docket(['append', '--title', 'Quoted reason', '--issue', '63', '--principle', 'Zero cognitive tax', '--body', 'Text with `Reason: quoted` only.'], { cwd: abc });
   ok('append: a Reason: only inside a code span is refused', r.code === 2 && /must state the reason/.test(r.err), r.err);
+  // one reader of the principle line for append, the index and check 6: a line beginning Principle:, a space after it or not (FORMAT.md 11)
+  const pp2 = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Principle: Capture precedes structure.\n', 'Principle: Capture precedes structure.\nPrinciple: Zeta.\n'));
+  r = docket(['check'], { cwd: pp2 });
+  ok('check 6: a contract-bound entry with a second Principle: line fails, naming both lines, though the first names a principle of the list', r.code === 1 && /^test\/fixture\/DECISIONS\.md:54  check 6: R8: 2 "Principle:" lines \(line 55, line 56\): an entry names one principle/m.test(r.out), r.out);
+  const pp3 = tempRepo(d => edit(d, 'test/fixture/DECISIONS.md', 'Principle: Capture precedes structure.\n', 'Principle: Capture precedes structure.\nPrinciple:Zeta\n'));
+  r = docket(['check'], { cwd: pp3 });
+  ok('…and one with no space after the colon is read as one, by check 6 as by the index', r.code === 1 && /check 6: R8: 2 "Principle:" lines/.test(r.out), r.out);
+  r = docket(['append', '--title', 'Spaceless principle', '--issue', '64', '--principle', 'Zero cognitive tax', '--body', 'Principle:Zeta\nReason: two would leave the reader to guess.'], { cwd: abc });
+  ok('append: a --body carrying a Principle: line with no space after the colon is refused, as one with a space is', r.code === 2 && /^append: --body may not carry a Principle: line/m.test(r.err), r.err);
   // a reader that closes stdout early: no stack trace, and the exit is the command's own (D6's addendum)
   const many = tempRepo(d => fs.writeFileSync(path.join(d, 'test', 'fixture', 'noisy.js'), Array.from({ length: 3000 }, (_, i) => `// R${90 + i} cited nowhere`).join('\n') + '\n')); // above the pipe's buffer: the reader's exit meets a blocked write
   const ep = cp.spawnSync('bash', ['-c', 'node "$1" check | head -1; echo "status=${PIPESTATUS[0]}"', 'x', CORE], { cwd: many, encoding: 'utf8' });

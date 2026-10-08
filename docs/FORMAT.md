@@ -438,7 +438,9 @@ contract line, parse loosely (2) and are held to nothing more. The contract:
 2. the meta's first clause is a grounding, not an edge;
 3. every further clause of the meta is an edge, `<verb> <P><m>`, with a verb from
    the list (5);
-4. the body has a line beginning `Principle: ` that names a principle (10);
+4. the body has one line beginning `Principle:`, a space after it or not, and it
+   names a principle (10): a second such line fails, since two leave the reader
+   to guess which the entry resolves against;
 5. the body contains `Reason:`.
 
 Both are read outside code spans and fenced blocks (5): a `Reason:` or a
