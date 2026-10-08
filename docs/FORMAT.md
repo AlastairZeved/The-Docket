@@ -157,7 +157,8 @@ that is absent has none.
 A heading is one line to this reader and to any other: `docket append` refuses a
 title, a grounding or an edge carrying U+2028 or U+2029, the line separators
 that a host may write and a reader may not see, and reads one written by hand
-as content of the heading rather than as the end of it.
+as content of the heading rather than as the end of it, which check 2 fails
+(13).
 
 ## 3. The title rule (D7)
 
@@ -501,9 +502,16 @@ differ only in case are both named and the command exits 2.
 Each failure prints one line, `<file>:<line>  check <k>: <message>`; the exit
 code is 1 if any check fails, else 0. A failure names the line of the offending
 cite, heading or edge, never only the file. Every line the core prints, here and
-in every subcommand, replaces a control character, or a character that reorders
+in every subcommand, replaces a control character, a character that reorders
 what a terminal shows — one of Unicode's bidi controls, U+061C, U+200E–U+200F,
-U+202A–U+202E and U+2066–U+2069 — with U+FFFD, and a name the repository holds — a file, a
+U+202A–U+202E and U+2066–U+2069 — or one that shows nothing and is still
+written — the soft hyphen U+00AD, U+180E, the zero-width space U+200B, the line
+and paragraph separators U+2028–U+2029, U+2060–U+2064, U+206A–U+206F, U+FEFF,
+U+FFF9–U+FFFB, the tag characters U+E0000–U+E007F, which spell text no reader
+sees, and a zero-width joiner or non-joiner, U+200C–U+200D, beside an ASCII
+character, a space, another joiner or the text's edge, where it joins no letters
+(between the letters of a Persian word or an emoji sequence it shapes what is
+shown, and stays) — with U+FFFD, and a name the repository holds — a file, a
 ledger — is printed on its one line with its own line breaks and tabs replaced
 too, so a failure is one line whatever its file is called; the JSON forms carry
 names as they are: check 2 fails an entry that carries one, and
@@ -513,7 +521,7 @@ prints straight.
 | k | Check | Fails when |
 |---|---|---|
 | 1 | Cites resolve | a cite in a git-tracked text file — or, given `--untracked`, an untracked one git does not ignore (1) — names a number that does not exist in that file's ledger |
-| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character or a character that reorders what a terminal shows; or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39); or the ledger has no entries and a line of it reads as an entry heading in another form (1, D45); or the ledger is not UTF-8 text — a UTF-16 byte order mark opens it, or it holds a NUL byte (1, D45) |
+| 2 | Numbering, and what an entry may carry | an entry's number is not its position among its prefix's entries in order of appearance: a gap, a repeated id, an entry out of order; or a heading or body carries a control character, a character that reorders what a terminal shows, or one that shows nothing and is still written (13); or the ledger has no entries and a line of it, fenced or not, begins `### ` — a heading the grammar does not read, or one a bare CR began, its lines read here as its author ended them (1, D39); or the ledger has no entries and a line of it reads as an entry heading in another form (1, D45); or the ledger is not UTF-8 text — a UTF-16 byte order mark opens it, or it holds a NUL byte (1, D45) |
 | 3 | Spec cites resolve | a `UIUX §x` or `PRD §x` cite names a heading that does not exist in the document beside the ledger, or the document is absent |
 | 4 | Bare-cite ratchet | a file's bare-`§` count exceeds its allowance, when a baseline comment is present |
 | 5 | Edges point back | an edge's target does not exist, is the source itself, or is defined later than the source |

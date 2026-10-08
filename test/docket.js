@@ -1791,6 +1791,27 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and check 2 still names the character in the ledger, so the fault is reported and not merely hidden', r.code === 1 && /RLO|202E/i.test(r.out), r.out);
   r = docket(['query', 'Heading'], { cwd: rlo });
   ok('…and query shows it plain too, since every reader-facing byte leaves by one door', !r.out.includes(RLO), JSON.stringify(r.out));
+  // A tag character spells text no reader sees; a zero-width space, a soft hyphen, a line separator and a word joiner show
+  // nothing and are still written; a joiner beside a letter of ASCII joins nothing: each refused as the bidi controls are, and
+  // each replaced in every line printed — while a joiner between the letters it shapes stays (FORMAT.md 13)
+  {
+    const TAGS = String.fromCodePoint(0xe0041, 0xe0042), KEPT = 'می\u200cخواهم and 👨\u200d👩\u200d👧';
+    const INV = [[TAGS, 'U+E0041'], ['\u200b', 'ZWSP'], ['\u00ad', 'SHY'], ['\u2028', 'LS'], ['\u2060', 'WJ'], ['\u200d', 'ZWJ']];
+    const inv = ledgerRepo('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n' + INV.map(([ch], i) => '### R' + (i + 1) + '. Over' + ch + 'night\nPrinciple: One.\nReason: r.\n\n').join('') + '### R7. Kept as joined\nPrinciple: One.\nReason: ' + KEPT + '.\n',
+      ['// R1 R2 R3 R4 R5 R6 R7 govern this', 'ANCHOR_LINE();']);
+    r = docket(['check'], { cwd: inv });
+    const lines2 = r.out.split('\n').filter(l => / check 2: /.test(l));
+    ok('check 2 names an entry carrying a tag character, a zero-width space, a soft hyphen, a line separator, a word joiner, or a joiner beside a letter of ASCII, each by its name or code point — and not one whose joiners stand between the letters they shape (FORMAT.md 13)', r.code === 1 && INV.every(([, nm], i) => lines2.some(l => l.startsWith('DECISIONS.md:') && l.includes('check 2: R' + (i + 1) + ': the text carries ' + nm + ', which changes what a reader is shown'))) && !lines2.some(l => l.includes('R7')), r.out);
+    const invisible = s => /[\u{e0000}-\u{e007f}\u200b\u00ad\u2028\u2060]|Over\u200d/u.test(s);
+    r = docket(['near'], { cwd: inv, input: nearInput(path.join(inv, 'app.js'), 'ANCHOR_LINE();') });
+    const nq = docket(['query', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6'], { cwd: inv }), g7 = docket(['governs', 'R7'], { cwd: inv });
+    ok('…and near and query print each replaced, the tag characters whole, one U+FFFD each, and governs prints the joined letters as written', r.code === 0 && !invisible(r.out) && /Over\ufffd\ufffdnight/.test(nq.out) && (nq.out.match(/Over\ufffd+night/g) || []).length === 6 && !invisible(nq.out) && g7.code === 0 && g7.out.includes('Reason: ' + KEPT + '.'), JSON.stringify(r.out.slice(0, 400)) + ' | ' + JSON.stringify(nq.out.slice(0, 600)) + ' | ' + JSON.stringify(g7.out.slice(0, 200)));
+    r = docket(['append', '--title', 'Carrying ' + TAGS, '--issue', '9', '--principle', 'One', '--body', 'Reason: r.'], { cwd: inv });
+    const clean = ledgerRepo('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\n## R. Rulings\n\n### R1. Plain\nPrinciple: One.\nReason: r.\n', ['// R1 governs this', 'ANCHOR_LINE();']);
+    const kj = docket(['append', '--title', 'Joined as written', '--issue', '10', '--principle', 'One', '--body', 'A word, ' + KEPT + '. Reason: r.'], { cwd: clean });
+    ok('…append refuses a tag character before it is written, naming its code point whole, and writes a joiner between the letters it shapes', r.code === 2 && r.err.includes('append: --title carries U+E0041, a control, bidi or invisible character the ledger refuses (check 2)') && kj.code === 0 && read(path.join(clean, 'DECISIONS.md')).includes('A word, ' + KEPT + '. Reason: r.'), r.code + ' ' + r.err + ' | ' + kj.code + ' ' + kj.out + kj.err);
+    fs.rmSync(inv, { recursive: true, force: true }); fs.rmSync(clean, { recursive: true, force: true });
+  }
 
   // An id is a name, and a name is read whatever its case — in append's edge target as in governs.
   const ci = ledgerRepo(HEAD3, ['// R1 here', 'const a = 1;']);
@@ -2555,7 +2576,7 @@ const SEC = String.fromCharCode(0xa7);
       let r = ap(['--addendum', 'R5', '--text', 'see R99 for the new count.']);
       ok('an addendum naming a ruling that does not exist is refused before it is written', r.code === 2 && /^append: --text names R99, which is not in test\/fixture\/DECISIONS\.md$/m.test(r.err), r.code + ' ' + r.err);
       r = ap(['--addendum', 'R5', '--text', 'colour it \u001b[31mred']);
-      ok('an addendum carrying a control character is refused, naming the code point', r.code === 2 && /^append: --text carries U\+001B, a control or bidi character/m.test(r.err), r.err);
+      ok('an addendum carrying a control character is refused, naming the code point', r.code === 2 && /^append: --text carries U\+001B, a control, bidi or invisible character/m.test(r.err), r.err);
       r = ap(['--title', 'A title with \u001b[2J inside', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Reason: r.']);
       ok('a title carrying a control character is refused, not written and failed for ever', r.code === 2 && /^append: --title carries U\+001B/m.test(r.err), r.err);
       r = ap(['--title', 'Right ‮ to left', '--issue', '5', '--principle', 'Capture precedes structure', '--body', 'Reason: r.']);
@@ -2878,7 +2899,7 @@ const SEC = String.fromCharCode(0xa7);
     v = docket(['verdict', 'MAYBE', '--hash', hash2, '--failures', '0'], { cwd: d });
     ok('verdict refuses a verdict that is not PASS, FAIL or STALE, exit 2', v.code === 2 && /usage: docket verdict <PASS\|FAIL\|STALE>/.test(v.err), v.err);
     v = docket(['verdict', 'FAIL', '--hash', hash2, '--failures', '1', '--session', 's1', '--reason', 'a reason with a bidi mark ‮ in it'], { cwd: d });
-    ok('verdict refuses a reason carrying a control or bidi character', v.code === 2 && /control or bidi/.test(v.err), v.code + ' ' + v.err);
+    ok('verdict refuses a reason carrying a control, bidi or invisible character', v.code === 2 && /control, bidi or invisible/.test(v.err), v.code + ' ' + v.err);
     ok('.docket/ is ignored by git where a .gitignore says so', sh('git', ['check-ignore', '.docket/verdict.json'], ROOT).status === 0, 'this repository does not ignore .docket/');
     { const gi = read(path.join(ROOT, '.gitignore')), lic = read(path.join(ROOT, 'LICENSE'));
       ok('.gitignore keeps node_modules/ and package*.json out too: the core runs with no install, and no package file is committed', /^node_modules\/$/m.test(gi) && /^package\*\.json$/m.test(gi), gi);
@@ -5540,7 +5561,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('check 2 names an entry carrying any of Unicode’s bidi controls, the twelve its tables list, U+061C among them as ALM (FORMAT.md 13)', bidi.length >= 12 && named.length === bidi.length && /check 2: R9: the text carries ALM, which changes what a reader is shown/.test(rc.out), bidi.map(hex).join(' ') + '\n' + rc.out);
   const fx = path.join(tempRepo(), 'test', 'fixture');
   const ra = bidi.map(ch => docket(['append', '--title', 'Carrying ' + ch + 'it', '--issue', 'issue #99', '--principle', 'Capture precedes structure', '--body', 'Text. Reason: r.'], { cwd: fx }));
-  ok('…append refuses each before it is written, naming its code point', ra.every((r, i) => r.code === 2 && r.err.includes('append: --title carries ' + hex(bidi[i]) + ', a control or bidi character the ledger refuses (check 2)')), ra.map(r => r.code + ' ' + r.err.trim()).join(' | '));
+  ok('…append refuses each before it is written, naming its code point', ra.every((r, i) => r.code === 2 && r.err.includes('append: --title carries ' + hex(bidi[i]) + ', a control, bidi or invisible character the ledger refuses (check 2)')), ra.map(r => r.code + ' ' + r.err.trim()).join(' | '));
   const rq = docket(['query', 'carrying'], { cwd: path.join(d, 'test', 'fixture') });
   ok('…and every line the core prints replaces each with U+FFFD', rq.code === 0 && bidi.every(ch => !rq.out.includes(ch)) && (rq.out.match(/\ufffd/g) || []).length >= bidi.length, JSON.stringify(rq.out));
 }

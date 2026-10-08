@@ -1337,14 +1337,20 @@ const TOKEN_ROW_RE = new RegExp('^\\|\\s*`(--[A-Za-z0-9_-]+)`\\s*\\|\\s*`(' + HE
 const HEXISH_ROW_RE = /^\|\s*`(--[A-Za-z0-9_-]+)`\s*\|\s*`(#[^`]*)`\s*\|/;                                // a row shaped like a token row whose value opens with #
 // C0 and C1 controls except tab, and the characters that reorder what a terminal shows.
 // The C0 and C1 controls, and Unicode's bidi controls whole — U+061C, U+200E-U+200F, U+202A-U+202E, U+2066-U+2069 — the
-// characters that reorder what a terminal shows (FORMAT.md 13)
-const UNSAFE_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
-const UNSAFE_RE_G = new RegExp(UNSAFE_RE.source, 'g');
-const UNSAFE_NAME = { '\u061c': 'ALM', '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b': 'RLE', '\u202c': 'PDF', '\u202d': 'LRO', '\u202e': 'RLO', '\u2066': 'LRI', '\u2067': 'RLI', '\u2068': 'FSI', '\u2069': 'PDI' };
+// characters that reorder what a terminal shows; and the characters that show nothing and are still written: the soft hyphen,
+// U+180E, the zero-width space, the line and paragraph separators, U+2060-U+2064, U+206A-U+206F, U+FEFF, U+FFF9-U+FFFB, and
+// the tag characters U+E0000-U+E007F, which spell text no reader sees. A zero-width joiner or non-joiner shapes the letters it
+// stands between, a Persian word or an emoji sequence, and is one of them only where it shapes nothing: beside an ASCII
+// character, a space, another joiner or the text's edge (FORMAT.md 13)
+const INVISIBLE = '\\u00ad\\u180e\\u200b\\u2028\\u2029\\u2060-\\u2064\\u206a-\\u206f\\ufeff\\ufff9-\\ufffb\\u{e0000}-\\u{e007f}';
+const LONE_JOINER = '(?<![^\\x00-\\x7f\\s\\u200c\\u200d])[\\u200c\\u200d]|[\\u200c\\u200d](?![^\\x00-\\x7f\\s\\u200c\\u200d])';
+const UNSAFE_RE = new RegExp('[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069' + INVISIBLE + ']|' + LONE_JOINER, 'u');
+const UNSAFE_RE_G = new RegExp(UNSAFE_RE.source, 'gu');
+const UNSAFE_NAME = { '\u00ad': 'SHY', '\u200b': 'ZWSP', '\u200c': 'ZWNJ', '\u200d': 'ZWJ', '\u2028': 'LS', '\u2029': 'PS', '\u2060': 'WJ', '\ufeff': 'ZWNBSP', '\u061c': 'ALM', '\u200e': 'LRM', '\u200f': 'RLM', '\u202a': 'LRE', '\u202b': 'RLE', '\u202c': 'PDF', '\u202d': 'LRO', '\u202e': 'RLO', '\u2066': 'LRI', '\u2067': 'RLI', '\u2068': 'FSI', '\u2069': 'PDI' };
 function unsafeName(ch) { return UNSAFE_NAME[ch] || 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'); }
 // What a reader is shown never carries them, whatever a ledger holds: check says so, and until it is
 // fixed the text still reads straight.
-const UNSAFE_OUT_RE_G = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const UNSAFE_OUT_RE_G = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069' + INVISIBLE + ']|' + LONE_JOINER, 'gu');
 function plain(t) { return String(t).replace(UNSAFE_OUT_RE_G, '\ufffd'); }
 // A name the repository holds — a file, a ledger — printed within a line: its own line breaks and tabs replaced too, which
 // plain() keeps since they shape the lines it prints, so a failure is one line whatever its file is called (FORMAT.md 13)
@@ -1561,7 +1567,7 @@ function entryArgs(argv) {
   if (!body || !body.trim()) die('append: --body is required (the ruling in prose, with its Reason:)', 2);
   for (const [name, v] of [['--title', title], ['--issue', issue], ['--principle', principle], ['--body', body]].concat(edges.map(e => ['--edge', e]))) {
     const um = UNSAFE_RE.exec(v);                                      // check 2 would fail the entry for ever; it is refused before it is written
-    if (um) die('append: ' + name + ' carries U+' + um[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control or bidi character the ledger refuses (check 2); once written it could never be unwritten', 2);
+    if (um) die('append: ' + name + ' carries U+' + um[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control, bidi or invisible character the ledger refuses (check 2); once written it could never be unwritten', 2);
   }
   if ((splitLines(body).filter(l => /^\s*```/.test(l)).length % 2) === 1) die('append: --body opens a fence it does not close; every line after it, in this entry and the next, would be read as code (FORMAT.md 8)', 2);
 
@@ -1650,7 +1656,7 @@ function appendAddendum(argv) {
   if (!r) die('append: --addendum ' + id + ' names no ruling in ' + rel(root, ledger.path), 2);
   if (!text || !text.trim()) die('append: --text is required (why the entry\'s reason no longer holds, or what changed)', 2);
   const um = UNSAFE_RE.exec(text);
-  if (um) die('append: --text carries U+' + um[0].charCodeAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control or bidi character the ledger refuses (check 2); once written it could never be unwritten', 2);
+  if (um) die('append: --text carries U+' + um[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0') + ', a control, bidi or invisible character the ledger refuses (check 2); once written it could never be unwritten', 2);
   for (const c of citesIn(text, ledger)) if (!c.exists) die('append: --text names ' + c.id + ', which is not in ' + rel(root, ledger.path), 2);
   const lines = ledger.lines.slice();
   let end = r.endLine;                       // index of the next heading line (exclusive end of the entry)
@@ -2624,7 +2630,7 @@ function verdict(argv) {
   if (v === 'PASS' && failures !== 0) die('verdict: a PASS has no located failures; this names ' + failures, 2);
   if (v !== 'PASS' && failures === 0) die('verdict: a ' + v + ' names at least one located failure; --failures is 0', 2);
   const reason = flag(argv, '--reason');
-  if (reason !== null && UNSAFE_RE.test(reason)) die('verdict: --reason carries a control or bidi character', 2);
+  if (reason !== null && UNSAFE_RE.test(reason)) die('verdict: --reason carries a control, bidi or invisible character', 2);
   const lines = reason === null ? [] : String(reason).split('\n').map(x => x.trim()).filter(Boolean);
   if (v === 'PASS' && lines.length) die('verdict: a PASS names no located failures; --reason is for a FAIL or a STALE', 2);
   const base = sessionBase(root, loadState(root), id);                 // the diff's own start (D40): a line before the diff is one there too
