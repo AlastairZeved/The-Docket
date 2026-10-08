@@ -6086,44 +6086,81 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
 }
 
 // test/install.sh, driven by a stand-in host: the install is the means, and the list printed in the project it went into,
-// with a judged stop, is the measure — an install that succeeded beside a hook that printed nothing is no pass (D50)
+// with a judged stop, is the measure — an install that succeeded beside a hook that printed nothing is no pass (D50). The
+// stand-in keeps the machine's plugin state as the host would, an install adding to it and an uninstall taking it away, so
+// that the teardown is witnessed; and it logs every call it was handed, so that what the host was asked is witnessed too.
 {
-  const stubDir = tmpDir('inst-host-'), state = path.join(stubDir, 'state');
+  const stubDir = tmpDir('inst-host-'), state = path.join(stubDir, 'state'), log = path.join(stubDir, 'calls.jsonl');
   fs.writeFileSync(path.join(stubDir, 'host.js'), [
     "const fs = require('fs'), a = process.argv.slice(2), mode = process.env.STAND_IN_MODE || 'ok', st = process.env.STAND_IN_STATE;",
+    "fs.appendFileSync(process.env.STAND_IN_LOG, JSON.stringify({ cwd: process.cwd(), argv: a }) + '\\n');",
     "const say = o => process.stdout.write(JSON.stringify(o) + '\\n');",
+    "const drop = l => { const t = fs.readFileSync(st, 'utf8'), i = t.indexOf(l + '\\n'); if (i >= 0) fs.writeFileSync(st, t.slice(0, i) + t.slice(i + l.length + 1)); };",
+    "const block = reason => say({ type: 'system', subtype: 'hook_response', hook_event: 'Stop', output: JSON.stringify({ decision: 'block', reason }) });",
     "if (a[0] === '--version') { process.stdout.write('9.9.9 (stand-in)\\n'); process.exit(0); }",
     "if (a[0] === 'plugin') {",
     "  const sub = a.slice(1).join(' ');",
     "  if (/^(marketplace )?list\\b/.test(sub)) { process.stdout.write(fs.readFileSync(st, 'utf8')); process.exit(0); }",
     "  if (/^marketplace add /.test(sub) && mode === 'refused') { process.stderr.write('marketplace not found\\n'); process.exit(1); }",
+    "  if (/^marketplace add /.test(sub)) fs.appendFileSync(st, 'the-docket (marketplace, local)\\n');",
+    "  if (/^install /.test(sub)) fs.appendFileSync(st, 'the-docket@the-docket (local)\\n');",
     "  if (/^install /.test(sub) && mode === 'leak') fs.appendFileSync(st, 'the-docket@the-docket (user)\\n');",
+    "  if (/^uninstall /.test(sub)) drop('the-docket@the-docket (local)');",
+    "  if (/^marketplace remove /.test(sub)) drop('the-docket (marketplace, local)');",
     "  process.exit(0);",
     "}",
     "if (a[0] === '-p') {",
     "  if (/^\\/constitute/.test(a[1])) {",
-    "    const content = [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM\\n\\nName: Loan sheet' }];",
+    "    const content = [{ type: 'text', text: mode === 'narrated' ? 'Once you answer, I will print the CONSTITUTION — PLEASE CONFIRM block for you to read.' : 'Here is the entry, written by nothing yet.\\n\\n**CONSTITUTION — PLEASE CONFIRM**\\n\\nName: Loan sheet' },",
+    "      { type: 'tool_use', name: 'Bash', input: { command: 'node \"/p/bin/docket.js\" append --title \"L1. The constitution\" --body \"The contract.\" --dry-run' } }];",
     "    if (mode === 'wrote') content.push({ type: 'tool_use', name: 'Bash', input: { command: 'node /p/bin/docket.js constitute --answers a.json' } });",
+    "    if (mode === 'masked') content.push({ type: 'tool_use', name: 'Bash', input: { command: 'node /p/bin/docket.js append --title \"L1. The constitution\" --body \"run it with --dry-run first\"' } });",
     "    say({ type: 'assistant', message: { content } });",
     "  } else {",
-    "    if (mode !== 'silent') say({ type: 'system', subtype: 'hook_response', hook_event: 'PreToolUse', output: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: 'Governed here (DECISIONS.md, ±20 lines of app.js:12):\\n  R4  Fold similarity' } }) });",
-    "    say({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'app.js' } }] } });",
-    "    if (mode !== 'unjudged') { fs.mkdirSync('.docket', { recursive: true }); fs.writeFileSync('.docket/verdicts.jsonl', '{\"verdict\":\"PASS\"}\\n'); }",
+    "    for (let k = 0; k < (mode === 'twice' ? 2 : 1); k++) {",
+    "      if (mode !== 'silent') say({ type: 'system', subtype: 'hook_response', hook_event: 'PreToolUse', output: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: 'Governed here (DECISIONS.md, ±20 lines of app.js:49):\\n  R6  Toolbar' } }) });",
+    "      say({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'app.js' } }] } });",
+    "    }",
+    "    if (mode === 'noverdict') block(\"The docket's judge recorded no verdict for this stop's diff (app.js): it ended after 3 seconds, exit 1, so this stop cannot stand: a governed stop is judged, and the judge is not you.\");",
+    "    else if (mode === 'relayed') block(\"The docket's judge recorded FAIL for this stop's diff (app.js), 1 located failure:\\ncode · F3 · app.js:49 · R6 …\");",
+    "    else if (mode === 'badrecord') { fs.mkdirSync('.docket', { recursive: true }); fs.writeFileSync('.docket/verdicts.jsonl', '{\"verdict\":\"MAYBE\"}\\nPASS\\n'); }",
+    "    else if (mode !== 'unjudged') { fs.mkdirSync('.docket', { recursive: true }); fs.writeFileSync('.docket/verdicts.jsonl', '{\"verdict\":\"PASS\"}\\n'); }",
     "  }",
     "  say({ type: 'result', result: 'done' });",
     "}"
   ].join('\n') + '\n');
   fs.writeFileSync(path.join(stubDir, 'claude'), '#!/bin/sh\nexec node "' + path.join(stubDir, 'host.js') + '" "$@"\n'); fs.chmodSync(path.join(stubDir, 'claude'), 0o755);
-  const run = mode => { fs.writeFileSync(state, 'the-docket-other (user)\n');
-    return cp.spawnSync('sh', [path.join(ROOT, 'test', 'install.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('inst-'), STAND_IN_MODE: mode, STAND_IN_STATE: state }) }); };
+  const run = (mode, extra) => { fs.writeFileSync(state, 'the-docket-other (user)\n'); fs.writeFileSync(log, '');
+    return cp.spawnSync('sh', [path.join(ROOT, 'test', 'install.sh')], { cwd: ROOT, encoding: 'utf8', env: Object.assign({}, outerEnv(), { PATH: stubDir + ':' + process.env.PATH, TMPDIR: tmpDir('inst-'), STAND_IN_MODE: mode, STAND_IN_STATE: state, STAND_IN_LOG: log }, extra || {}) }); };
+  const calls = () => read(log).split('\n').filter(Boolean).map(l => JSON.parse(l));
+  // each scratch project's calls, in order: the marketplace and the plugin at its local scope, the run, then both taken away
+  const asked = proj => calls().filter(c => path.basename(c.cwd) === proj).map(c => c.argv[0] === '-p' ? '-p' : c.argv.join(' ')).join(' | ');
+  const cycle = src => ['plugin marketplace add ' + src + ' --scope local', 'plugin install the-docket@the-docket --scope local -y', '-p', 'plugin uninstall the-docket@the-docket --scope local', 'plugin marketplace remove the-docket --scope local'].join(' | ');
   let r = run('ok');
-  ok('install.sh installs from this repository by default, prints the host tool as it reports its version and the date, and passes a run whose hook printed the governed list and whose stop was judged, exit 0', r.status === 0 && /^installing the-docket@the-docket from AlastairZeved\/The-Docket, at each scratch project's local scope\non the host's command-line tool, version 9\.9\.9 \(stand-in\), \d{4}-\d\d-\d\d\n/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout) && /\(e\) edit, stop  1 of 1/.test(r.stdout) && /plugin state as the run found it: yes$/m.test(r.stdout) && r.stderr === '', r.status + '\n' + r.stdout + r.stderr);
+  ok('install.sh installs from this repository by default, prints the host tool as it reports its version and the date, and passes a run whose maker made one edit, whose hook printed the governed list for it and whose stop was judged, a dry run of an entry no write, exit 0', r.status === 0 && /^installing the-docket@the-docket from AlastairZeved\/The-Docket, at each scratch project's local scope\non the host's command-line tool, version 9\.9\.9 \(stand-in\), \d{4}-\d\d-\d\d\n/.test(r.stdout) && /\(k\) run 1  confirm block reached: yes  a write ran: no /.test(r.stdout) && /\(e\) run 1  edit calls: 1  the pre-edit hook printed the governed list: yes \(1 time\(s\)\)  the stop judged: yes \(a verdict recorded: yes, a block relaying one: no\)/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout) && /\(e\) edit, stop  1 of 1/.test(r.stdout) && /plugin state as the run found it: yes$/m.test(r.stdout) && r.stderr === '', r.status + '\n' + r.stdout + r.stderr);
+  { const pe = calls().find(c => c.argv[0] === '-p' && path.basename(c.cwd) === 'e-project'), pk = calls().find(c => c.argv[0] === '-p' && path.basename(c.cwd) === 'k-project'), flag = (c, f) => c ? c.argv[c.argv.indexOf(f) + 1] : undefined;
+    ok('…the host was asked, in each scratch project and at its local scope, to add the published repository as the marketplace and install the-docket from it, then the run, then to uninstall it and remove the marketplace: the teardown ran, and the state read after is the state read before because of it', asked('k-project') === cycle('AlastairZeved/The-Docket') && asked('e-project') === cycle('AlastairZeved/The-Docket') && read(state) === 'the-docket-other (user)\n', asked('k-project') + '\n' + asked('e-project') + '\n' + read(state));
+    ok('…the constitute run allowed the core and nothing else of the shell, and the edit run had no shell, asked for one change with one call of the edit tool, and carried the hooks’ records', !!pk && flag(pk, '--allowedTools') === 'Bash(node *docket.js*)' && /^\/constitute\n/.test(pk.argv[1]) && !!pe && flag(pe, '--disallowedTools') === 'Bash' && pe.argv.includes('--include-hook-events') && /\bone change with one call of the edit tool\b/.test(pe.argv[1]), JSON.stringify([pk && pk.argv.slice(2), pe && pe.argv])); }
+  r = run('ok', { INSTALL_SOURCE: '/clone/of/the-docket' });
+  ok('…and INSTALL_SOURCE names the marketplace the host is handed, on the first line and in the add', r.status === 0 && /^installing the-docket@the-docket from \/clone\/of\/the-docket, /.test(r.stdout) && asked('e-project') === cycle('/clone/of/the-docket'), r.stdout + asked('e-project'));
   r = run('silent');
-  ok('…and an install that succeeded beside a hook that printed nothing in the scratch project is no pass, a verdict recorded or not: (e) 0 of 1, exit 1', r.status === 1 && /\(e\) run 1  the pre-edit hook printed the governed list: no /.test(r.stdout) && /a verdict recorded: yes/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  ok('…and an install that succeeded beside a hook that printed nothing in the scratch project is no pass, a verdict recorded or not: (e) 0 of 1, exit 1', r.status === 1 && /the pre-edit hook printed the governed list: no  \(0 time\(s\)\)  the stop judged: yes /.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout) && /\(k\) constitute  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('twice');
+  ok('…nor a maker that made two edits where one was asked, each printed for: (e) 0 of 1, exit 1', r.status === 1 && /edit calls: 2  the pre-edit hook printed the governed list: yes \(2 time\(s\)\)/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('unjudged');
-  ok('…nor a hook that printed beside a stop no judge recorded for and nothing blocked: (e) 0 of 1, exit 1', r.status === 1 && /printed the governed list: yes\s+the stop judged: no /.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  ok('…nor a hook that printed beside a stop no judge recorded for and nothing blocked: (e) 0 of 1, exit 1', r.status === 1 && /printed the governed list: yes \(1 time\(s\)\)  the stop judged: no  \(a verdict recorded: no, a block relaying one: no\)/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('noverdict');
+  ok('…nor a stop that blocked saying the judge recorded no verdict: a block is a judgement only when it relays one, (e) 0 of 1, exit 1', r.status === 1 && /the stop judged: no  \(a verdict recorded: no, a block relaying one: no\)/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('badrecord');
+  ok('…nor a verdict log whose lines record no verdict, one that names none of PASS, FAIL or STALE and one that does not parse: (e) 0 of 1, exit 1', r.status === 1 && /a verdict recorded: no, a block relaying one: no/.test(r.stdout) && /\(e\) edit, stop  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('relayed');
+  ok('…while a stop that blocked relaying the judge’s FAIL was judged, no verdict log beside it: (e) 1 of 1, exit 0', r.status === 0 && /the stop judged: yes \(a verdict recorded: no, a block relaying one: yes\)/.test(r.stdout) && /\(e\) edit, stop  1 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('wrote');
   ok('…nor a constitute whose maker ran the write before any confirm: (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: yes  a write ran: yes/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('masked');
+  ok('…nor one whose append wrote an entry with --dry-run named only inside its quoted body: the flag is read where the shell reads one, (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: yes  a write ran: yes/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('narrated');
+  ok('…nor one whose maker named the confirm heading in prose and printed no block: the heading is read at a line’s start, (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: no +a write ran: no /.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('refused');
   ok('…and an install the host refused stops the measurement, named with its source and the host’s words, exit 1', r.status === 1 && /install\.sh: the install into the scratch project failed \(source AlastairZeved\/The-Docket\):\nmarketplace not found/.test(r.stderr) && !/\(k\) run 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('leak');
