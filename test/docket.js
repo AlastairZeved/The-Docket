@@ -1517,6 +1517,8 @@ const SEC = String.fromCharCode(0xa7);
   ok('an option the core does not know is a usage error, not a flag silently passed over', r.code === 2 && /unknown option "--no-such-option"/.test(r.err), r.code + '|' + r.err);
   r = docket(['--help']);
   ok('--help prints the usage and exits 0, as help and -h do', r.code === 0 && /^docket — the ledger of rulings/m.test(r.out) && /^  docket near /m.test(r.out) && r.out === docket(['help']).out && r.out === docket(['-h']).out, r.out.split('\n')[0]);
+  { const hj = [docket(['help', '--json']), docket(['--help', '--json'])], j = hj.map(x => { try { return JSON.parse(x.out); } catch (e) { return null; } });
+    ok('help --json, as --help --json, prints one object — every subcommand by name, help among them, and the usage text — where it had printed the text: --json is on every subcommand (README)', hj.every(x => x.code === 0) && j.every(o => !!o && Object.keys(o).join() === 'subcommands,text' && o.text === r.out.replace(/\n$/, '') && ['help', 'near', 'status', 'stop', 'transcript', 'pack'].every(n => o.subcommands.includes(n)) && o.subcommands.length === 20), hj.map(x => x.code + ':' + x.out.slice(0, 80)).join(' | ')); }
   // the docket opens a stretch of work: a state file it cannot use informs, and never throws (D1)
   const stDir = tempRepo();
   const stFile = path.join(stDir, '.docket', 'verdict.json');

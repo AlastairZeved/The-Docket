@@ -3087,10 +3087,12 @@ function leaveTrail() {
 function main() {
   leaveTrail();
   const argv = parseArgv(process.argv.slice(2));
-  if (argv.raw.includes('--help')) { out(USAGE); return 0; }
   const sub = argv._[0];
   const table = { near, index: indexOf_, check, 'spec-check': specCheck, append, query, governs, principles, status, diff, vendor, constitute, intake, gate, verdict, protocol, pack, transcript, stop };
-  if (sub === 'help' || sub === '-h') { out(USAGE); return 0; }
+  // help is a subcommand as the others are, and --json on every subcommand is on it too: the subcommands by name, and the text
+  const help = () => { out(argv.raw.includes('--json') ? JSON.stringify({ subcommands: Object.keys(table).concat('help').sort(), text: USAGE }, null, 2) : USAGE); return 0; };
+  if (argv.raw.includes('--help')) return help();
+  if (sub === 'help' || sub === '-h') return help();
   if (sub && !Object.prototype.hasOwnProperty.call(table, sub)) die('docket: unknown subcommand "' + sub + '"\n\n' + USAGE, 2);   // `constructor` is no subcommand
   // the witness is the subcommand with no name, its options read as every other's are: one it does not read is refused, so a
   // misspelt --untracked is never taken for the set it names
