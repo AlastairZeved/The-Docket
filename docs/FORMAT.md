@@ -800,8 +800,8 @@ surfaces the session. For any other stop it starts the judge with a prompt that
 names the core by its path, the permission's spelling when given, and the hook
 input's session, transcript path and directory — none of what the maker wrote;
 waits for it to end, up to `--wait` seconds (700 by default; a whole number
-written as digits, at most 9007199254740, the most seconds whose milliseconds are
-counted exactly), then stops
+written as digits, one or more — zero would bound nothing — and at most
+9007199254740, the most seconds whose milliseconds are counted exactly), then stops
 it; and reads the state: a PASS for this diff allows; a FAIL or STALE recorded
 for this diff and this session since the judge started is relayed as a block
 carrying the recorded reason and its route — the judge runs with `DOCKET_SESSION`
