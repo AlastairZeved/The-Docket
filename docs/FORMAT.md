@@ -736,7 +736,10 @@ refused, exit 2, with the reason: the copy of the index not made, or the add
 failing, would leave every tracked file read as deleted; and a repository git
 will not read — its ownership, its config — is not a tree with no repository,
 whose governed files all read as new, as they do before a first commit; nor is
-a git that cannot be run, whose error the refusal names. `SKIP` when that text is empty, when its hash
+a git that cannot be run, whose error the refusal names. A working directory in
+a repository git will not read is refused wherever a ledger lies above it, one
+in another repository among them: read past, the root was that ledger's home,
+and the gate judged its tree (D28's addendum). `SKIP` when that text is empty, when its hash
 equals the last PASS's, or when the session is surfaced;
 `SURFACE` when the session has been blocked five times or more since its last PASS or
 its located failures have not fallen across the last two verdicts after the

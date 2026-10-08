@@ -5035,6 +5035,15 @@ const SEC = String.fromCharCode(0xa7);
     fs.appendFileSync(path.join(e, '.git', 'config'), '\n[core\n');   // a config git will not read
     const gr = docket(['gate', '--session', 'gr'], { cwd: e, env: { CLAUDE_PROJECT_DIR: '' } });
     ok('…and when git will not read the repository it says so, with git’s own line, exit 2, where it had read every governed file as new (FORMAT.md 16)', gr.code === 2 && /git will not read the repository at /.test(gr.err) && /config/.test(gr.err) && !/^JUDGE/m.test(gr.out), [gr.code, gr.out.slice(0, 200), gr.err.slice(0, 300)].join('|'));
+    // the same repository nested beneath a governed one: refused, not judged as the tree above it; with no ledger above, ungoverned
+    const o = tempRepo(), inner = path.join(o, 'test', 'fixture', 'inner'); fs.mkdirSync(inner); sh('git', ['init', '-q', '.'], inner);
+    fs.writeFileSync(path.join(inner, 'i.js'), 'const i = 9; // R2\n'); fs.appendFileSync(path.join(o, 'test', 'fixture', 'app.js'), 'const q = 8; // R2\n');
+    fs.appendFileSync(path.join(inner, '.git', 'config'), '\n[core\n');
+    const iv = [docket(['gate', '--session', 'gi'], { cwd: inner, env: { CLAUDE_PROJECT_DIR: '' } }), docket(['verdict', 'PASS', '--session', 'gi'], { cwd: inner, env: { CLAUDE_PROJECT_DIR: '' } }),
+      docket(['stop', '--judge', 'true'], { cwd: inner, input: '{"session_id":"gi"}', env: { CLAUDE_PROJECT_DIR: '' } })];
+    const lone = tmpDir('unread-'); sh('git', ['init', '-q', '.'], lone); fs.writeFileSync(path.join(lone, 'l.js'), 'const l = 1;\n'); fs.appendFileSync(path.join(lone, '.git', 'config'), '\n[core\n');
+    const lg = docket(['gate', '--session', 'gl'], { cwd: lone, env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('…and so beneath a ledger in another repository: gate, verdict and stop refuse, exit 2, with git’s own line, where the gate took the home of the ledger above for the root and judged that tree, and the verdict recorded there; one with no ledger above is ungoverned, SKIP (FORMAT.md 16, D28’s addendum)', iv.every(r => r.code === 2 && /git will not read the repository at /.test(r.err) && /config/.test(r.err) && !/^JUDGE/m.test(r.out)) && !fs.existsSync(path.join(o, '.docket', 'verdict.json')) && lg.code === 0 && /^SKIP$/m.test(lg.out), iv.concat([lg]).map(r => r.code + ':' + (r.out + r.err).slice(0, 160)).join(' | '));
     const ng = tempRepo(); fs.appendFileSync(path.join(ng, 'test', 'fixture', 'app.js'), 'const q = 7; // R2\n');
     const nodeOnly = tmpDir('nogit-'); fs.symlinkSync(process.execPath, path.join(nodeOnly, 'node'));   // a PATH that holds node and no git
     const ngg = docket(['gate', '--session', 'ng'], { cwd: ng, env: { PATH: nodeOnly, CLAUDE_PROJECT_DIR: '' } }), ngc = docket(['check'], { cwd: ng, env: { PATH: nodeOnly } });

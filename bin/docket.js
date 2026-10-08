@@ -198,6 +198,23 @@ function stopRoot(cwd) {
   if (v && isDir(v) && isWithin(path.resolve(cwd), path.resolve(v))) return path.resolve(v);
   return enumerationRoot(cwd);
 }
+// git's own line when `dir` lies in a repository git will not read — its ownership, its config — else null: none there, one it
+// reads, or a git that cannot be run (the gate names that itself). git is asked in its own words, whatever the locale, so "not a
+// git repository" is read as written (FORMAT.md 16)
+function unreadRepo(dir) {
+  const gd = cp.spawnSync('git', ['rev-parse', '--git-dir'], { cwd: dir, encoding: 'utf8', env: gitEnv(Object.assign({}, process.env, { LC_ALL: 'C', LANGUAGE: '' })) });
+  if (gd.error || gd.status === 0 || /not a git repository/i.test(gd.stderr || '')) return null;
+  return String(gd.stderr || '').trim().split('\n')[0] || 'git rev-parse --git-dir failed';
+}
+// The stop's root for the commands that read the diff — gate, verdict, stop (D28's addendum): a working directory in a repository
+// git will not read, beneath a ledger, is refused with git's own line before any root is taken. Read past, discovery took the home
+// of the ledger above it for the root, and the gate judged that tree, another repository's, while this one's edits went unseen; with
+// no ledger above it the tree is one the docket does not govern, and is read as before (FORMAT.md 16)
+function diffRoot(cwd) {
+  const why = unreadRepo(cwd);
+  if (why && findLedger(path.join(path.resolve(cwd), 'x'), path.parse(path.resolve(cwd)).root)) throw Object.assign(new Error('git will not read the repository at ' + path.resolve(cwd) + ' — ' + why + '; the gate reads no diff it cannot read whole (FORMAT.md 16)'), { refusal: true });
+  return stopRoot(cwd);
+}
 
 // The nearest DECISIONS.md or docs/DECISIONS.md walking up from `filePath`'s
 // directory to `root` inclusive; null when there is none (the file is ungoverned). With `memo`, a map kept for one root, every
@@ -2536,7 +2553,7 @@ function gateDecide(root, id, byHand) {
   return { decision: 'JUDGE', d, st, sess };
 }
 function gate(argv) {
-  const root = stopRoot(process.cwd());                               // D28
+  const root = diffRoot(process.cwd());                               // D28
   const id = sessionId(argv);
   const g = gateDecide(root, id, id === HAND_SESSION), d = g.d;
   const say = (decision, extra) => { if (argv.json) out(JSON.stringify(Object.assign({ decision, session: id, hash: d.hash, files: d.touched }, extra || {}), null, 2)); };
@@ -2664,7 +2681,7 @@ function holdToLines(root, v, failures, lines, base) {
 function verdict(argv) {
   const v = (argv._[1] || '').toUpperCase();
   if (!['PASS', 'FAIL', 'STALE'].includes(v)) die('usage: docket verdict <PASS|FAIL|STALE> [--hash <hash>] [--failures <n>] [--session <id>] [--reason "<the located failures>"]', 2);
-  const root = stopRoot(process.cwd());                               // D28
+  const root = diffRoot(process.cwd());                               // D28
   const id = sessionId(argv);
   const fRaw = flag(argv, '--failures'), failures = fRaw === null ? 0 : /^\d+$/.test(String(fRaw)) ? Number(fRaw) : NaN;   // a whole number, written as one
   if (!Number.isInteger(failures) || failures < 0) die('verdict: --failures must be a non-negative integer', 2);
@@ -2771,7 +2788,7 @@ function stop(argv) {
   const named = sessionOpt(argv);                                     // an option is read before the host's flag, as --wait is: one naming no session is refused at a re-entry too
   const allow = () => { if (argv.json) out('{}'); return 0; };      // an allowed stop prints nothing; with --json, an object with no decision
   if (input.stop_hook_active === true) return allow();                                           // D11: blocked at most once per turn
-  const root = stopRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
+  const root = diffRoot(process.cwd());                               // D28: the judge's root, whatever the host tells this hook
   const id = sessionKey(named || (typeof input.session_id === 'string' && input.session_id) || process.env.DOCKET_SESSION || 'default');
   const g = gateDecide(root, id), d = g.d;                             // the gate's own decision, before any judge starts
   if (g.decision === 'SKIP') return allow();                                                     // D10, D11: nothing to judge, or surfaced before this stop
