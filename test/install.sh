@@ -25,14 +25,15 @@
 #   (e) edit, stop  the fixture copied as a governed project, committed; the maker is asked for one edit in a
 #                   governed region, the toolbar's offset in the function R6 governs, and has no shell, so the edit
 #                   goes through the host's edit tool, the one the pre-edit hook is bound to. pass = the maker made one
-#                   edit call and app.js changed, the pre-edit hook PRINTED for it in the scratch project — the host's
+#                   edit call and app.js changed by the asked line alone (the offset's 48 now 56, no other line), the pre-edit hook PRINTED for it in the scratch project — the host's
 #                   own record of that hook's response carries the governed list, "Governed here" with a ruling under
 #                   it, where the notice of a window that cites none is no list — the installed plugin's own core ran
 #                   there, its path in the project's .docket/core and its docket.js, hooks.json and plugin.json this
 #                   checkout's by SHA-256 (a core of another tree measures that tree's install, not this one's), and
-#                   the stop was judged: a line of the
-#                   project's .docket/verdicts.jsonl records a verdict, PASS, FAIL or STALE, or the stop blocked with
-#                   one, its reason relaying what the judge recorded. A block saying the judge recorded no verdict is no
+#                   the stop was judged: a line of the project's .docket/verdicts.jsonl records a verdict, PASS, FAIL or
+#                   STALE, for this run's session — the one the host's init record names, since a verdict another
+#                   session recorded is not this stop's — or the stop blocked with one, its reason relaying what the
+#                   judge recorded. A block saying the judge recorded no verdict is no
 #                   judgement, and an install that succeeded beside a hook that printed nothing is no pass: the install
 #                   is the means, and the list printed in the project the plugin was installed into is the measure.
 #                   The run prints the verdict the judge recorded, how long the judge ran as the core's judge.log
@@ -42,7 +43,7 @@
 # A machine whose plugin state already lists the-docket is refused: an install over one cannot be measured as fresh.
 #
 # INSTALL_SOURCE names the marketplace (default AlastairZeved/The-Docket, the published repository; a path to a clone
-# measures an unpublished tree, and the record says which ran). INSTALL_KEEP=1 keeps the scratch directory and names it.
+# measures an unpublished tree, and the record says which ran, on its first line and in its summary). INSTALL_KEEP=1 keeps the scratch directory and names it.
 # The core's own switches (DOCKET_*) are not passed to the runs: a run measures the plugin as a person gets it.
 
 set -u
@@ -99,20 +100,36 @@ edits() { node -e '
     }
     process.stdout.write(String(n));
   ' "$1" 2>/dev/null || echo 0; }
-# yes when a line of the verdict log records a verdict: one that parses, its verdict PASS, FAIL or STALE
-recorded() { node -e '
-    const fs = require("fs"); let hit = false, t = "";
-    try { t = fs.readFileSync(process.argv[1], "utf8"); } catch (e) { /* none */ }
-    for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict)) hit = true; }
-    process.stdout.write(hit ? "yes" : "no");
+# yes when app.js's diff is the asked change and nothing else — one line removed and one added, the line that sets
+# bar.style.top, its 48 now 56 — other when app.js changed otherwise, no when it is as it was
+asked_change() { node -e '
+    const d = require("child_process").spawnSync("git", ["diff", "-U0", "--", "app.js"], { cwd: process.argv[1], encoding: "utf8" }).stdout || "";
+    const minus = d.split("\n").filter(l => /^-(?!--)/.test(l)), plus = d.split("\n").filter(l => /^\+(?!\+\+)/.test(l));
+    const asked = minus.length === 1 && plus.length === 1 && /^-\s*bar\.style\.top = .*- 48 \* scale/.test(minus[0]) && plus[0] === "+" + minus[0].slice(1).replace("- 48 * scale", "- 56 * scale");
+    process.stdout.write(asked ? "yes" : minus.length + plus.length ? "other" : "no");
   ' "$1" 2>/dev/null || echo no; }
-# The verdicts the verdict log records, in order, joined by commas; "none" when it records none
+# The session the host's stream names in its init record — the one its hooks carry to the core — or "unknown"
+session_of() { node -e '
+    const fs = require("fs"); let s = "";
+    for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (!s && o && o.type === "system" && o.subtype === "init" && typeof o.session_id === "string" && o.session_id) s = o.session_id; }
+    process.stdout.write(s || "unknown");
+  ' "$1" 2>/dev/null || echo unknown; }
+# yes when a line of the verdict log records a verdict for the session $2: one that parses, its verdict PASS, FAIL or STALE,
+# its session the run's — a verdict recorded for another session is not this stop's
+recorded() { node -e '
+    const fs = require("fs"), [log, sid] = process.argv.slice(1); let hit = false, t = "";
+    try { t = fs.readFileSync(log, "utf8"); } catch (e) { /* none */ }
+    for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict) && o.session === sid) hit = true; }
+    process.stdout.write(hit ? "yes" : "no");
+  ' "$1" "$2" 2>/dev/null || echo no; }
+# The verdicts the verdict log records, in order, joined by commas, one of another session than $2 marked as such; "none"
+# when it records none
 verdicts() { node -e '
-    const fs = require("fs"); let t = "", v = [];
-    try { t = fs.readFileSync(process.argv[1], "utf8"); } catch (e) { /* none */ }
-    for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict)) v.push(o.verdict); }
+    const fs = require("fs"), [log, sid] = process.argv.slice(1); let t = "", v = [];
+    try { t = fs.readFileSync(log, "utf8"); } catch (e) { /* none */ }
+    for (const line of t.split("\n")) { let o; try { o = JSON.parse(line); } catch (e) { continue; } if (o && /^(PASS|FAIL|STALE)$/.test(o.verdict)) v.push(o.verdict + (o.session === sid ? "" : " (session " + String(o.session) + ", not this run'"'"'s)")); }
     process.stdout.write(v.join(",") || "none");
-  ' "$1" 2>/dev/null || echo none; }
+  ' "$1" "$2" 2>/dev/null || echo none; }
 # How the core's judge.log says the judge ended — "ended after 22 seconds" — or "not logged"
 judge_ran() { node -e '
     const fs = require("fs"); let t = "";
@@ -217,16 +234,16 @@ setup "$E" || { echo "install.sh: the install into the scratch project failed (s
     --output-format stream-json --verbose --include-hook-events --permission-mode acceptEdits --disallowedTools "Bash" --max-turns 12 ) > "$WORK/e.jsonl" 2> "$WORK/e.err"
 made=$(edits "$WORK/e.jsonl")
 prints=$(listed "$WORK/e.jsonl")
-changed=no; ( cd "$E" && git diff --quiet -- app.js ) || changed=yes
+changed=$(asked_change "$E")   # yes: the asked line, alone; other: app.js changed otherwise; no: as it was
 printed=no; [ "$prints" -gt 0 ] && printed=yes
-logged=$(recorded "$E/.docket/verdicts.jsonl")
+sid=$(session_of "$WORK/e.jsonl"); logged=$(recorded "$E/.docket/verdicts.jsonl" "$sid")
 blocked=no; [ "$(hook_said "$WORK/e.jsonl" Stop '^(?=[\s\S]*"decision" *: *"block")(?=[\s\S]*judge recorded (FAIL|STALE) for this stop)')" -gt 0 ] && blocked=yes
 judged=no; { [ "$logged" = yes ] || [ "$blocked" = yes ]; } && judged=yes
-said=$(verdicts "$E/.docket/verdicts.jsonl"); ran=$(judge_ran "$E/.docket/judge.log"); prov=$(provenance "$E/.docket/core" "$REPO")
+said=$(verdicts "$E/.docket/verdicts.jsonl" "$sid"); ran=$(judge_ran "$E/.docket/judge.log"); prov=$(provenance "$E/.docket/core" "$REPO")
 own=no; [ "$prov" != none ] && ! printf '%s' "$prov" | grep -q "(not this checkout's)" && own=yes   # the three files this checkout's, each
 teardown "$E"
 e_pass=0; [ "$made" = 1 ] && [ "$changed" = yes ] && [ "$printed" = yes ] && [ "$own" = yes ] && [ "$judged" = yes ] && e_pass=1
-printf '  (e) run 1  edit calls: %s  app.js changed: %-3s  the pre-edit hook printed the governed list: %-3s (%s time(s))  the stop judged: %-3s (a verdict recorded: %s, a block relaying one: %s)\n' "$made" "$changed" "$printed" "$prints" "$judged" "$logged" "$blocked"
+printf '  (e) run 1  edit calls: %s  the asked line changed, alone: %-5s  the pre-edit hook printed the governed list: %-3s (%s time(s))  the stop judged: %-3s (a verdict recorded for this session: %s, a block relaying one: %s)\n' "$made" "$changed" "$printed" "$prints" "$judged" "$logged" "$blocked"
 printf '             the verdicts recorded: %s; the judge %s\n' "$said" "$ran"
 printf '             the core that ran: %s\n' "$prov"
 
@@ -234,4 +251,5 @@ AFTER=$(state); same=yes; [ "$BEFORE" = "$AFTER" ] || same=no
 printf '\n  (k) constitute  %s of 1   the skill loaded, the confirm block reached, nothing written\n' "$k_pass"
 printf '  (e) edit, stop  %s of 1   one edit, the pre-edit hook printed for it in the scratch project by the installed core, this checkout'"'"'s by SHA-256, and the stop judged\n' "$e_pass"
 printf "  the machine's own plugin state as the run found it: %s\n" "$same"
+if [ "$SRC" = AlastairZeved/The-Docket ]; then printf '  installed from: %s, the published repository\n' "$SRC"; else printf '  installed from: %s, not the published repository: this run measured an unpublished tree\n' "$SRC"; fi
 [ "$k_pass" = 1 ] && [ "$e_pass" = 1 ] && [ "$same" = yes ] && exit 0 || exit 1
