@@ -923,7 +923,9 @@ governs the working directory, the look below it is read within the same bound,
 and past it the tree is read as the ungoverned tree it would be: nothing is
 printed and no base is recorded, as past the walk's bound (1). `DOCKET_START_MS`,
 when the environment names a whole number of milliseconds, seven digits at most,
-replaces the bound: a hook for a test that must be repeatable.
+replaces the bound: a hook for a test that must be repeatable. A value that is
+not such a number — a sign, a point, a letter, a space or an eighth digit — is
+refused, exit 2, naming it; an empty value is read as unset.
 
 `.docket/core` is the core's breadcrumb: the absolute path of the `docket.js`
 that last ran as the host's own hook in this project — written by `near` and

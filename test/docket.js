@@ -5725,7 +5725,7 @@ const SEC = String.fromCharCode(0xa7);
   const bad = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: 'soon' } });
   ok('…and a bound that is no whole number of milliseconds is refused', bad.code === 2 && /^DOCKET_START_MS is "soon", which is no whole number/.test(bad.err), bad.err);
   const big = docket(['status', '--session-start'], { cwd: fx, input: '{}', env: { DOCKET_START_MS: '10000000' } });
-  ok('…and one of eight digits is refused with the range it takes named, seven digits at most (FORMAT.md 16)', big.code === 2 && /^DOCKET_START_MS is "10000000", which is no whole number of milliseconds of seven digits at most/.test(big.err), big.err);
+  ok('…and one of eight digits is refused with the range it takes named, seven digits at most — and FORMAT.md 16 states the refusal, exit 2, and the empty value read as unset (FORMAT.md 16)', big.code === 2 && /^DOCKET_START_MS is "10000000", which is no whole number of milliseconds of seven digits at most/.test(big.err) && /seven digits at most, replaces the bound: a hook for a test that must be repeatable\. A value that is not such a number — a sign, a point, a letter, a space or an eighth digit — is refused, exit 2, naming it; an empty value is read as unset\./.test(read(path.join(ROOT, 'docs', 'FORMAT.md')).replace(/\s+/g, ' ')), big.err);
 }
 
 // ── one stop counts once, the later word on a diff decides, and the stop names how its judge ended as it ended (D37's and D38's addenda) ──
