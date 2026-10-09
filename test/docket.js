@@ -2967,6 +2967,7 @@ const SEC = String.fromCharCode(0xa7);
     { const gi = read(path.join(ROOT, '.gitignore')), lic = read(path.join(ROOT, 'LICENSE'));
       ok('.gitignore keeps node_modules/ and package*.json out too: the core runs with no install, and no package file is committed', /^node_modules\/$/m.test(gi) && /^package\*\.json$/m.test(gi), gi);
       ok('LICENSE is the MIT licence, with its copyright line: the year and the holder it names', /^MIT License\n\nCopyright \(c\) 2026 AlastairZeved\n/.test(lic) && /Permission is hereby granted, free of charge/.test(lic), lic.slice(0, 80)); }
+      ok('the core carries its licence in its header — an SPDX line naming MIT within its first ten lines — so a vendored witness and every copy constitute writes carry it, where LICENSE stays behind (D9)', /^\/\/ SPDX-License-Identifier: MIT$/m.test(read(CORE).split('\n').slice(0, 10).join('\n')), read(CORE).split('\n').slice(0, 10).join('\n'));
     // five blocks with decreasing failures still hit the cap
     const d2 = tempRepo();
     fs.appendFileSync(path.join(d2, 'test', 'fixture', 'app.js'), 'const x = 1; // R2\n');

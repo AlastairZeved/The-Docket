@@ -4,6 +4,7 @@
 // stdin JSON, stdout text, exit codes and markdown, and names no host, model or
 // vendor. Vendored as test/docket.js it is the witness (D9): run with no
 // subcommand it checks the ledger and the spec and exits non-zero on a failure.
+// SPDX-License-Identifier: MIT
 //
 // Sections
 // 0  utilities            shell, files, git
