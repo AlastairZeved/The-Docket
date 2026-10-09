@@ -16,21 +16,26 @@
 #                   segments the shell runs, as test/judge.sh reads them (a quoted body naming --dry-run is no dry
 #                   run); and the project holds no file but git's and the host's own settings, .git/ and .claude/,
 #                   as test/constitute.sh counts its directory: the intake halts at its confirm block, and only the
-#                   person confirms (D18).
+#                   person confirms (D18); and the skill reached the model — the host's init record lists the skill
+#                   the installed plugin registered, no splice was refused and a turn ran, as test/constitute.sh
+#                   reads it — since the block is the maker's rendering of the intake the skill splices in, and a
+#                   block from a maker the skill never reached measures the host's dispatch, not the install.
 #   (e) edit, stop  the fixture copied as a governed project, committed; the maker is asked for one edit in a
 #                   governed region, the toolbar's offset in the function R6 governs, and has no shell, so the edit
 #                   goes through the host's edit tool, the one the pre-edit hook is bound to. pass = the maker made one
 #                   edit call and app.js changed, the pre-edit hook PRINTED for it in the scratch project — the host's
 #                   own record of that hook's response carries the governed list, "Governed here" with a ruling under
 #                   it, where the notice of a window that cites none is no list — the installed plugin's own core ran
-#                   there, its path in the project's .docket/core, and the stop was judged: a line of the
+#                   there, its path in the project's .docket/core and its docket.js, hooks.json and plugin.json this
+#                   checkout's by SHA-256 (a core of another tree measures that tree's install, not this one's), and
+#                   the stop was judged: a line of the
 #                   project's .docket/verdicts.jsonl records a verdict, PASS, FAIL or STALE, or the stop blocked with
 #                   one, its reason relaying what the judge recorded. A block saying the judge recorded no verdict is no
 #                   judgement, and an install that succeeded beside a hook that printed nothing is no pass: the install
 #                   is the means, and the list printed in the project the plugin was installed into is the measure.
 #                   The run prints the verdict the judge recorded, how long the judge ran as the core's judge.log
 #                   says, and the core that ran, with the SHA-256 of its docket.js, hooks.json and plugin.json and
-#                   whether each is this checkout's.
+#                   whether each is this checkout's — which the pass requires of all three.
 #
 # A machine whose plugin state already lists the-docket is refused: an install over one cannot be measured as fresh.
 #
@@ -162,6 +167,16 @@ assistant_text() { node -e '
     process.stdout.write(out);
   ' "$1" 2>/dev/null; }
 
+# The skill the host registered from the installed plugin — its init record lists the-docket:constitute — its splice not
+# refused, and a turn run, as test/constitute.sh reads it: the block is the maker's rendering of the intake the skill
+# splices in, so a block from a maker the skill never reached measures the host's dispatch, not the install
+skill_loaded() {
+  grep -qE '"skills":\[[^]]*"the-docket:constitute"' "$1" 2>/dev/null || { echo no; return; }
+  grep -qE 'local-command-stderr|permission check failed for pattern' "$1" 2>/dev/null && { echo no; return; }
+  turns=$(grep -oE '"num_turns":[0-9]+' "$1" 2>/dev/null | tail -1 | cut -d: -f2)
+  [ "${turns:-0}" -ge 1 ] && echo yes || echo no
+}
+
 HOSTV=$(claude --version 2>/dev/null | head -1)
 printf '%s\n' "installing the-docket@the-docket from ${SRC}, at each scratch project's local scope"
 printf '%s\n' "on the host's command-line tool, version ${HOSTV:-not reported}, $(date -u +%Y-%m-%d)"
@@ -177,9 +192,10 @@ reached=no; assistant_text "$WORK/k.jsonl" | grep -qE '^[^[:alnum:]]*CONSTITUTIO
 wrote=$(ran_write "$WORK/k.jsonl")
 written=$(cd "$K" && find . -path ./.git -prune -o -path ./.claude -prune -o -type f -print | sed 's#^\./##' | sort)
 files=no; [ -n "$written" ] && files=yes
+skill=$(skill_loaded "$WORK/k.jsonl")
 teardown "$K"
-k_pass=0; [ "$reached" = yes ] && [ "$wrote" = no ] && [ "$files" = no ] && k_pass=1
-printf '  (k) run 1  confirm block reached: %-3s  a write ran: %-3s  a file written: %s%s\n' "$reached" "$wrote" "$files" "$( [ -n "$written" ] && printf ' (%s)' "$(printf '%s\n' "$written" | head -n 3 | tr '\n' ' ' | sed 's/ $//')" )"
+k_pass=0; [ "$reached" = yes ] && [ "$wrote" = no ] && [ "$files" = no ] && [ "$skill" = yes ] && k_pass=1
+printf '  (k) run 1  confirm block reached: %-3s  a write ran: %-3s  a file written: %s%s  the skill loaded: %s\n' "$reached" "$wrote" "$files" "$( [ -n "$written" ] && printf ' (%s)' "$(printf '%s\n' "$written" | head -n 3 | tr '\n' ' ' | sed 's/ $//')" )" "$skill"
 
 # (e) edit, stop
 E="$WORK/e-project"; mkdir -p "$E" && cp -a "$REPO/test/fixture/." "$E/" && ( cd "$E" && git init -q . && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -q -m fixture ) \
@@ -195,14 +211,15 @@ logged=$(recorded "$E/.docket/verdicts.jsonl")
 blocked=no; [ "$(hook_said "$WORK/e.jsonl" Stop '^(?=[\s\S]*"decision" *: *"block")(?=[\s\S]*judge recorded (FAIL|STALE) for this stop)')" -gt 0 ] && blocked=yes
 judged=no; { [ "$logged" = yes ] || [ "$blocked" = yes ]; } && judged=yes
 said=$(verdicts "$E/.docket/verdicts.jsonl"); ran=$(judge_ran "$E/.docket/judge.log"); prov=$(provenance "$E/.docket/core" "$REPO")
+own=no; [ "$prov" != none ] && ! printf '%s' "$prov" | grep -q "(not this checkout's)" && own=yes   # the three files this checkout's, each
 teardown "$E"
-e_pass=0; [ "$made" = 1 ] && [ "$changed" = yes ] && [ "$printed" = yes ] && [ "$prov" != none ] && [ "$judged" = yes ] && e_pass=1
+e_pass=0; [ "$made" = 1 ] && [ "$changed" = yes ] && [ "$printed" = yes ] && [ "$own" = yes ] && [ "$judged" = yes ] && e_pass=1
 printf '  (e) run 1  edit calls: %s  app.js changed: %-3s  the pre-edit hook printed the governed list: %-3s (%s time(s))  the stop judged: %-3s (a verdict recorded: %s, a block relaying one: %s)\n' "$made" "$changed" "$printed" "$prints" "$judged" "$logged" "$blocked"
 printf '             the verdicts recorded: %s; the judge %s\n' "$said" "$ran"
 printf '             the core that ran: %s\n' "$prov"
 
 AFTER=$(state); same=yes; [ "$BEFORE" = "$AFTER" ] || same=no
-printf '\n  (k) constitute  %s of 1   the confirm block reached, nothing written\n' "$k_pass"
-printf '  (e) edit, stop  %s of 1   one edit, the pre-edit hook printed for it in the scratch project by the installed core, and the stop judged\n' "$e_pass"
+printf '\n  (k) constitute  %s of 1   the skill loaded, the confirm block reached, nothing written\n' "$k_pass"
+printf '  (e) edit, stop  %s of 1   one edit, the pre-edit hook printed for it in the scratch project by the installed core, this checkout'"'"'s by SHA-256, and the stop judged\n' "$e_pass"
 printf "  the machine's own plugin state as the run found it: %s\n" "$same"
 [ "$k_pass" = 1 ] && [ "$e_pass" = 1 ] && [ "$same" = yes ] && exit 0 || exit 1
