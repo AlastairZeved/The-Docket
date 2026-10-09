@@ -1127,7 +1127,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('the witness at the root ends with its exact summary line: every ledger the walk finds (docs/, test/fixture/, and the entry-less templates/), no spec rows beside docs/DECISIONS.md', rootWitness.code === 0 && rootWitness.out.trimEnd().split('\n').pop() === 'witness: ok (' + ledgerSet.size + ' ledgers, 0 spec rows)', rootWitness.out);
   const rootIdx = JSON.parse(docket(['index']).out);
   const rootStatus = docket(['status']).out.split('\n');
-  ok('status at the root: the ledger line with its count, the last three rulings newest first, nothing cited nowhere', rootStatus[0] === 'Docket — docs/DECISIONS.md (' + rootIdx.rulings.length + ' rulings; prefix D)' && rootStatus[1] === 'Last rulings:' && rootStatus.slice(2, 5).map(l => l.trim().split(/\s+/)[0]).join(',') === rootIdx.rulings.slice(-3).reverse().map(x => x.id).join(',') && rootStatus[5] === 'Cited nowhere: none', rootStatus.join('\n'));
+  ok('status at the root: the ledger line with its count, the last three rulings newest first, nothing cited nowhere, no addendum pending, a verdict line and the witness line — a clean docket', rootStatus[0] === 'Docket — docs/DECISIONS.md (' + rootIdx.rulings.length + ' rulings; prefix D)' && rootStatus[1] === 'Last rulings:' && rootStatus.slice(2, 5).map(l => l.trim().split(/\s+/)[0]).join(',') === rootIdx.rulings.slice(-3).reverse().map(x => x.id).join(',') && rootStatus[5] === 'Cited nowhere: none' && rootStatus[6] === 'Addenda pending: none' && /^Last verdict: /.test(rootStatus[7]) && /^Witness: ok \(\d+ ledgers\)$/.test(rootStatus[8]), rootStatus.join('\n'));
   // governs R6 lists every fixture line that cites R6 outside code and nothing else: an independent count over the tracked fixture files
   const fixFiles = sh('git', ['ls-files', '-z', 'test/fixture'], ROOT).stdout.split('\0').filter(Boolean).filter(f => !/^DECISIONS.*\.md$/i.test(path.basename(f)));
   const want = [];
@@ -3251,8 +3251,25 @@ const SEC = String.fromCharCode(0xa7);
       fs.appendFileSync(path.join(dv, 'test', 'fixture', 'app.js'), 'const v2 = 1; // R2\n');
       if (/HEAD had/.test(label)) { const f = path.join(dv, 'test', 'fixture', 'app.js'); const L = read(f).split('\n'); fs.writeFileSync(f, L.slice(0, 250).concat(['const v2 = 1; // R2', '']).join('\n')); }
       const Hv = docket(['gate', '--session', 'w'], { cwd: dv }).out.split(' ')[1];
-      const rv = docket(['verdict', 'FAIL', '--hash', Hv, '--failures', '1', '--session', 'w', '--reason', 'code · F3 · test/fixture/app.js:200 · R2 keeps positions read-only; this diff writes one · ' + a + ' · change the code'], { cwd: dv });
-      ok('verdict reads the answer’s line when it is ' + label + ' (D27)', rv.code === 0, rv.err);
+      const reason = 'code · F3 · test/fixture/app.js:200 · R2 keeps positions read-only; this diff writes one · ' + a + ' · change the code';
+      const rv = docket(['verdict', 'FAIL', '--hash', Hv, '--failures', '1', '--session', 'w', '--reason', reason], { cwd: dv });
+      ok('verdict reads the answer’s line when it is ' + label + ', and records the FAIL with the reason as given (D27)', rv.code === 0 && recorded(dv, 'FAIL', reason), rv.code + ' ' + rv.err);
+      fs.rmSync(dv, { recursive: true, force: true });
+    }
+    // the same forms with a line neither tree has are refused, nothing recorded: the form is read, and then the line is held
+    for (const [label, a] of [
+      ['a list whose second line is past the end', 'reason holds: the lot still reads positions (test/fixture/app.js:40, test/fixture/app.js:9999)'],
+      ['a dash for the colon, past the end', 'reason holds — the lot still reads positions (test/fixture/app.js:9999)'],
+      ['the line before the words, past the end', 'reason holds (test/fixture/app.js:9999): the lot still reads positions'],
+      ['a range that ends past the end', 'reason holds: the lot still reads positions (test/fixture/app.js:40-9999)'],
+      ['a line of the ledger past its end', 'reason holds: positions stay read-only (test/fixture/DECISIONS.md:9999)'],
+    ]) {
+      const dv = tempRepo();
+      fs.appendFileSync(path.join(dv, 'test', 'fixture', 'app.js'), 'const v2 = 1; // R2\n');
+      const Hv = docket(['gate', '--session', 'w'], { cwd: dv }).out.split(' ')[1];
+      const reason = 'code · F3 · test/fixture/app.js:200 · R2 keeps positions read-only; this diff writes one · ' + a + ' · change the code';
+      const rv = docket(['verdict', 'FAIL', '--hash', Hv, '--failures', '1', '--session', 'w', '--reason', reason], { cwd: dv });
+      ok('…and refuses ' + label + ', exit 2, naming the line that is not a line of a file, and records nothing (D27)', rv.code === 2 && /which is not a line of a file in this repository, before or after the diff \(D27\)/.test(rv.err) && !fs.existsSync(path.join(dv, '.docket', 'verdicts.jsonl')), rv.code + ' ' + rv.err);
       fs.rmSync(dv, { recursive: true, force: true });
     }
     v = vd('FAIL', 1, ans('reason holds: the lot still reads positions (test/fixture/app.js:44-40)'));
@@ -3571,14 +3588,17 @@ const SEC = String.fromCharCode(0xa7);
   {
     const words = new RegExp(['the speci' + 'fication', '\\bthe pl' + 'an\\b', '\\bthe pha' + 'se (?:that|which|where)\\b', '\\bpha' + 'se [0-9]', 'readers who ' + 'were given',
       '\\bspi' + 'ke\\b', 'muta' + 'nt', '\\bwa' + 've [0-9]', '\\bQA ba' + 'tch', 'SP' + 'EC\\.md', 'CLA' + 'IMS\\.md'].join('|'), 'i');
-    const kept = ['> Addendum 2026-09-22: The number added at the pha' + 'se that builds the intake', '### D17. The wedge holds: the reader names the ruling and declines to break it (the wedge measured at the pha' + 'se that', '> Addendum 2026-09-21: What this measured is confounded, found by readers who ' + 'were given the build'];
-    const found = [];
+    // the three passages are held whole, each by the SHA-256 of its line: a word added to one, or a new line opening as one does,
+    // is not the passage D4 keeps
+    const kept = ['6085ceb4255704c8e331775fb0a4fd34f94cc80d01b846cba0b6b8152a893e69', '785371cc76f6d55a0a7df133e76729996e634681d329deea28e5fc66120ca7b1', '0c9e85edcceff6c67f16b4f2446fad73d2fa51ebd597ce3c1a3e741119f9f7ab'];
+    const lineHash = l => require('crypto').createHash('sha256').update(l, 'utf8').digest('hex');
+    const found = [], exempt = [];
     for (const f of sh('git', ['ls-files', '-z'], ROOT).stdout.split('\0').filter(Boolean)) {
       const p = path.join(ROOT, f);
       let t; try { const b = fs.readFileSync(p); if (b.subarray(0, 8000).includes(0)) continue; t = b.toString('utf8'); } catch (e) { continue; }
-      t.split('\n').forEach((l, i) => { if (words.test(l) && !(f === 'docs/DECISIONS.md' && kept.some(k => l.startsWith(k)))) found.push(f + ':' + (i + 1)); });
+      t.split('\n').forEach((l, i) => { if (!words.test(l)) return; if (f === 'docs/DECISIONS.md' && kept.includes(lineHash(l))) exempt.push(i + 1); else found.push(f + ':' + (i + 1)); });
     }
-    ok('no tracked file names how the build was made — the three published passages of the ledger excepted, which D4 keeps as written', found.length === 0, found.join(', '));
+    ok('no tracked file names how the build was made — the three published passages of the ledger excepted, each held whole by its hash, which D4 keeps as written', found.length === 0 && exempt.length === 3, found.join(', ') + ' | exempt: ' + exempt.join(', '));
   }
 
   // ── D15 made mechanical (D47): the protocol and the packs are the bytes the calibration of record measured, read from the
@@ -6177,6 +6197,17 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   const bare = Array.from(prose.matchAll(/(?<![\w./-])[A-Za-z0-9][\w.-]*\/[\w.-]+(?![\w/])/g), m => m[0].replace(/\.+$/, '')).filter(t => !OWN.test(t) && !fs.existsSync(path.join(ROOT, t)));
   const other = links.filter(u => !KINDS.some(k => k.test(u))).concat(sources.filter(s => !OWN.test(s)), bare);
   ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, every clone and marketplace source is AlastairZeved/The-Docket, and an owner/name in its prose is this repository or a path in it', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
+  // …and the rest of the tree: every link and every clone or marketplace source in any tracked text file, and every github.com
+  // path written bare, is held to the same kinds — a name of another repository anywhere in the tree is a name of another repository
+  { const elsewhere = [];
+    for (const f of sh('git', ['ls-files', '-z'], ROOT).stdout.split('\0').filter(Boolean)) {
+      if (f === 'README.md') continue;
+      let t; try { const b = fs.readFileSync(path.join(ROOT, f)); if (b.subarray(0, 8000).includes(0)) continue; t = b.toString('utf8'); } catch (e) { continue; }
+      for (const m of t.matchAll(/\bhttps?:\/\/[^\s)<>\]"'`]+/g)) if (!KINDS.some(k => k.test(m[0]))) elsewhere.push(f + ': ' + m[0]);
+      for (const m of t.matchAll(/\b(?:marketplace add|clone)\s+([^\s`]+\/[^\s`]+)/g)) if (!OWN.test(m[1])) elsewhere.push(f + ': ' + m[0]);
+      for (const m of t.matchAll(/(?<![\w/])github\.com\/([\w.-]+(?:\/[\w.-]+)?)/g)) if (!/^AlastairZeved(?:\/The-Docket(?:\.git)?)?$/.test(m[1])) elsewhere.push(f + ': ' + m[0]);
+    }
+    ok('no tracked file names a repository but this one: every link, clone or marketplace source and bare github.com path outside the README is this repository, its owner’s account, a static badge or Node’s site', elsewhere.length === 0, elsewhere.slice(0, 8).join(' | ')); }
   const badge = /img\.shields\.io\/badge\/version-((?:[^-)\s]|--)+)-/.exec(readme);
   ok('the README’s version badge is the plugin manifest’s version', !!badge && badge[1].replace(/--/g, '-') === plugin.version, (badge ? badge[1] : 'no version badge') + ' against ' + plugin.version);
   { const inst = /^claude plugin install ([^\s@`]+)@([^\s`]+)$/m.exec(readme);
@@ -6197,8 +6228,10 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('the plugin’s description and the marketplace’s two lead with the judge — the first sentence naming the judge or the hook names the judge, ahead of the hook — and give the hook before an edit after it (D49)', descs.length === 3 && descs.every(d => typeof d === 'string' && leads(d) && d.indexOf('judge') >= 0 && d.indexOf('judge') < d.toLowerCase().indexOf('before an edit')), descs.join('\n'));
   const claudeMd = read(path.join(ROOT, 'CLAUDE.md'));
   ok('CLAUDE.md opens with its reader header and says what D6 gives it to say: the repository governs itself, work here with claude --plugin-dir ., run the witness before you stop', /^# CLAUDE\.md\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(claudeMd) && /governs itself \(D6\)/.test(claudeMd) && /^    claude --plugin-dir \.$/m.test(claudeMd) && /Before you stop, run both/.test(claudeMd) && /^    node test\/docket\.js /m.test(claudeMd) && /^    node bin\/docket\.js /m.test(claudeMd), claudeMd.slice(0, 300));
+  ok('no .claude/settings.json is tracked or present: the repository governs itself through the plugin at its root, not a settings file, as CLAUDE.md says (D6)', !fs.existsSync(path.join(ROOT, '.claude', 'settings.json')) && sh('git', ['ls-files', '-z', '--', '.claude'], ROOT).stdout === '' && /Add no `\.claude\/settings\.json`/.test(claudeMd), sh('git', ['ls-files', '-z', '--', '.claude'], ROOT).stdout);
   const packsMd = read(path.join(ROOT, 'docs', 'PACKS.md')), form = '<pack> · F<n> · <file:line> · <what> · <fix route>';
   ok('docs/PACKS.md opens with its reader header and gives the located-failure form the core holds a verdict to', /^# PACKS\.md[^\n]*\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(packsMd) && packsMd.includes('    ' + form + '\n') && read(CORE).includes(form), packsMd.slice(0, 300));
+  ok('docs/PACKS.md holds its four sections under their headings, in order: what the core reads in a pack, a feature, the located failure, when a pack changes', (packsMd.match(/^## .*$/gm) || []).map(h => h.slice(3)).join(' | ') === 'What the core reads in a pack | A feature | The located failure | When a pack changes', (packsMd.match(/^## .*$/gm) || []).join(' | '));
   const shipped = fs.readdirSync(path.join(ROOT, 'packs')).filter(f => f.endsWith('.md'));
   const off = shipped.filter(f => { const t = read(path.join(ROOT, 'packs', f)); return !/^[a-z][a-z0-9-]*\.md$/.test(f) || !/^Domain: \S/m.test(t) || !/^\*\*F1(?: — |\*\* — )/m.test(t) || !/\n## Located failure\n(?![\s\S]*\n#)/.test(t); });
   ok('every shipped pack is written as docs/PACKS.md says: a name the core reads, a Domain line, F1 in one of its two bold forms, and the located failure last', shipped.length === 4 && !off.length, off.join(', '));
