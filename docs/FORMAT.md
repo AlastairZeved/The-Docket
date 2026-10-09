@@ -147,7 +147,7 @@ An entry parses to
 | `issue` | the digits of `issue #<n>` inside `meta`, as written (a string), or empty |
 | `edges[]` | every edge in the heading and body (5) |
 | `addenda[]` | every addendum line under the entry (6) |
-| `body` | every line after the heading to the end of the entry, addendum lines included |
+| `body` | every line after the heading to the end of the entry, addendum lines included (an addendum line's text makes no edge, 5) |
 
 `docket index` prints the whole parse of a ledger as
 `{ledger, prefixes, contractFrom, baseline, rulings[], sections[], specs[]}` —
@@ -233,6 +233,15 @@ the same rendering, qualifier included: `extends R1` and `extends R1 (desktop)` 
 binding less than the first, and each is kept. One verb may name several
 targets joined by `/` (`keeps R1/R2`): that is one edge per target, all with
 the same clause.
+
+An addendum line (6) is read for no edge. An addendum records what happened to
+the entry after it was written, and the ruling that answered it is a later one,
+which an edge may not name — a target is defined earlier than its source — so
+the verbs there are the record's prose: `supersedes R3` in an addendum under
+R2 asserts nothing, where the same words in a body line of R4 make an edge, and
+a ruling's own id beside a verb in its addendum fails nothing, as no edge is
+read (check 5 reads the edges there are). What binds is written as a ruling,
+and `governs` shows an addendum's text whole beside the edges.
 
 Text inside backticks is quoted, not asserted — a code span is a run of
 backticks and the next run of as many (3), so ``supersedes R3`` is one as

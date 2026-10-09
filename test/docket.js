@@ -5120,6 +5120,17 @@ const SEC = String.fromCharCode(0xa7);
     ok('a capitalised verb is an edge only where it opens a sentence: "The Lot Keeps R5 In View" and "a capital mid-sentence Extends R1" make none, "Two words: In part reverses R1" makes the lowercase edge alone, and "Keeps R2 whole." makes one (FORMAT.md 5)', JSON.stringify(es) === JSON.stringify(['keeps R2', 'reverses R1']), JSON.stringify(es));
   }
   {
+    // an addendum line's text makes no edge: it records what happened after the entry, and the ruling that answered it is a later
+    // one, which an edge may not name — the same words in a body line do make one (FORMAT.md 5, 6)
+    const d = tempRepo(), at = path.join(d, 'test', 'fixture');
+    const edgesOf = id => { let ix = null; try { ix = JSON.parse(docket(['index', '--json'], { cwd: at }).out); } catch (e) { return ['unparsed']; } return ((ix.rulings.find(x => x.id === id)) || { edges: [] }).edges.map(x => x.verb + ' ' + x.to); };
+    const r2Before = edgesOf('R2');
+    const a1 = docket(['append', '--addendum', 'R2', '--text', 'this supersedes R1 and keeps R2 itself, in prose'], { cwd: at });
+    const a2 = docket(['append', '--title', 'A body edge', '--issue', '91', '--principle', 'Zero cognitive tax', '--body', 'This supersedes R1. Reason: r.'], { cwd: at });
+    const chk = docket(['check'], { cwd: at }), gov = docket(['governs', 'R1'], { cwd: at });
+    ok('an addendum line’s text makes no edge, where the same words in a body line do: "this supersedes R1 and keeps R2 itself" as an addendum under R2 adds R2 no edge and fails no check — a ruling’s own id there is prose — while "This supersedes R1." in R9’s body is R9’s edge, and governs R1 lists R9’s and no R2’s (FORMAT.md 5, 6)', a1.code === 0 && a2.code === 0 && JSON.stringify(edgesOf('R2')) === JSON.stringify(r2Before) && edgesOf('R9').includes('supersedes R1') && chk.code === 0 && /R9 supersedes R1/.test(gov.out) && !/R2 (?:supersedes|keeps) R/.test(gov.out), JSON.stringify([r2Before, edgesOf('R2'), edgesOf('R9'), a1.code, a2.code, chk.code, chk.out.slice(0, 200), gov.out.slice(0, 300)]));
+  }
+  {
     const d = tmpDir('skip7-'); fs.writeFileSync(path.join(d, 'DECISIONS.md'), LEDGER); fs.writeFileSync(path.join(d, 'a.js'), 'x(); // R1\n');
     sh('git', ['init', '-q', '-b', 'main'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'one'], d);
     const s = docket(['status'], { cwd: d }), c = docket(['check'], { cwd: d });
