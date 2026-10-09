@@ -351,3 +351,6 @@ fixture, with no model named in the run. A result holds for that host, that date
   blocks, and the judge does not depend on it.
 - **One host (D13).** Every measurement ran on Claude Code's command-line tool. `docs/PROTOCOL-BINDING.md` binds
   the core to another host, and none has been bound or measured.
+- **The host warns about CLAUDE.md (D6).** `claude plugin validate .` passes with one warning: the CLAUDE.md at the
+  plugin root is not loaded as project context. It is not meant to be: it is the repository's own file, read when
+  you work in the repository, where the plugin at its root governs it (D6). The warning stands with each release.
