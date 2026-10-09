@@ -5581,6 +5581,37 @@ const SEC = String.fromCharCode(0xa7);
   ok('…and names a heading that is only its parenthetical, whose entry every listing names by its id alone', info.some(l => /^info  DECISIONS\.md:25: R2's heading has no title before its parenthetical, so it is named by its id alone \(FORMAT\.md 3\)$/.test(l)) && st.out.split('\n').includes('  R2  · issue #2'), c.out + '\n' + st.out);
 }
 
+// ── a ledger git does not track fails check 7 as untracked; one a commit before the tip's parent removed, none since, as removed (D54) ──
+{
+  // the tree as constitute leaves it: a repository with nothing added yet, so no tracked file leads the walk to the ledger
+  const u = tmpDir('loose-'); fs.cpSync(FIX, u, { recursive: true });
+  sh('git', ['init', '-q', '-b', 'main'], u);
+  const line = 'DECISIONS.md:1  check 7: the ledger is untracked: check reads the files git tracks, and would pass this tree as ungoverned — git add it, or run with --untracked (D54)';
+  const c = docket(['check'], { cwd: u }), w = docket([], { cwd: u }), st = docket(['status'], { cwd: u }), cu = docket(['check', '--untracked'], { cwd: u });
+  ok('a ledger the working tree holds untracked, with no tracked file under it, fails check 7 as untracked, exit 1, naming the way out — not "ok (0 ledgers)": the hook walks to it, and a pass would call a governed tree ungoverned (D54)', c.code === 1 && c.out.split('\n').includes(line) && !/check: ok/.test(c.out), c.code + '|' + c.out);
+  ok('…the witness run bare and status carry the failure, since each runs the check', w.code === 1 && w.out.split('\n').includes(line) && /^witness: 1 failure$/m.test(w.out) && /^Witness: FAIL \(1\)$/m.test(st.out) && st.out.includes('  ' + line), w.code + '|' + w.out + '|' + st.out);
+  ok('…and --untracked reads it as before: the fixture whole, check ok with one ledger', cu.code === 0 && /^check: ok \(1 ledger, /m.test(cu.out), cu.code + '|' + cu.out);
+  // a ledger in a directory git ignores and no tracked file lies under (not docs/, which governs the directory above it, FORMAT.md 1):
+  // the walk from the tracked files reaches no ledger, and git lists it as ignored
+  const gi = tmpDir('ignored-'); fs.mkdirSync(path.join(gi, 'sub')); fs.copyFileSync(path.join(FIX, 'DECISIONS.md'), path.join(gi, 'sub', 'DECISIONS.md'));
+  fs.writeFileSync(path.join(gi, 'a.js'), 'x();\n'); fs.writeFileSync(path.join(gi, '.gitignore'), 'sub/\n');
+  const gg = a => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(a), gi);
+  gg(['init', '-q', '-b', 'main']); gg(['add', '-A']); gg(['commit', '-qm', 'the ledger ignored']);
+  const ci = docket(['check'], { cwd: gi });
+  ok('…and a ledger .gitignore hides from git, in a directory no tracked file shares, is untracked the same and fails the same, named by its path', ci.code === 1 && ci.out.split('\n').includes('sub/' + line), ci.code + '|' + ci.out);
+  const rm = tempRepo(); const gr = a => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(a), rm);
+  gr(['rm', '-q', 'test/fixture/DECISIONS.md']); gr(['commit', '-qm', 'the ledger removed']); const sha = gr(['rev-parse', '--short', 'HEAD']).stdout.trim();
+  gr(['commit', '-q', '--allow-empty', '-m', 'one on']); gr(['commit', '-q', '--allow-empty', '-m', 'two on']);
+  const c2 = docket(['check'], { cwd: rm }), w2 = docket([], { cwd: rm });
+  const gone = 'test/fixture/DECISIONS.md:1  check 7: the ledger was removed in ' + sha + ', and none stands in the tree since: a repository that held a ledger is not ungoverned by its removal (append only, D54)';
+  ok('a ledger a commit before the tip’s parent removed, with none in the tree since, fails check 7 as removed, naming the commit — a repository that held a ledger is not ungoverned by its removal, so a CI red once is not green after (D54)', c2.code === 1 && c2.out.split('\n').includes(gone) && c2.out.split('\n').filter(l => /check 7/.test(l)).length === 1 && w2.code === 1 && w2.out.split('\n').includes(gone), c2.code + '|' + c2.out + '|' + w2.out);
+  const nv = tmpDir('never-'); fs.writeFileSync(path.join(nv, 'a.js'), 'x();\n'); const gn = a => sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t'].concat(a), nv);
+  gn(['init', '-q', '-b', 'main']); gn(['add', '-A']); gn(['commit', '-qm', 'no ledger ever']);
+  const cn = docket(['check'], { cwd: nv });
+  ok('…where a tree whose history never held a ledger stays a said ok with none read', cn.code === 0 && cn.out === 'check: ok (0 ledgers, 0 governed-tree files)\n', cn.code + '|' + cn.out);
+  for (const x of [u, gi, rm, nv]) fs.rmSync(x, { recursive: true, force: true });
+}
+
 // ── a ledger removed in the commit a check is given, or struck from the index, fails check 7 (D4's addendum) ──
 {
   const d = tempRepo();
@@ -5588,10 +5619,11 @@ const SEC = String.fromCharCode(0xa7);
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'the ledger removed'], d);
   const c = docket(['check'], { cwd: d });
   ok('a check of the commit that removed the ledger fails check 7, as a check before the commit does: HEAD’s parent has it, and a check judges the commit it was given (D4’s addendum)', c.code === 1 && c.out.split('\n').includes("test/fixture/DECISIONS.md:1  check 7: HEAD's commit removed the ledger (append only); HEAD's parent has it"), c.out);
+  const shaR = sh('git', ['rev-parse', '--short', 'HEAD'], d).stdout.trim();
   sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'next'], d);
   const c2 = docket(['check'], { cwd: d });
   const c3 = docket(['check'], { cwd: d, env: { DOCKET_BASE: sh('git', ['rev-parse', 'HEAD~2'], d).stdout.trim() } });
-  ok('…a commit on, the tip rule passes it, as it passes an entry amended a commit before; a check against the push’s base fails it still', c2.code === 0 && c3.code === 1 && /check 7: the ledger is gone from the working tree \(append only\)/.test(c3.out), c2.out + ' | ' + c3.out);
+  ok('…a commit on, the tip rule no longer names it and D54 does — removed in the commit that removed it, none in the tree since; a check against the push’s base fails it by the base rule, and once', c2.code === 1 && c2.out.split('\n').includes('test/fixture/DECISIONS.md:1  check 7: the ledger was removed in ' + shaR + ', and none stands in the tree since: a repository that held a ledger is not ungoverned by its removal (append only, D54)') && c3.code === 1 && /check 7: the ledger is gone from the working tree \(append only\)/.test(c3.out) && c3.out.split('\n').filter(l => /check 7/.test(l)).length === 1, c2.out + ' | ' + c3.out);
 }
 {
   const d = tempRepo();

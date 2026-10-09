@@ -146,6 +146,31 @@ function untrackedFiles(root) {
   if (r.status !== 0) return [];
   return r.stdout.split('\0').filter(Boolean).map(f => path.join(root, f));
 }
+// The ledgers git does not track under root — untracked, or ignored: a DECISIONS.md the hook's walk reaches and check reads
+// nothing of (D54)
+function looseLedgers(root) {
+  const seen = new Set(), found = [];
+  for (const flags of [['--others', '--exclude-standard'], ['--others', '--ignored', '--exclude-standard']]) {
+    const r = sh('git', ['ls-files', '-z'].concat(flags), root);
+    if (r.status !== 0) continue;
+    for (const f of r.stdout.split('\0')) if (f && /(^|\/)DECISIONS\.md$/.test(f) && !seen.has(f)) { seen.add(f); found.push(path.join(root, f)); }
+  }
+  return found;
+}
+// The DECISIONS.md paths a commit removed and the working tree lacks since, each with the commit that removed it, newest first.
+// A rename is one change to git, not a removal, and a path added back is not gone. The history is read whole and the names
+// kept here, since git runs with literal pathspecs (D54)
+function removedLedgers(root) {
+  const r = sh('git', ['log', '--diff-filter=D', '--format=\x01%h', '--name-only'], root);   // the commit line marked, so a path spelt like a hash is a path
+  if (r.status !== 0) return [];
+  const found = [], seen = new Set(); let sha = '';
+  for (const line of r.stdout.split('\n')) {
+    if (line.charCodeAt(0) === 1) { sha = line.slice(1); continue; }
+    if (!/(^|\/)DECISIONS\.md$/.test(line) || seen.has(line) || isFile(path.join(root, line))) continue;
+    seen.add(line); found.push({ path: line, sha });
+  }
+  return found;
+}
 function isTextFile(p) {
   let fd;
   try {
@@ -1307,6 +1332,20 @@ function runCheck(root, opts) {
       const full = path.join(groot, p);
       if (atRev.includes(p) || !isWithin(full, path.resolve(root)) || trackedNow.has(full)) continue;
       fail(full, 1, 7, 'HEAD\'s commit removed the ledger (append only); HEAD\'s parent has it');
+    }
+    // A ledger git does not track is read by none of the seven checks and reached by the hook's walk, so a pass would call a
+    // governed tree ungoverned: it fails check 7 as the struck one does, untracked, with the way out named (D54)
+    if (!ctx.untracked) for (const full of looseLedgers(groot)) {
+      if (!isWithin(full, path.resolve(root)) || ctx.ledgers.has(full)) continue;
+      fail(full, 1, 7, 'the ledger is untracked: check reads the files git tracks, and would pass this tree as ungoverned — git add it, or run with --untracked (D54)');
+    }
+    // Older than the tip: a ledger a commit before HEAD's parent removed, with none in the tree since. Read only where no ledger
+    // was read, so a tree that never held one is told from one that lost one, and reported once — the tip's rule above has
+    // named a removal at HEAD or at the base already (D54)
+    if (!ctx.ledgers.size) for (const g of removedLedgers(groot)) {
+      const full = path.join(groot, g.path);
+      if (!isWithin(full, path.resolve(root)) || failures.some(f => f.k === 7 && f.file === rel(root, full))) continue;
+      fail(full, 1, 7, 'the ledger was removed in ' + g.sha + ', and none stands in the tree since: a repository that held a ledger is not ungoverned by its removal (append only, D54)');
     }
   }
   return { failures, info, ctx };
