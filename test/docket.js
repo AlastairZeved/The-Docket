@@ -5061,6 +5061,27 @@ const SEC = String.fromCharCode(0xa7);
       && bad.w.every(r => r.code === 2 && r.err.includes('is not UTF-8 text — byte ' + at + ', on line 7, begins no UTF-8 character')) && bad.same
       && !/not UTF-8/.test(good.c.out) && good.w[1].code === 0, [bad.c.out.slice(0, 200), bad.w.map(r => r.code + ':' + r.err.slice(0, 120)).join(' | '), bad.same, good.c.out.slice(0, 200), good.w[1].code + ':' + good.w[1].err.slice(0, 160)].join(' || '));
   }
+  // the byte named is the sequence's first — a lead whose continuation is missing, wrong, overlong, a surrogate or past U+10FFFF,
+  // or a continuation byte standing alone — found by the encoding's grammar: a sequence led by EF shares a prefix with U+FFFD's own
+  // bytes, so a read-back compared to the file named the byte one or two late, or one past the file's end (FORMAT.md 1, D45's addendum)
+  {
+    const head = 'Preamble.\n\nPrinciples:\n\n- **One.** a.\n\n### R1. Caf', tail = ' rule (issue #1)\nPrinciple: One.\nReason: a.\n';
+    const run = bytes => { const d = tmpDir('utf8-lead-'), lp = path.join(d, 'DECISIONS.md'); fs.writeFileSync(lp, bytes); fs.writeFileSync(path.join(d, 'a.js'), 'const a = 1; // R1\n');
+      sh('git', ['init', '-q'], d); sh('git', ['add', '-A'], d); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'l'], d);
+      const c = docket(['check'], { cwd: d }), w = docket(['append', '--addendum', 'R1', '--text', 'More.'], { cwd: d });
+      const r = { c, w, same: fs.readFileSync(lp).equals(bytes) }; fs.rmSync(d, { recursive: true, force: true }); return r; };
+    const at = Buffer.byteLength(head) + 1, mid = (name, bytes) => ({ name, r: run(Buffer.concat([Buffer.from(head), Buffer.from(bytes), Buffer.from(tail)])), at, line: 7 });
+    const cases = [mid('EF alone before a space', [0xEF]), mid('EF BF before a space', [0xEF, 0xBF]), mid('EF BB 78', [0xEF, 0xBB, 0x78]), mid('EF BF 78', [0xEF, 0xBF, 0x78]),
+      mid('a continuation byte alone', [0x80]), mid('C0 AF, an overlong slash', [0xC0, 0xAF]), mid('E0 80 80, overlong', [0xE0, 0x80, 0x80]), mid('ED A0 80, a surrogate', [0xED, 0xA0, 0x80]),
+      mid('F4 90 80 80, past U+10FFFF', [0xF4, 0x90, 0x80, 0x80]), mid('F5 80 80 80', [0xF5, 0x80, 0x80, 0x80]),
+      { name: 'EF alone at the file\u2019s end', r: run(Buffer.concat([Buffer.from(head + 'e' + tail), Buffer.from([0xEF])])), at: Buffer.byteLength(head + 'e' + tail) + 1, line: 10 }];
+    const wrong = cases.filter(k => !(k.r.c.code === 1 && k.r.c.out.split('\n').includes('DECISIONS.md:' + k.line + '  check 2: the ledger is not UTF-8 text — byte ' + k.at + ' begins no UTF-8 character; save it as UTF-8 (FORMAT.md 1, D45)')
+      && k.r.w.code === 2 && k.r.w.err.includes('is not UTF-8 text — byte ' + k.at + ', on line ' + k.line + ', begins no UTF-8 character') && k.r.same));
+    const fine = run(Buffer.from(head + '\ufffd\u00e9\u{1F600}' + tail));
+    ok('check 2 and append name the first byte of the sequence that begins no character — EF alone, EF BF, EF BB 78 and EF BF 78 before the rest of the heading, a continuation byte alone, the overlong C0 AF and E0 80 80, the surrogate ED A0 80, F4 90 80 80 past U+10FFFF, F5, and EF as the file\u2019s last byte, named at its own line — where U+FFFD written as itself, a two-byte and a four-byte character pass (FORMAT.md 1, D45\u2019s addendum)',
+      !wrong.length && !/not UTF-8/.test(fine.c.out) && fine.c.code === 0 && fine.w.code === 0,
+      wrong.map(k => k.name + ' → check ' + k.r.c.code + ' ' + (k.r.c.out.match(/byte \d+[^\n]*/) || [''])[0] + ' | append ' + k.r.w.code + ' ' + (k.r.w.err.match(/byte \d+, on line \d+/) || [''])[0] + ' | same ' + k.r.same).join(' || ') + ' || fine ' + fine.c.code + ':' + fine.c.out.slice(0, 120) + ' ' + fine.w.code);
+  }
   {
     const d = tempRepo(x => fs.writeFileSync(path.join(x, 'test', 'fixture', 'decisions-notes.md'), '### R6. The toolbar replaces the long-press menu\nNotes on R6.\n'));   // a copy of a ledger's entry (D5's addendum)
     fs.appendFileSync(path.join(fx(d), 'decisions-notes.md'), 'More on R6.\n');

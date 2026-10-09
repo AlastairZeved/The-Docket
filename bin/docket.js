@@ -75,15 +75,26 @@ function die(msg, code) {
 }
 function readStdin() { try { return fs.readFileSync(0, 'utf8'); } catch (e) { return ''; } }
 function readText(p) { return fs.readFileSync(p, 'utf8'); }
-// The first byte of `buf` that begins no UTF-8 character, as { byte, line } (1-based), or null when all of it is UTF-8. Read
-// lossily, such a byte is U+FFFD, and written back it is three other bytes: the valid prefix reads back as itself, so the first
-// byte where the read-back differs is the first that is not UTF-8 (FORMAT.md 1, D45's addendum)
+// The first byte of `buf` that begins no UTF-8 character, as { byte, line } (1-based), or null when all of it is UTF-8: a walk of
+// the encoding's grammar. A lead byte says how many continuation bytes follow it and what the first may be, so an overlong form
+// (C0, C1, E0 80, F0 80), a surrogate (ED A0 to ED BF), a point past U+10FFFF (F4 90, F5 and up), a continuation byte standing
+// alone, and a sequence the file ends inside or a byte outside 80–BF interrupts each begin no character, named at their first
+// byte. Read lossily such a sequence is U+FFFD, whose own bytes EF BF BD share a prefix with a sequence led by EF, which is why
+// the first byte is found by the grammar and not by where a read-back differs (FORMAT.md 1, D45's addendum)
 function badUtf8(buf) {
-  const back = Buffer.from(buf.toString('utf8'), 'utf8');
-  let i = 0; while (i < buf.length && i < back.length && buf[i] === back[i]) i++;
-  if (i === buf.length && i === back.length) return null;
-  let line = 1; for (let j = 0; j < i; j++) if (buf[j] === 0x0A) line++;
-  return { byte: i + 1, line };
+  let i = 0, line = 1;
+  while (i < buf.length) {
+    const b = buf[i]; let n, lo = 0x80, hi = 0xBF;
+    if (b < 0x80) { if (b === 0x0A) line++; i++; continue; }
+    else if (b >= 0xC2 && b <= 0xDF) n = 1;
+    else if (b >= 0xE0 && b <= 0xEF) { n = 2; if (b === 0xE0) lo = 0xA0; else if (b === 0xED) hi = 0x9F; }
+    else if (b >= 0xF0 && b <= 0xF4) { n = 3; if (b === 0xF0) lo = 0x90; else if (b === 0xF4) hi = 0x8F; }
+    else return { byte: i + 1, line };
+    if (i + n >= buf.length || buf[i + 1] < lo || buf[i + 1] > hi) return { byte: i + 1, line };
+    for (let k = 2; k <= n; k++) if (buf[i + k] < 0x80 || buf[i + k] > 0xBF) return { byte: i + 1, line };
+    i += n + 1;
+  }
+  return null;
 }
 function exists(p) { try { fs.accessSync(p); return true; } catch (e) { return false; } }
 function isFile(p) { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }

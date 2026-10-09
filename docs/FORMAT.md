@@ -39,8 +39,10 @@ them, bold, or the id alone at a line's start (`## R1.`, `###R1.`, `**R1.**`,
 text: one that a UTF-16 byte order mark opens reads as no entries at all, and
 one that holds a NUL byte is not text (1), so check 2 fails either at its first
 line (D45); one that holds a byte beginning no UTF-8 character fails it at that
-byte's line, and `append` refuses to write it, since read as U+FFFD the byte would
-be written back as three others, in a line the write does not touch (D45's
+byte's line, naming the byte — the first of a sequence the file ends inside, that
+a byte outside the continuation range interrupts, or that is overlong, a surrogate
+or past U+10FFFF — and `append` refuses to write it, since read as U+FFFD the byte
+would be written back as three others, in a line the write does not touch (D45's
 addendum). A file
 with no ledger above it is **ungoverned** and is skipped by every subcommand,
 before it is read: the walk looks at each directory's ledger once, and a file
