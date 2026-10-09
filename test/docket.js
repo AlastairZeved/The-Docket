@@ -6121,12 +6121,16 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
     const said = { verdict: /^- \*\*The maker can record a verdict \(D11, D40\)\.\*\*[\s\S]*?not cryptography/m.test(kl),
       prose: /^- \*\*The judge is a model reading prose \(D12, D37\)\.\*\*[\s\S]*?cannot rewrite one[\s\S]*?files you can read\. That is the whole defence against drift\./m.test(kl),
       cost: new RegExp('^- \\*\\*Cost \\(D10, D11\\)\\.\\*\\* One judge per stop whose diff touches a governed file[\\s\\S]*?at most ' + cap + ' judged blocks per session between passes', 'm').test(kl),
-      accuracy: /the judge's accuracy is\s+that model's, on that host: every result under Measured Results states the host's version and the date/.test(kl),
+      accuracy: /the judge's accuracy is\s+that model's, on that host: every result under Measured Results states the date that produced it, and the latest\s+records, the judge's and the install's, the host's version too\./.test(kl),
       cap: new RegExp('A judge blocks a session at most ' + cap + '\\s+times between passes;[\\s\\S]{0,120}?blocked one final time to hand you the residue').test(readme),
       who: /\*\*Who it is for:\*\* a solo builder[\s\S]*?\*\*Not for:\*\*\s+enterprises, throwaway projects, or anyone who will not open the ledger twice\./.test(readme),
       write: !/can write nothing/.test(readme) && /allowed to read files and to run the docket's core, which records its verdict \(D37\)/.test(readme),
       vendor: /`\/constitute` vendors the witness[\s\S]{0,80}?and so does `docket vendor \.` for a ledger\s+of your own \(D9\)/.test(readme) };
     ok('the README states the four limits — the maker can record a verdict, the judge a model reading prose that cites and cannot rewrite, the cost per stop with the cap the core counts, accuracy the host’s with host and date stated — the cap with the final block that hands over the residue, who it is for and not, the judge’s one write, and the witness vendored on both routes', Number.isInteger(cap) && Object.values(said).every(Boolean), JSON.stringify(said)); }
+  // …and the limit's own claim about the results is read against them: a date in every bullet, the host's version in the two it names
+  { const mr = readme.slice(readme.indexOf('\n## Measured Results\n'), readme.indexOf('\n## Known Limits\n')), mb = mr.split(/\n- /).slice(1);
+    const dated = mb.filter(b => /(?<![\d.-])\d{4}-\d\d-\d\d(?![\d.-])/.test(b)), versioned = mb.filter(b => /\bversion \d+\.\d+\.\d+\b/.test(b));
+    ok('…and what the accuracy limit says of the results holds of them: every bullet under Measured Results states the date that produced it, and the judge’s and the fresh install’s state the host’s version', mb.length >= 5 && dated.length === mb.length && versioned.length >= 2 && versioned.some(b => /^\*\*The judge at the stop/.test(b)) && versioned.some(b => /^\*\*The fresh install/.test(b)), 'bullets ' + mb.length + ', dated ' + dated.length + ', versioned ' + versioned.length + ': ' + JSON.stringify(mb.map(b => b.slice(0, 36)))); }
   // a repository is named by a link, a clone or a marketplace's source; every link is held to the four kinds the README makes —
   // this repository, its owner's account, a static badge, Node's site — so a host no list could name is caught as well
   const OWN = /^(?:https:\/\/github\.com\/)?AlastairZeved\/The-Docket(?:\.git)?$/;

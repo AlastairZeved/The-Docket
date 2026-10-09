@@ -300,8 +300,8 @@ fixture, with no model named in the run. A result holds for that host, that date
   it, the clean rename passed, and the amendment halted at its confirm block with the ledger unchanged. Every judge
   recorded at its first attempt, and each ended between 23 and 35 seconds after it started. The first record, of
   2026-09-24, held at four stops of five.
-- **The stale reading (D25).** In that record's two further runs of the stale case, it met its outcome in 1 of 2; in
-  each of the two runs recorded before it, in 2 of 2.
+- **The stale reading (D25).** In that record's two further runs of the stale case, on 2026-10-02, it met its outcome in
+  1 of 2; in each of the two runs recorded before it, in 2 of 2.
 - **The intake (D18).** One run of each measure beside an empty project, 2026-09-23: told the reader was a general
   audience, `/constitute` refused it and wrote nothing, one of one; given four acceptable answers, it printed
   CONSTITUTION — PLEASE CONFIRM and wrote nothing, one of one.
@@ -341,9 +341,9 @@ fixture, with no model named in the run. A result holds for that host, that date
 - **A stop can take minutes (D42).** The judge is bounded at seven hundred seconds, and the stop hook's timeout is
   seven hundred and thirty.
 - **The judge runs on the host's default model (D13, D43).** The binding names no model, so the judge's accuracy is
-  that model's, on that host: every result under Measured Results states the host's version and the date that
-  produced it. The judge most likely shares the maker's model, and its blind spots; a second model is yours to set in
-  the host.
+  that model's, on that host: every result under Measured Results states the date that produced it, and the latest
+  records, the judge's and the install's, the host's version too. The judge most likely shares the maker's model, and
+  its blind spots; a second model is yours to set in the host.
 - **What the calibration covers (D25).** Six planted cases on one fixture, read through the code pack and the
   decisions pack. The design and prose packs' features are read by the judge and driven by no planted case.
 - **The hook's effect is not shown (D17, D49).** No measurement of the hook has had a control; it informs and never
