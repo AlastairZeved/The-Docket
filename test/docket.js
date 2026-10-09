@@ -1508,7 +1508,7 @@ const SEC = String.fromCharCode(0xa7);
     const dd = tempRepo(), fd = path.join(dd, 'test', 'fixture'), led = path.join(fd, 'DECISIONS.md'), at = { cwd: fd, env: { DOCKET_TODAY: '2026-10-01' } };
     const args = ['--title', 'The toolbar collapses on narrow screens', '--issue', '94', '--principle', 'Zero cognitive tax', '--edge', 'extends R6', '--body', 'Icons below 480px. Reason: the labels do not fit.'];
     const l0 = read(led), dry = docket(['append'].concat(args, ['--dry-run']), at), l1 = read(led), wet = docket(['append'].concat(args), at), l2 = read(led);
-    ok('append --dry-run prints the entry the write then appends, byte for byte, and writes nothing (FORMAT.md 11, D8’s addendum)', dry.code === 0 && l1 === l0 && wet.code === 0 && l2.startsWith(l0) && l2.slice(l0.length).trim() === dry.out.trim() && wet.out.startsWith(dry.out.trimEnd() + '\n'), JSON.stringify(dry.out) + ' | ' + JSON.stringify(l2.slice(l0.length)));
+    ok('append --dry-run prints the entry the write then appends, byte for byte — the ledger gains one blank line and that print, nothing else — and writes nothing (FORMAT.md 11, D8’s addendum)', dry.code === 0 && l1 === l0 && wet.code === 0 && l2 === l0 + '\n' + dry.out && wet.out.startsWith(dry.out), JSON.stringify(dry.out) + ' | ' + JSON.stringify(l2.slice(l0.length)));
     const ad = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses', '--dry-run'], at), l3 = read(led), aw = docket(['append', '--addendum', 'R6', '--text', 'the toolbar collapses'], at);
     ok('…and an addendum: the dated line the write then puts under its entry, and nothing written before the word', ad.code === 0 && l3 === l2 && ad.out.trim() === '> Addendum 2026-10-01: the toolbar collapses' && aw.code === 0 && read(led).includes('\n' + ad.out.trim() + '\n'), ad.out + aw.out + aw.err);
     fs.appendFileSync(path.join(fd, 'app.js'), '// see ' + SEC + '4\n');   // a fourth bare cite: the baseline the write would make is not the one the ledger holds
@@ -2008,7 +2008,7 @@ const SEC = String.fromCharCode(0xa7);
   const r8 = entryOf(cur, 'R8');
   ok('the current fixture ledger holds R8, the entry v1 is said to predate', !!r8, 'R8 missing');
   const derived = cur.replace(r8, '').split('\n').filter(l => !/^> Addendum /.test(l)).join('\n');
-  ok('history/DECISIONS.v1.md is the current ledger minus R8 and the addendum, byte for byte, and nothing else drifts', derived.trim() === v1.trim(), 'first difference: ' + firstDiff(derived.trim(), v1.trim()));
+  ok('history/DECISIONS.v1.md is the current ledger minus R8 and the addendum, byte for byte, and nothing else drifts', derived === v1, 'first difference: ' + firstDiff(derived, v1));
   // v2 differs from current by exactly one line, and it is a heading.
   const cl = cur.trim().split('\n'), v2l = v2.trim().split('\n');
   const diffAt = cl.length === v2l.length ? cl.map((l, i) => l === v2l[i] ? -1 : i).filter(i => i >= 0) : null;
