@@ -1309,7 +1309,7 @@ function bodyOnlyAppended(oldLines, newLines) {
 }
 // The committed ledger for check 7: HEAD's, or HEAD's parent's when the ledger in the working tree already
 // equals HEAD's, so a check run on a fresh commit (as in CI) judges the commit it was given; null when no
-// such version exists, and then the check is skipped.
+// such version exists, and then the check is skipped — or none can be read, a repository git will not read, and then the check is refused (D53).
 function normEol(s) { return s.replace(/\r\n/g, '\n'); }
 // DOCKET_BASE, when the environment names a revision (CI names the commit before the push), is the version compared
 // with: an amendment in the middle of a pushed range is then seen, where a tip-only comparison would miss it. Unset
@@ -1338,6 +1338,11 @@ function committedText(root, filePath, workingText, note) {
   const p = rel(groot, filePath);
   const run = sh('git', ['--version'], groot);                         // a git that never started holds no version: said as that, not as a ledger never committed
   if (run.error) { if (note) note('skipped — git could not be run (' + run.error + '), so no committed version of the ledger was read to compare', true); return null; }
+  // a repository git will not read — its ownership, its config — holds a committed ledger the check cannot read: `git show` fails
+  // there as it fails for a file no commit holds, and read as that, the check said the ledger was not yet committed and passed an
+  // entry rewritten there. Refused, as the gate is (FORMAT.md 16, D53): a skip is said only where there is nothing to compare
+  const unread = unreadRepo(path.dirname(filePath));
+  if (unread) throw Object.assign(new Error('git will not read the repository at ' + groot + ' — ' + unread + '; check 7 cannot read the committed ledger to compare, and a check that cannot run is refused, not skipped (FORMAT.md 13, 16, D53)'), { refusal: true });
   const { base, refused } = baseRevision();
   let why = refused, self = false;                                     // why a named base was not the one compared with: said beside what was
   // a base that names HEAD itself would compare a clean commit with itself and witness nothing: read as unset, so the parent rule

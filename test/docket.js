@@ -5101,6 +5101,16 @@ const SEC = String.fromCharCode(0xa7);
     const nodeOnly = tmpDir('nogit-'); fs.symlinkSync(process.execPath, path.join(nodeOnly, 'node'));   // a PATH that holds node and no git
     const ngg = docket(['gate', '--session', 'ng'], { cwd: ng, env: { PATH: nodeOnly, CLAUDE_PROJECT_DIR: '' } }), ngc = docket(['check'], { cwd: ng, env: { PATH: nodeOnly } });
     ok('…and when git cannot be run the gate refuses, exit 2, naming the error, and check 7 is skipped saying so — not that the ledger is uncommitted, and no "undefined" (FORMAT.md 13, 16)', ngg.code === 2 && /^the gate cannot run git \(ENOENT\) at .*: it reads no diff it cannot read whole \(FORMAT\.md 16\)$/m.test(ngg.err) && !/undefined/.test(ngg.err) && /check 7 skipped — git could not be run \(ENOENT\), so no committed version of the ledger was read to compare/.test(ngc.out) && !/not yet committed/.test(ngc.out), [ngg.code, ngg.err, ngc.out.slice(0, 600)].join(' | '));
+    // a repository git will not read holds a committed ledger the check cannot read: refused, not skipped — check, status, the
+    // witness run bare and append before it writes, as the gate is; the same tree with no repository is still a said skip (D53)
+    const ur = tempRepo(); fs.appendFileSync(path.join(ur, '.git', 'config'), '\n[core\n');
+    const urLed = path.join(ur, 'test', 'fixture', 'DECISIONS.md'); fs.writeFileSync(urLed, read(urLed).replace('\n### R2. ', '\n### R2. Rewritten: '));
+    const urEnv = { CLAUDE_PROJECT_DIR: '' }, urAt = path.join(ur, 'test', 'fixture'), urBefore = read(urLed);
+    const urc = docket(['check'], { cwd: urAt, env: urEnv }), urj = docket(['check', '--json'], { cwd: urAt, env: urEnv }), urs = docket(['status'], { cwd: urAt, env: urEnv }), urw = docket([], { cwd: urAt, env: urEnv }), ura = docket(['append', '--addendum', 'R1', '--text', 'x'], { cwd: urAt, env: urEnv });
+    const urRefused = [urc, urj, urs, urw, ura].every(r => r.code === 2 && /^git will not read the repository at .* — fatal: .*config.*; check 7 cannot read the committed ledger to compare, and a check that cannot run is refused, not skipped \(FORMAT\.md 13, 16, D53\)$/m.test(r.err) && !/check 7 skipped|check: ok|not yet committed/.test(r.out + r.err));
+    fs.rmSync(path.join(ur, '.git'), { recursive: true, force: true });
+    const urn = docket(['check'], { cwd: urAt, env: urEnv });
+    ok('…and a repository git will not read, its committed ledger holding an entry rewritten, is refused by check — exit 2, git’s own line, no skip said and no "check: ok" — and by status, the witness run bare and append before it writes, the ledger left as it was, where check had said the ledger was not yet committed and passed the rewrite; the same tree with no repository is a said skip, exit 0 (FORMAT.md 13, 16, D53)', urRefused && read(urLed) === urBefore && urn.code === 0 && /check 7 skipped — no earlier version to compare/.test(urn.out), [urc.code, urc.out.slice(0, 200), urc.err.slice(0, 300), urs.code, urw.code, ura.code, urn.code, urn.out.slice(0, 200)].join(' | '));
   }
   {
     const d = tempRepo(x => fs.appendFileSync(path.join(x, 'test', 'fixture', 'DECISIONS.md'), '\n### R9. The Lot Keeps R5 In View (issue #9)\nPrinciple: Capture precedes structure.\nA capital mid-sentence Extends R1 here. Two words: In part reverses R1. Keeps R2 whole. Reason: r.\n'));
