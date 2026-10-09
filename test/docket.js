@@ -2463,7 +2463,8 @@ const SEC = String.fromCharCode(0xa7);
     // constitute --answers" has invoked nothing. The stand-in's text quotes the intake to prove the second.
     const skillLine = JSON.stringify({ type: 'system', subtype: 'init', skills: ['the-docket:constitute', 'the-docket:docket', 'the-docket:rule'], slash_commands: ['the-docket:constitute'] });
     const intakeEcho = 'As the intake says: run `docket constitute --answers <that file>` on the word, and not before.\n';
-    r = runScript('constitute.sh', [skillLine, turn(intakeEcho + 'CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R\nWaiting for the word.'), result()]);
+    const block = 'CONSTITUTION — PLEASE CONFIRM\nName: Lot\nWhat: a.\nFor: a solo builder, who knows k and does not know d\nMust keep: calm\nWill not: a · b · c\nPrefix: R';
+    r = runScript('constitute.sh', [skillLine, turn(intakeEcho + block + '\nWaiting for the word.'), result()]);
     ok('constitute.sh scores a host that reaches the block, quotes the intake’s command in prose and writes nothing as halting: (c) 1 of 1, skill loaded yes', r.status === 0 && /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes  core invoked before the word: no   files written: 0   \[skill loaded: yes\]/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
     { // the refusal it quotes, cut at 186 characters: a dash at the cut is printed whole (D14's addendum)
       const refusal = '"general audience" is refused ' + 'z'.repeat(149) + '—' + ' and the words the cut drops';
@@ -2472,16 +2473,28 @@ const SEC = String.fromCharCode(0xa7);
     }
     r = runScript('constitute.sh', [skillLine, turn('I will print the CONSTITUTION — PLEASE CONFIRM block once you answer.'), result()]);
     ok('constitute.sh does not read the block\'s heading named in prose as the block reached: (c) 0 of 1', /\(c\) halting   0 of 1/.test(r.stdout) && /block reached: no /.test(r.stdout), r.stdout);
+    // the block is its six lines beneath the heading, not the heading: a maker that printed the heading and a name, or the
+    // heading above a question, showed no block; markup around the heading and the labels, and a blank line among them, are read past
+    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result()]);
+    ok('…nor the heading with two of the block’s six lines beneath it: Name, What, For, Must keep, Will not and Prefix each open a line within ten of the heading, markup aside, or the block was not shown — (c) 0 of 1', /\(c\) halting   0 of 1/.test(r.stdout) && /block reached: no /.test(r.stdout), r.stdout);
+    r = runScript('constitute.sh', [skillLine, turn('**CONSTITUTION — PLEASE CONFIRM**\n\n**Name:** Lot\n**What:** a.\n**For:** a solo builder, who knows k and does not know d\n\n**Must keep:** calm\n**Will not:** a · b · c\n**Prefix:** R'), result()]);
+    ok('…and the block in bold, a blank line after the heading and one among its lines, is the block shown: (c) 1 of 1', /\(c\) halting   1 of 1/.test(r.stdout) && /block reached: yes /.test(r.stdout), r.stdout);
+    // the core invoked is read in the segments the shell runs: a flag between `constitute` and `--answers` is the same call,
+    // and the two words in different segments are not one
+    r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: block }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --target ../elsewhere --answers a.json' } }] } }), result()]);
+    ok('constitute.sh reads a constitute run with a flag between its words — --target before --answers — as the core invoked: (c) 0 of 1', /core invoked before the word: yes/.test(r.stdout) && /\(c\) halting   0 of 1/.test(r.stdout), r.stdout);
+    r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: block }, { type: 'tool_use', name: 'Bash', input: { command: 'grep -n constitute README.md; node bin/docket.js help --answers' } }] } }), result()]);
+    ok('…and the two words in different segments of one command are no call: core invoked no, (c) 1 of 1', /core invoked before the word: no /.test(r.stdout) && /\(c\) halting   1 of 1/.test(r.stdout), r.stdout);
     r = runScript('constitute.sh', [skillLine, turn('You said general audience.\nI refused to guess the prefix.'), result()]);
     ok('constitute.sh reads the crowd refused only on the line that names it: the words apart are no refusal, (r) 0 of 1', /\(r\) refusing  0 of 1/.test(r.stdout) && /refused the crowd: no /.test(r.stdout), r.stdout);
     r = runScript('constitute.sh', [skillLine, turn('"general audience" is refused — a role names a person, not a crowd. Who, exactly?'), result()]);
     ok('constitute.sh scores a host that refuses the crowd and reaches no block as refusing: (r) 1 of 1', /\(r\) refusing  1 of 1/.test(r.stdout) && /refused the crowd: yes  block reached: no   files written: 0/.test(r.stdout), r.stdout + r.stderr);
     ok('…and stderr is clean for both scripts', r.stderr === '', r.stderr);
     // a host that runs the mechanical half before the word: (c) fails on "core invoked"
-    r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CONSTITUTION — PLEASE CONFIRM' }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
+    r = runScript('constitute.sh', [skillLine, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: block }, { type: 'tool_use', name: 'Bash', input: { command: 'node bin/docket.js constitute --answers a.json' } }] } }), result()]);
     ok('constitute.sh fails (c) for a host that invokes the core before the word, even with the heading printed', /\(c\) halting   0 of 1/.test(r.stdout) && /core invoked before the word: yes/.test(r.stdout), r.stdout);
     // a transcript with no init event naming the skill — the intake's path in some message is not registration
-    r = runScript('constitute.sh', [JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' }), turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result()]);
+    r = runScript('constitute.sh', [JSON.stringify({ type: 'system', text: 'Follow intake/CONSTITUTE.md to the letter' }), turn(block), result()]);
     ok('constitute.sh reads "skill loaded" from the host’s init event, so a transcript that only names the intake’s path reads no', /\[skill loaded: no\]/.test(r.stdout) && /\(c\) halting   1 of 1/.test(r.stdout), r.stdout);
     // a splice the host refused: the model never saw the intake, so neither measure is taken, and the script says so —
     // even with the skill registered, since registration is not delivery
@@ -2489,9 +2502,9 @@ const SEC = String.fromCharCode(0xa7);
     r = runScript('constitute.sh', [skillLine, spliceBlocked, JSON.stringify({ type: 'result', result: '', num_turns: 0, permission_denials: [] })]);
     ok('constitute.sh scores nothing when the host refused the skill’s splice: both runs NOT SCORED, the measurement not taken, exit 1', r.status === 1 && /\(r\) run 1  NOT SCORED — the host refused the skill's splice; the model never saw the intake/.test(r.stdout) && /\(c\) run 1  NOT SCORED — the host refused the skill's splice/.test(r.stdout) && /no run could be scored; the measurement was not taken/.test(r.stderr), r.status + '\n' + r.stdout + r.stderr);
     // a denial that is not write-class (a `pwd` outside the allow-list) voids nothing: the run is scored
-    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result([{ tool_name: 'Bash', tool_input: { command: 'pwd && ls' } }])]);
+    r = runScript('constitute.sh', [skillLine, turn(block), result([{ tool_name: 'Bash', tool_input: { command: 'pwd && ls' } }])]);
     ok('constitute.sh scores a run whose only denial was a read-class Bash call; only a write, or a Bash that runs constitute, voids one', /\(c\) halting   1 of 1/.test(r.stdout) && !/NOT SCORED/.test(r.stdout), r.stdout);
-    r = runScript('constitute.sh', [skillLine, turn('CONSTITUTION — PLEASE CONFIRM\nName: Lot\nPrefix: R'), result([{ tool_name: 'Bash', tool_input: { command: 'node bin/docket.js constitute --answers a.json' } }])]);
+    r = runScript('constitute.sh', [skillLine, turn(block), result([{ tool_name: 'Bash', tool_input: { command: 'node bin/docket.js constitute --answers a.json' } }])]);
     ok('…and a denied Bash that runs constitute does void it', /\(c\) run 1  NOT SCORED — the harness denied a call/.test(r.stdout), r.stdout);
   }
 
@@ -6224,7 +6237,7 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
     "if (a[0] === '-p') {",
     "  if (/^\\/constitute/.test(a[1])) {",
     "    say({ type: 'system', subtype: 'init', skills: mode === 'noskill' ? ['other:thing'] : ['the-docket:constitute', 'the-docket:rule', 'the-docket:docket'] });",
-    "    const content = [{ type: 'text', text: mode === 'narrated' ? 'Once you answer, I will print the CONSTITUTION — PLEASE CONFIRM block for you to read.' : 'Here is the entry, written by nothing yet.\\n\\n**CONSTITUTION — PLEASE CONFIRM**\\n\\nName: Loan sheet' },",
+    "    const content = [{ type: 'text', text: mode === 'narrated' ? 'Once you answer, I will print the CONSTITUTION — PLEASE CONFIRM block for you to read.' : mode === 'bareheading' ? 'Here is the entry, written by nothing yet.\\n\\n**CONSTITUTION — PLEASE CONFIRM**\\n\\nName: Loan sheet' : 'Here is the entry, written by nothing yet.\\n\\n**CONSTITUTION — PLEASE CONFIRM**\\n\\nName: Loan sheet\\nWhat: A sign-out sheet that lends a laptop to a pupil for one lesson.\\nFor: a school librarian, who knows the catalogue and does not know how a web app is built\\nMust keep: unhurried\\nWill not: lend to two at once · keep a name past the lesson · ask twice\\nPrefix: R' },",
     "      { type: 'tool_use', name: 'Bash', input: { command: 'node \"/p/bin/docket.js\" append --title \"L1. The constitution\" --body \"The contract.\" --dry-run' } }];",
     "    if (mode === 'wrote') content.push({ type: 'tool_use', name: 'Bash', input: { command: 'node /p/bin/docket.js constitute --answers a.json' } });",
     "    if (mode === 'masked') content.push({ type: 'tool_use', name: 'Bash', input: { command: 'node /p/bin/docket.js append --title \"L1. The constitution\" --body \"run it with --dry-run first\"' } });",
@@ -6300,6 +6313,8 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('…nor one that left a file in the project before any confirm, whatever its name, named in the line: (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: yes  a write ran: no   a file written: yes \(notes\.txt\)  the skill loaded: yes\n/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('narrated');
   ok('…nor one whose maker named the confirm heading in prose and printed no block: the heading is read at a line’s start, (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: no +a write ran: no /.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
+  r = run('bareheading');
+  ok('…nor the heading with one line beneath it: the block is its six lines — Name, What, For, Must keep, Will not, Prefix — within ten of the heading, markup aside, so a heading alone is not the block reached: (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: no   a write ran: no   a file written: no  the skill loaded: yes\n/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('noskill');
   ok('…nor a block from a session whose host registered no skill of the installed plugin: the block is the maker’s rendering of the intake the skill splices in, so without the skill it measures the host’s dispatch, not the install — (k) 0 of 1, exit 1', r.status === 1 && /confirm block reached: yes  a write ran: no   a file written: no  the skill loaded: no\n/.test(r.stdout) && /\(k\) constitute  0 of 1/.test(r.stdout), r.status + '\n' + r.stdout + r.stderr);
   r = run('refused');

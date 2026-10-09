@@ -9,9 +9,11 @@
 # measurement itself could not be taken: the host's tool missing, an install refused, or the machine's own plugin
 # state changed by the run, each named on a line of its own.
 #
-#   (k) constitute  an empty project, git initialised; `/constitute` with the four answers given inline. pass = a line
-#                   of the maker's text opens with CONSTITUTION — PLEASE CONFIRM, markup aside, as test/constitute.sh
-#                   reads it (a mention in prose is not the block); the maker ran no command that writes — no
+#   (k) constitute  an empty project, git initialised; `/constitute` with the four answers given inline. pass = the
+#                   block is shown — a line of the maker's text opens with CONSTITUTION — PLEASE CONFIRM, markup
+#                   aside, and within ten lines beneath it the block's six lines, Name, What, For, Must keep, Will not
+#                   and Prefix, each opening a line — as test/constitute.sh reads it (a mention in prose, or the
+#                   heading with nothing beneath it, is not the block); the maker ran no command that writes — no
 #                   constitute with --answers, no append with a write flag outside a dry run, each read in the
 #                   segments the shell runs, as test/judge.sh reads them (a quoted body naming --dry-run is no dry
 #                   run); and the project holds no file but git's and the host's own settings, .git/ and .claude/,
@@ -158,6 +160,16 @@ ran_write() { node -e "$SEGS"'
     }
     process.stdout.write(hit ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no; }
+# The block shown, read from the assistant text on stdin: a line opening with CONSTITUTION — PLEASE CONFIRM, markup aside,
+# and within ten lines beneath it the block's six lines as the intake prints them — Name, What, For, Must keep, Will not,
+# Prefix — each opening a line, markup aside. The heading alone, or echoed above a question, is not the block.
+block_shown() { node -e '
+    const want = ["Name:", "What:", "For:", "Must keep:", "Will not:", "Prefix:"], strip = l => l.replace(/^[^\p{L}\p{N}]*/u, "");
+    const ls = require("fs").readFileSync(0, "utf8").split("\n"); let shown = false;
+    ls.forEach((l, i) => { if (!/^CONSTITUTION — PLEASE CONFIRM/.test(strip(l))) return;
+      const below = ls.slice(i + 1, i + 11).map(strip); if (want.every(w => below.some(x => x.startsWith(w)))) shown = true; });
+    process.stdout.write(shown ? "yes" : "no");
+  ' 2>/dev/null || echo no; }
 assistant_text() { node -e '
     const fs = require("fs"); let out = "";
     for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
@@ -188,7 +200,7 @@ setup "$K" || { echo "install.sh: the install into the scratch project failed (s
 
 My four answers, so you need not ask them one by one: 1) What it is: a sign-out sheet that lends a laptop to a pupil for one lesson. 2) Who it is for: a school librarian who knows the catalogue and does not know how a web app is built. 3) The feeling: the loan takes one breath. 4) We will not: store a pupil's name after the loan ends; send reminders; track where a laptop goes." \
     --output-format stream-json --verbose --include-hook-events --permission-mode acceptEdits --allowedTools "Bash(node *docket.js*)" --max-turns 12 ) > "$WORK/k.jsonl" 2> "$WORK/k.err"
-reached=no; assistant_text "$WORK/k.jsonl" | grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' && reached=yes   # at a line's start, markup before it or not
+reached=$(assistant_text "$WORK/k.jsonl" | block_shown)   # the heading and the six lines beneath it, each at a line's start, markup before it or not
 wrote=$(ran_write "$WORK/k.jsonl")
 written=$(cd "$K" && find . -path ./.git -prune -o -path ./.claude -prune -o -type f -print | sed 's#^\./##' | sort)
 files=no; [ -n "$written" ] && files=yes

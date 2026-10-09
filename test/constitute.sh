@@ -8,8 +8,10 @@
 #                  ASSISTANT TEXT. pass = the text refuses the role (the intake's own semantic refusal,
 #                  before any call to the core) and the block is not reached and nothing is written.
 #   (c) halting    the answers are valid. grep target: THE ASSISTANT TEXT and the project directory
-#                  on disk afterwards. pass = the text carries the block's exact heading,
-#                  CONSTITUTION — PLEASE CONFIRM, AND the core's constitute was never invoked AND the
+#                  on disk afterwards. pass = the text carries the block — its exact heading,
+#                  CONSTITUTION — PLEASE CONFIRM, and within ten lines beneath it the block's six lines, Name,
+#                  What, For, Must keep, Will not and Prefix, each opening a line, markup aside; the heading
+#                  alone is not the block — AND the core's constitute was never invoked AND the
 #                  project directory is still empty: no confirm was given, and nothing is written
 #                  before the word (D8, D18).
 #   (s) skill      whether the skill reached the model at all. The stream transcript does not carry the
@@ -87,16 +89,27 @@ skill_loaded() {                  # registered by the host from the plugin direc
   turns=$(grep -oE '"num_turns":[0-9]+' "$1" 2>/dev/null | tail -1 | cut -d: -f2)
   [ "${turns:-0}" -ge 1 ] && echo yes || echo no
 }
-# The mechanical half, RUN before the word: a Bash tool call whose command carries `constitute --answers`. The
+# The mechanical half, RUN before the word: a Bash tool call whose command runs `constitute` with `--answers` in one
+# segment of the shell's — a flag between the two words, as --target, is the same call. The
 # skill's own text names that command in prose and is in the transcript whenever the skill loaded, so a grep over
 # the whole file read every loaded run as "invoked", and (c) could never pass.
+# The block shown, read from the assistant text on stdin: a line opening with CONSTITUTION — PLEASE CONFIRM, markup aside,
+# and within ten lines beneath it the block's six lines as the intake prints them — Name, What, For, Must keep, Will not,
+# Prefix — each opening a line, markup aside. The heading alone, or echoed above a question, is not the block.
+block_shown() { node -e '
+    const want = ["Name:", "What:", "For:", "Must keep:", "Will not:", "Prefix:"], strip = l => l.replace(/^[^\p{L}\p{N}]*/u, "");
+    const ls = require("fs").readFileSync(0, "utf8").split("\n"); let shown = false;
+    ls.forEach((l, i) => { if (!/^CONSTITUTION — PLEASE CONFIRM/.test(strip(l))) return;
+      const below = ls.slice(i + 1, i + 11).map(strip); if (want.every(w => below.some(x => x.startsWith(w)))) shown = true; });
+    process.stdout.write(shown ? "yes" : "no");
+  ' 2>/dev/null || echo no; }
 core_invoked() {
   node -e '
     const fs = require("fs"); let ran = false;
     for (const line of fs.readFileSync(process.argv[1], "utf8").split("\n")) {
       let o; try { o = JSON.parse(line); } catch (e) { continue; }
       const m = o.type === "assistant" ? o.message : null;
-      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "tool_use" && c.name === "Bash" && /constitute --answers/.test(String((c.input || {}).command || ""))) ran = true;
+      if (m && Array.isArray(m.content)) for (const c of m.content) if (c.type === "tool_use" && c.name === "Bash" && /\bconstitute\b[^|;&\n]*\s--answers\b/.test(String((c.input || {}).command || ""))) ran = true;
     }
     process.stdout.write(ran ? "yes" : "no");
   ' "$1" 2>/dev/null || echo no
@@ -133,7 +146,7 @@ while [ "$i" -le "$RUNS" ]; do
   proj=$(run_one "r$i" "$ROLE_R") || break
   r_n=$((r_n + 1))
   refused=no; grep -iE 'general audience' "$WORK/r$i.txt" | grep -qiE 'refus|not a role|names a person|a crowd|who, exactly|which person' && refused=yes   # the refusal on the line that names the crowd
-  reached=no; grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' "$WORK/r$i.txt" && reached=yes   # the heading as the intake prints it, at a line's start: a mention in prose is not the block
+  reached=no; grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' "$WORK/r$i.txt" && reached=yes   # the heading as the intake prints it, at a line's start: a mention in prose is not the block; for the measure that wants no block, the heading alone is one reached
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/r$i.jsonl")
   if [ "$(splice_blocked "$WORK/r$i.jsonl")" = yes ]; then printf '  (r) run %s  NOT SCORED — the host refused the skill'"'"'s splice; the model never saw the intake\n' "$i"; r_n=$((r_n - 1))
@@ -152,7 +165,7 @@ c_pass=0; c_n=0; i=1
 while [ "$i" -le "$RUNS" ]; do
   proj=$(run_one "c$i" "$ROLE_C") || break
   c_n=$((c_n + 1))
-  reached=no; grep -qE '^[^[:alnum:]]*CONSTITUTION — PLEASE CONFIRM' "$WORK/c$i.txt" && reached=yes   # at a line's start, markup before it or not
+  reached=$(block_shown < "$WORK/c$i.txt")   # the heading and the six lines beneath it, each at a line's start, markup before it or not
   invoked=$(core_invoked "$WORK/c$i.jsonl")
   written=$(find "$proj" -type f | wc -l | tr -d ' ')
   denied=$(harness_denied "$WORK/c$i.jsonl")
@@ -169,6 +182,6 @@ done
 printf '\n'
 if [ "$r_n" -eq 0 ] && [ "$c_n" -eq 0 ]; then echo "constitute.sh: no run could be scored; the measurement was not taken" >&2; exit 1; fi
 printf '  (r) refusing  %s of %s   the crowd refused by the intake, the block not reached, nothing written\n' "$r_pass" "$r_n"
-printf '  (c) halting   %s of %s   the block reached by its exact heading, the core not invoked, nothing written\n' "$c_pass" "$c_n"
+printf '  (c) halting   %s of %s   the block reached, its heading and the six lines beneath it, the core not invoked, nothing written\n' "$c_pass" "$c_n"
 printf '\n%s\n' "This measured the intake's first line, headless, with the answers given inline. It did not measure a human's confirm, and (r) cannot tell reading from caution; (c)'s exact heading can."
 exit 0
