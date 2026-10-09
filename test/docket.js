@@ -1135,7 +1135,7 @@ const SEC = String.fromCharCode(0xa7);
   ok('the witness at the root ends with its exact summary line: every ledger the walk finds (docs/, test/fixture/, and the entry-less templates/), no spec rows beside docs/DECISIONS.md', rootWitness.code === 0 && rootWitness.out.trimEnd().split('\n').pop() === 'witness: ok (' + ledgerSet.size + ' ledgers, 0 spec rows)', rootWitness.out);
   const rootIdx = JSON.parse(docket(['index']).out);
   const rootStatus = docket(['status']).out.split('\n');
-  ok('status at the root: the ledger line with its count, the last three rulings newest first, nothing cited nowhere, no addendum pending, a verdict line and the witness line — a clean docket', rootStatus[0] === 'Docket — docs/DECISIONS.md (' + rootIdx.rulings.length + ' rulings; prefix D)' && rootStatus[1] === 'Last rulings:' && rootStatus.slice(2, 5).map(l => l.trim().split(/\s+/)[0]).join(',') === rootIdx.rulings.slice(-3).reverse().map(x => x.id).join(',') && rootStatus[5] === 'Cited nowhere: none' && rootStatus[6] === 'Addenda pending: none' && /^Last verdict: /.test(rootStatus[7]) && /^Witness: ok \(\d+ ledgers\)$/.test(rootStatus[8]), rootStatus.join('\n'));
+  ok('status at the root: the ledger line with its count, the last three rulings newest first, nothing cited nowhere, no addendum pending, no verdict or a PASS with nothing located and no session surfaced, and the witness line — a clean docket', rootStatus[0] === 'Docket — docs/DECISIONS.md (' + rootIdx.rulings.length + ' rulings; prefix D)' && rootStatus[1] === 'Last rulings:' && rootStatus.slice(2, 5).map(l => l.trim().split(/\s+/)[0]).join(',') === rootIdx.rulings.slice(-3).reverse().map(x => x.id).join(',') && rootStatus[5] === 'Cited nowhere: none' && rootStatus[6] === 'Addenda pending: none' && (rootStatus[7] === 'Last verdict: none' || /^Last verdict: PASS at \S+ \(0 located failures\)$/.test(rootStatus[7])) && /^Witness: ok \(\d+ ledgers\)$/.test(rootStatus[8]), rootStatus.join('\n'));
   // governs R6 lists every fixture line that cites R6 outside code and nothing else: an independent count over the tracked fixture files
   const fixFiles = sh('git', ['ls-files', '-z', 'test/fixture'], ROOT).stdout.split('\0').filter(Boolean).filter(f => !/^DECISIONS.*\.md$/i.test(path.basename(f)));
   const want = [];
@@ -1864,14 +1864,16 @@ const SEC = String.fromCharCode(0xa7);
   r = docket(['append', '--title', 'Names one that is not there at all', '--issue', '92', '--principle', 'One', '--edge', 'supersedes r99', '--body', 'Reason: r.'], { cwd: ci });
   ok('…while a target no case can reach is still refused by name', r.code === 2 && /r99, which is not in/.test(r.err), r.code + '|' + r.err);
 
-  // "any verb" means the twelve, not the six a loop happened to try (FORMAT.md 6).
+  // "any verb" means the twelve, not the six a loop happened to try (FORMAT.md 6). Both sides are read in the record
+  // (status --json's pendingAddenda) and in the text, whose items sit on the lines under "Addenda pending:" — a
+  // pattern that stays on the heading's line reads neither side.
   for (const verb of ['overrides', 'retires', 're-tunes', 'replaces', 'corrects', 'revises']) {
     const d = ledgerRepo(HEAD3, ['// R1 here', 'const a = 1;']);
-    docket(['append', '--addendum', 'R1', '--text', 'one more thing'], { cwd: d });
-    const before = docket(['status'], { cwd: d });
-    docket(['append', '--title', 'It edges into R1', '--issue', '93', '--principle', 'One', '--edge', verb + ' R1', '--body', 'Reason: r.'], { cwd: d });
-    const after = docket(['status'], { cwd: d });
-    ok('status: "' + verb + '" closes a pending addendum too — any verb is the twelve, not the six', /Addenda pending/.test(before.out) && /R1/.test(before.out) && !/Addenda pending:[^\n]*R1/.test(after.out), before.out + '||' + after.out);
+    const ad = docket(['append', '--addendum', 'R1', '--text', 'one more thing'], { cwd: d });
+    const before = docket(['status'], { cwd: d }), beforeIds = JSON.parse(docket(['status', '--json'], { cwd: d }).out).pendingAddenda.map(a => a.id);
+    const ap = docket(['append', '--title', 'It edges into R1', '--issue', '93', '--principle', 'One', '--edge', verb + ' R1', '--body', 'Reason: r.'], { cwd: d });
+    const after = docket(['status'], { cwd: d }), afterIds = JSON.parse(docket(['status', '--json'], { cwd: d }).out).pendingAddenda.map(a => a.id);
+    ok('status: "' + verb + '" closes a pending addendum too — any verb is the twelve, not the six: before the edge R1 is pending, in the record and as the item line under "Addenda pending:"; after it, neither — "Addenda pending: none"', ad.code === 0 && ap.code === 0 && beforeIds.join(',') === 'R1' && /^Addenda pending:\n {2}R1 \(\d{4}-\d\d-\d\d\): one more thing$/m.test(before.out) && afterIds.length === 0 && /^Addenda pending: none$/m.test(after.out), ad.code + '|' + ap.code + '|' + beforeIds + '|' + afterIds + '||' + before.out + '||' + after.out);
   }
 
   // FORMAT.md 6, D21: which came first is read from history. The fixture's R7 partially reverses R6, so an addendum
@@ -3595,7 +3597,7 @@ const SEC = String.fromCharCode(0xa7);
   // published passages of the ledger that the ledger's own law keeps as written (D4)
   {
     const words = new RegExp(['the speci' + 'fication', '\\bthe pl' + 'an\\b', '\\bthe pha' + 'se (?:that|which|where)\\b', '\\bpha' + 'se [0-9]', 'readers who ' + 'were given',
-      '\\bspi' + 'ke\\b', 'muta' + 'nt', '\\bwa' + 've [0-9]', '\\bQA ba' + 'tch', 'SP' + 'EC\\.md', 'CLA' + 'IMS\\.md'].join('|'), 'i');
+      '\\bspi' + 'ke\\b', 'muta' + 'nt', '\\bpha' + 'se (?:one|two|three|four|five|six)\\b', '\\ble' + 'ns(?:es)?\\b', 'sabot' + 'eur', '\\bwa' + 've [0-9]', '\\bQA ba' + 'tch', 'SP' + 'EC\\.md', 'CLA' + 'IMS\\.md'].join('|'), 'i');
     // the three passages are held whole, each by the SHA-256 of its line: a word added to one, or a new line opening as one does,
     // is not the passage D4 keeps
     const kept = ['6085ceb4255704c8e331775fb0a4fd34f94cc80d01b846cba0b6b8152a893e69', '785371cc76f6d55a0a7df133e76729996e634681d329deea28e5fc66120ca7b1', '0c9e85edcceff6c67f16b4f2446fad73d2fa51ebd597ce3c1a3e741119f9f7ab'];
@@ -5580,10 +5582,10 @@ const SEC = String.fromCharCode(0xa7);
 {
   const mk = body => { const dir = tmpDir('docket-g-'); fs.writeFileSync(path.join(dir, 'DECISIONS.md'), body); fs.writeFileSync(path.join(dir, 'app.js'), '// R1\n'); sh('git', ['init', '-q', '-b', 'main'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], dir); sh('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'g'], dir); return dir; };
   const d = mk('# Rulings\n\nPrinciples:\n\n- **One.** a.\n\nAn entry is written so:\n\n```\n### X1. An example heading (issue #1)\n```\n\n## R. Rulings\n\n'
-    + '### R1. The first\nPrinciple: One.\nReason: r.\n\n## Phase two rulings\n\nThe rulings below came later.\n\n### Notes\n\n### R2. (issue #2)\nPrinciple: One.\nReason: r.\n');
+    + '### R1. The first\nPrinciple: One.\nReason: r.\n\n## Later rulings\n\nThe rulings below came later.\n\n### Notes\n\n### R2. (issue #2)\nPrinciple: One.\nReason: r.\n');
   const c = docket(['check'], { cwd: d });
   const info = c.out.split('\n').filter(l => /^info  /.test(l));
-  ok('check reads a `## ` and a `### ` line that are no section and no entry heading as the body of the entry above, and names each, and whose body it is, in an info line — no failure (FORMAT.md 2, 7, D3’s addendum)', c.code === 0 && info.some(l => /^info  DECISIONS\.md:19: "## Phase two rulings" is no section and no entry heading, so it ends nothing: it and the lines below it, to the next entry heading or section, are R1's body \(FORMAT\.md 2, 7\)$/.test(l)) && info.some(l => /^info  DECISIONS\.md:23: "### Notes" is no section/.test(l)), c.out);
+  ok('check reads a `## ` and a `### ` line that are no section and no entry heading as the body of the entry above, and names each, and whose body it is, in an info line — no failure (FORMAT.md 2, 7, D3’s addendum)', c.code === 0 && info.some(l => /^info  DECISIONS\.md:19: "## Later rulings" is no section and no entry heading, so it ends nothing: it and the lines below it, to the next entry heading or section, are R1's body \(FORMAT\.md 2, 7\)$/.test(l)) && info.some(l => /^info  DECISIONS\.md:23: "### Notes" is no section/.test(l)), c.out);
   ok('…names an entry heading inside a fenced block, which opens an entry all the same', info.some(l => /^info  DECISIONS\.md:10: X1's heading lies inside a fenced block and opens an entry all the same — a fence quotes cites, not headings; a heading shown as an example is indented four spaces \(FORMAT\.md 8\)$/.test(l)), c.out);
   const st = docket(['status'], { cwd: d });
   ok('…and names a heading that is only its parenthetical, whose entry every listing names by its id alone', info.some(l => /^info  DECISIONS\.md:25: R2's heading has no title before its parenthetical, so it is named by its id alone \(FORMAT\.md 3\)$/.test(l)) && st.out.split('\n').includes('  R2  · issue #2'), c.out + '\n' + st.out);
@@ -6172,6 +6174,24 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   { const jobs = (/\n## The five jobs\n\n\| When \| Job \| What happens \|\n\|---\|---\|---\|\n((?:\|[^\n]*\|\n)+)/.exec(readme) || [])[1] || '', rows = jobs.split('\n').filter(Boolean).map(r => r.split('|')[1].trim());
     const has = { what: /^## What it is$/m.test(readme), who: /^\*\*Who it is for:\*\* \S/m.test(readme), jobs: rows.join(' | ') === 'at "done" | before an edit | at a decision | at a new project | across time', install: /^## Install$/m.test(readme), demo: /^## The two-second demo$/m.test(readme) };
     ok('the README holds what it is, who it is for, the five jobs — five rows, the judge’s at "done" first — the install and the two-second demo, each under its heading or bold lead', Object.values(has).every(Boolean), JSON.stringify(has) + ' ' + rows.join(' | ')); }
+  // the demo's three blocks are the core's own output, not prose: near on the fixture at makeToolbar, by the command the README
+  // gives, byte for byte; the blocked stop and the docket after it, on a scratch fixture with the toolbar's removal planted and
+  // a stand-in judge recording the two located lines the README shows — identical, but for the verdict's time
+  { const block = lead => { const i = readme.indexOf(lead), a = i < 0 ? -1 : readme.indexOf('```text\n', i), b = a < 0 ? -1 : readme.indexOf('```', a + 8); return i >= 0 && a > i && b > a ? readme.slice(a + 8, b) : null; };
+    const nearBlock = block('**Before the edit: what governs it.**'), stopBlock = block('**At "done": the stop blocked.**'), statusBlock = block("**At a session's start: the docket.**");
+    const nearOut = docket(['near'], { cwd: ROOT, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: path.join(ROOT, 'test', 'fixture', 'app.js'), old_string: 'function makeToolbar(sel) {' } }), env: { CLAUDE_PROJECT_DIR: '' } });
+    ok('the README’s "Before the edit" block is `docket near` on the fixture at makeToolbar, by the command the README gives, byte for byte', nearBlock !== null && nearOut.code === 0 && nearOut.out === nearBlock, nearOut.code + '|' + nearOut.out + '|' + nearBlock);
+    const demo = tmpDir('demo-'), S = tmpDir('demo-judge-'); fs.cpSync(FIX, demo, { recursive: true });
+    for (const a of [['init', '-q', '-b', 'main'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'fixture']]) sh('git', a, demo);
+    { const p = path.join(demo, 'app.js'); let s = read(p); const a = s.indexOf('function makeToolbar('), b = s.indexOf('\n}\n', a); s = s.slice(0, a) + s.slice(b + 3); fs.writeFileSync(p, s.replace('makeToolbar, ', '')); }
+    const stopLines = (stopBlock || '').split('\n'); fs.writeFileSync(path.join(S, 'reason'), stopLines[1] + '\n' + stopLines[2]);
+    fs.writeFileSync(path.join(S, 'judge.js'), ["const cp = require('child_process'), fs = require('fs'), [core, sid, reasonFile] = process.argv.slice(2);", "fs.readFileSync(0, 'utf8');", "const run = a => cp.spawnSync('node', [core].concat(a), { encoding: 'utf8' });", "const h = run(['gate', '--session', sid]).stdout.split('\\n')[0].split(' ')[1];", "run(['verdict', 'FAIL', '--hash', h, '--failures', '2', '--session', sid, '--reason', fs.readFileSync(reasonFile, 'utf8')]);"].join('\n') + '\n');
+    const st = docket(['stop', '--judge', 'node ' + path.join(S, 'judge.js') + ' ' + CORE + ' demo ' + path.join(S, 'reason')], { cwd: demo, input: JSON.stringify({ session_id: 'demo', transcript_path: '', cwd: demo, stop_hook_active: false }), env: { CLAUDE_PROJECT_DIR: '' } });
+    let said = null; try { said = JSON.parse(st.out).reason + '\n'; } catch (e) { /* no json */ }
+    ok('…its "At done" block is the core’s stop relaying a judge that recorded the two located lines the README shows, on the fixture with the toolbar’s removal planted, byte for byte', stopBlock !== null && said === stopBlock, st.code + '|' + st.out + st.err + '|' + stopBlock);
+    const stOut = docket(['status'], { cwd: demo, env: { CLAUDE_PROJECT_DIR: '' } }).out, atTime = t => t.replace(/^Last verdict: FAIL at [0-9TZ:.-]+/m, 'Last verdict: FAIL at <time>');
+    ok('…and its "At a session’s start" block is `docket status` after that stop, byte for byte but for the verdict’s time', statusBlock !== null && atTime(stOut) === atTime(statusBlock), stOut + '|' + statusBlock);
+    fs.rmSync(demo, { recursive: true, force: true }); fs.rmSync(S, { recursive: true, force: true }); }
   ok('the README ends with Measured Results, then Known Limits', heads.slice(-2).join(' | ') === '## Measured Results | ## Known Limits', heads.slice(-3).join(' | '));
   // each ruling's whole text — heading, body and addenda — and every number a line there states, figures and number words
   const text = {}; let cur = null;
@@ -6264,16 +6284,34 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   // measurement, and a present-tense "this repository's own" is true of the commit measured and false of a later head
   { const fresh = (/^- \*\*The fresh install \(D50\)\.\*\*[\s\S]*?(?=\n- \*\*|\n\n|\n## )/m.exec(readme) || [''])[0];
     ok('the README’s fresh-install bullet holds the installed files to the commit its record names — "this repository’s own by SHA-256 at the commit the record names" — and D50’s record names that commit by id beside the three hashes', /\bthis repository's own by SHA-256 at the commit the record names\b/.test(fresh) && /\bto this repository's at [0-9a-f]{7,40} \(bin\/docket\.js [0-9a-f]{8}…, hooks\/hooks\.json [0-9a-f]{8}…, plugin\.json [0-9a-f]{8}…\)/.test(text.D50 || ''), fresh.slice(0, 400)); }
+  // the record is held to the bytes: where this history holds a commit D50 names beside three hashes, the three files at
+  // that commit hash as recorded; a copy whose history lacks the commit cannot check it, and the detail says which
+  { const recs = [...(text.D50 || '').matchAll(/\bat ([0-9a-f]{7,40}) \(bin\/docket\.js ([0-9a-f]{8})…, hooks\/hooks\.json ([0-9a-f]{8})…, plugin\.json ([0-9a-f]{8})…\)/g)];
+    const at = (c, f) => { const r = cp.spawnSync('git', ['show', c + ':' + f], { cwd: ROOT }); return r.status === 0 ? require('crypto').createHash('sha256').update(r.stdout).digest('hex').slice(0, 8) : 'unreadable'; };
+    const held = recs.map(m => { const there = cp.spawnSync('git', ['cat-file', '-e', m[1] + '^{commit}'], { cwd: ROOT }).status === 0;
+      return { commit: m[1], there, same: there ? at(m[1], 'bin/docket.js') === m[2] && at(m[1], 'hooks/hooks.json') === m[3] && at(m[1], '.claude-plugin/plugin.json') === m[4] : null }; });
+    ok('…and each commit D50’s record names beside three hashes is held to its bytes where this history holds it: the three files at that commit hash as the record says, by SHA-256 of what the commit holds — a copy whose history lacks the commit leaves it unchecked, and says so', recs.length >= 1 && held.every(h => !h.there || h.same), JSON.stringify(held)); }
+  ok('the three result rulings, D17, D18 and D19, each carry the date of the run they record: a measurement without its date is a claim with no when', ['D17', 'D18', 'D19'].every(id => /\b20\d\d-\d\d-\d\d\b/.test(text[id] || '')), ['D17', 'D18', 'D19'].map(id => id + ': ' + ((text[id] || '').match(/\b20\d\d-\d\d-\d\d\b/) || ['none'])[0]).join(', '));
   const descs = [plugin.description, market.description].concat((market.plugins || []).map(p => p.description));
   // leading is where a reader meets them: the first sentence that names the judge or the hook names the judge, ahead of the hook
   const leads = d => { const s = d.split(/(?<=[.!?])\s+/).find(x => /\b(?:judge|hook)/i.test(x)) || '', j = s.search(/\bjudge/i), h = s.search(/\bhook|\bbefore an edit/i); return j >= 0 && (h < 0 || j < h); };
   ok('the plugin’s description and the marketplace’s two lead with the judge — the first sentence naming the judge or the hook names the judge, ahead of the hook — and give the hook before an edit after it (D49)', descs.length === 3 && descs.every(d => typeof d === 'string' && leads(d) && d.indexOf('judge') >= 0 && d.indexOf('judge') < d.toLowerCase().indexOf('before an edit')), descs.join('\n'));
   const claudeMd = read(path.join(ROOT, 'CLAUDE.md'));
-  ok('CLAUDE.md opens with its reader header and says what D6 gives it to say: the repository governs itself, work here with claude --plugin-dir ., run the witness before you stop', /^# CLAUDE\.md\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(claudeMd) && /governs itself \(D6\)/.test(claudeMd) && /^    claude --plugin-dir \.$/m.test(claudeMd) && /Before you stop, run both/.test(claudeMd) && /^    node test\/docket\.js /m.test(claudeMd) && /^    node bin\/docket\.js /m.test(claudeMd), claudeMd.slice(0, 300));
+  ok('CLAUDE.md opens with its reader header, Reader, Purpose and Source within its first paragraph, and says what D6 gives it to say: the repository governs itself, work here with claude --plugin-dir ., run the witness before you stop', /^\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test((/^# CLAUDE\.md\n\n([\s\S]*?)\n\n/.exec(claudeMd) || [])[1] || '') && /governs itself \(D6\)/.test(claudeMd) && /^    claude --plugin-dir \.$/m.test(claudeMd) && /Before you stop, run both/.test(claudeMd) && /^    node test\/docket\.js /m.test(claudeMd) && /^    node bin\/docket\.js /m.test(claudeMd), claudeMd.slice(0, 300));
   ok('no .claude/settings.json is tracked or present: the repository governs itself through the plugin at its root, not a settings file, as CLAUDE.md says (D6)', !fs.existsSync(path.join(ROOT, '.claude', 'settings.json')) && sh('git', ['ls-files', '-z', '--', '.claude'], ROOT).stdout === '' && /Add no `\.claude\/settings\.json`/.test(claudeMd), sh('git', ['ls-files', '-z', '--', '.claude'], ROOT).stdout);
   const packsMd = read(path.join(ROOT, 'docs', 'PACKS.md')), form = '<pack> · F<n> · <file:line> · <what> · <fix route>';
-  ok('docs/PACKS.md opens with its reader header and gives the located-failure form the core holds a verdict to', /^# PACKS\.md[^\n]*\n\n\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test(packsMd) && packsMd.includes('    ' + form + '\n') && read(CORE).includes(form), packsMd.slice(0, 300));
+  ok('docs/PACKS.md opens with its reader header, Reader, Purpose and Source within its first paragraph, and gives the located-failure form the core holds a verdict to', /^\*\*Reader\.\*\* [\s\S]+?\*\*Purpose\.\*\* [\s\S]+?\*\*Source\.\*\* /.test((/^# PACKS\.md[^\n]*\n\n([\s\S]*?)\n\n/.exec(packsMd) || [])[1] || '') && packsMd.includes('    ' + form + '\n') && read(CORE).includes(form), packsMd.slice(0, 300));
   ok('docs/PACKS.md holds its four sections under their headings, in order: what the core reads in a pack, a feature, the located failure, when a pack changes', (packsMd.match(/^## .*$/gm) || []).map(h => h.slice(3)).join(' | ') === 'What the core reads in a pack | A feature | The located failure | When a pack changes', (packsMd.match(/^## .*$/gm) || []).join(' | '));
+  // a heading is not its section: each says its part — the three things the core reads, with the two feature-id forms; a
+  // feature's How scored and its no host, model or vendor (D13); the form and the rulings the reason field rests on; the
+  // calibration a changed pack runs again (D15), recorded by hash (D47)
+  { const secs = {}; let cur = ''; for (const l of packsMd.split('\n')) { if (/^## /.test(l)) { cur = l.slice(3); secs[cur] = ''; } else if (cur) secs[cur] += l + '\n'; }
+    const want = { 'What the core reads in a pack': [/^Three things; a verdict that does not match them is refused before it is written\.$/m, /^1\. \*\*`Domain:`\*\*/m, /^2\. \*\*Feature ids\.\*\* .*`\*\*F1 — <the statement>\.\*\*`.*\n.*`\*\*F1\*\* — <the statement>`/m, /^3\. \*\*Nothing else\.\*\*/m],
+      'A feature': [/^Each feature says \*\*How scored:\*\* — a command whose exit code decides, or a reading with the exact thing to look for$/m, /A feature names no host, model\nor vendor \(D13\)/, /It does not restate a ruling/],
+      'The located failure': [/^End the pack with `## Located failure`: one example of a failing feature as the judge records it\./m, /^    <pack> · F<n> · <file:line> · <what> · <fix route>$/m, /`docket verdict` refuses the line without it \(D23, D27\)\./],
+      'When a pack changes': [/the calibration runs again before the judge's next\nverdict counts \(D15\): `sh test\/judge\.sh`/, /names, by SHA-256,\nthe protocol and the packs it measured \(D47\)/, /a pack changed after\nthe last record fails `node test\/docket\.js` until a new one is appended\./] };
+    const missing = Object.entries(want).flatMap(([h, res]) => res.filter(re => !re.test(secs[h] || '')).map(re => h + ': ' + re.source.slice(0, 60)));
+    ok('…and each section says its part, not its heading alone: the three things the core reads with both feature-id forms and "Nothing else"; How scored and no host, model or vendor (D13); the form, and the reason field the verdict refuses a line without (D23, D27); the calibration run again (D15), recorded by hash (D47), the witness failing until it is', missing.length === 0, missing.join(' | ')); }
   const shipped = fs.readdirSync(path.join(ROOT, 'packs')).filter(f => f.endsWith('.md'));
   const off = shipped.filter(f => { const t = read(path.join(ROOT, 'packs', f)); return !/^[a-z][a-z0-9-]*\.md$/.test(f) || !/^Domain: \S/m.test(t) || !/^\*\*F1(?: — |\*\* — )/m.test(t) || !/\n## Located failure\n(?![\s\S]*\n#)/.test(t); });
   ok('every shipped pack is written as docs/PACKS.md says: a name the core reads, a Domain line, F1 in one of its two bold forms, and the located failure last', shipped.length === 4 && !off.length, off.join(', '));
