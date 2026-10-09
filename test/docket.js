@@ -6130,6 +6130,8 @@ ok('FORMAT.md 7 says why a spec heading is read three levels deep: a cite resolv
   ok('the README names no repository but this one: every link goes to it, its owner’s account, a static badge or Node’s site, every clone and marketplace source is AlastairZeved/The-Docket, and an owner/name in its prose is this repository or a path in it', links.concat(sources).filter(s => OWN.test(s)).length >= 3 && !other.length, other.join(', '));
   const badge = /img\.shields\.io\/badge\/version-((?:[^-)\s]|--)+)-/.exec(readme);
   ok('the README’s version badge is the plugin manifest’s version', !!badge && badge[1].replace(/--/g, '-') === plugin.version, (badge ? badge[1] : 'no version badge') + ' against ' + plugin.version);
+  { const inst = /^claude plugin install ([^\s@`]+)@([^\s`]+)$/m.exec(readme);
+    ok('the README’s install line names the plugin as its manifest names it, at the marketplace as its manifest names it — the-docket@the-docket — and the manifest’s version is 0.1.0, the one D50 records the install measured at', !!inst && inst[1] === plugin.name && inst[2] === market.name && plugin.name === 'the-docket' && market.name === 'the-docket' && plugin.version === '0.1.0', (inst ? inst[0] : 'no install line') + ' | ' + plugin.name + '@' + market.name + ' ' + plugin.version); }
   // the manifests are the plugin the fresh install measured (D50): the version the README's record of it names, which D50 holds,
   // is the manifest's — a version no install was measured at is not the one shipped — and each names the-docket, the
   // marketplace's one plugin at the repository's root
