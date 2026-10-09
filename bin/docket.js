@@ -1033,15 +1033,17 @@ function printRuling(ledger, r, lines) {
   for (const e of inEdges(ledger, r.id)) lines.push('  ← ' + renderEdge(e) + '  — "' + e.clause + '"');
   for (const a of r.addenda) lines.push('  > Addendum ' + a.date + ': ' + a.text);
 }
-// Every ruling any term matches — its id, or a word of its heading or body — once each, in the ledger's order: the intake runs
-// it with the nouns of an answer (RULE.md 4, D4's addendum)
+// Every ruling any term matches — its id, or a substring of its heading or body, case folded, canonically equivalent text read
+// as one text (NFC: é as one code point and as e with a combining acute are one word) — once each, in the ledger's order: the
+// intake runs it with the nouns of an answer (RULE.md 4, D4's addendum)
 function query(argv) {
   const terms = argv._.slice(1);
   if (!terms.length) die('usage: docket query <term>…', 2);
   if (terms.some(t => !t.trim())) die('query: a term is empty or blank, and would match every ruling; name a word', 2);
   const { ledger } = ledgerFromCwd(argv);
-  const ts = terms.map(t => t.toLowerCase());
-  const hits = ledger.rulings.filter(r => ts.some(t => r.id.toLowerCase() === t || r.heading.toLowerCase().includes(t) || r.body.toLowerCase().includes(t)));
+  const fold = s => s.normalize('NFC').toLowerCase();
+  const ts = terms.map(fold);
+  const hits = ledger.rulings.filter(r => ts.some(t => fold(r.id) === t || fold(r.heading).includes(t) || fold(r.body).includes(t)));
   if (argv.json) { out(JSON.stringify(hits.map(r => Object.assign(rulingJson(r), { inEdges: inEdges(ledger, r.id).map(e => ({ from: e.from, verb: e.verb, adverb: e.adverb, to: e.to, qualifier: e.qualifier, clause: e.clause })) })), null, 2)); return 0; }
   const lines = [];
   if (!hits.length) lines.push('no ruling matches ' + terms.map(t => '"' + t + '"').join(', ') + ' in ' + path.basename(ledger.path));

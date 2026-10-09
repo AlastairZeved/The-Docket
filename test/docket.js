@@ -207,6 +207,14 @@ const SEC = String.fromCharCode(0xa7);
     const iq = docket(['query', 'R9', 'R10'], { cwd: path.join(iss, 'test', 'fixture') });
     ok('an issue number is kept as its digits are written: #007 is "007", and twenty digits are twenty, in the index and in a print (FORMAT.md 4)', i9 && i9.issue === '007' && i10 && i10.issue === '99999999999999999999' && iq.out.includes('· issue #007') && iq.out.includes('· issue #99999999999999999999'), JSON.stringify([i9 && i9.issue, i10 && i10.issue]) + ' ' + iq.out.slice(0, 300));
     fs.rmSync(iss, { recursive: true, force: true }); }
+  // canonically equivalent text is one text: café as one code point and as e with a combining acute (FORMAT.md 13)
+  { const nf = tempRepo(), nfc = path.join(nf, 'test', 'fixture'), one = 'caf\u00e9', two = 'cafe\u0301';
+    const a1 = docket(['append', '--title', 'The ' + one + ' layout stays', '--issue', '95', '--principle', 'Zero cognitive tax', '--body', 'Reason: r.'], { cwd: nfc });
+    const a2 = docket(['append', '--title', 'A second ruling', '--issue', '96', '--principle', 'Zero cognitive tax', '--body', 'Reason: the ' + two + ' is named here.'], { cwd: nfc });
+    const both = JSON.parse(docket(['index'], { cwd: nfc }).out).rulings.slice(-2).map(r => r.id).join(',');
+    const ids = t => { const q = docket(['query', t, '--json'], { cwd: nfc }); try { return JSON.parse(q.out).map(r => r.id).join(','); } catch (e) { return q.code + '|' + q.err; } };
+    ok('query reads canonically equivalent text as one text: café written as one code point and as e with a combining acute are one word, found by either spelling of the term and in either case — the two rulings appended, the first with it in its heading, the second in its body (FORMAT.md 13)', a1.code === 0 && a2.code === 0 && /^R\d+,R\d+$/.test(both) && ids(one) === both && ids(two) === both && ids('CAF\u00c9') === both, a1.err + a2.err + '|' + both + '|' + ids(one) + '|' + ids(two) + '|' + ids('CAF\u00c9'));
+    fs.rmSync(nf, { recursive: true, force: true }); }
   // ── edges (FORMAT.md 5) ──
   const r7 = j.rulings.find(r => r.id === 'R7');
   ok('a body edge carries adverb, target and qualifier', r7.edges.length === 1 && r7.edges[0].adverb === 'partially' && r7.edges[0].verb === 'reverses' && r7.edges[0].to === 'R6' && r7.edges[0].qualifier === 'relational plane only', JSON.stringify(r7.edges));

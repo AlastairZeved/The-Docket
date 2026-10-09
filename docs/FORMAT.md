@@ -608,8 +608,9 @@ named, since what it meets the eye as depends on what lies behind it: the stated
 ratio is rounded half-up on its written digits, the recomputed one on its value,
 and the two are compared in hundredths. `governs <id>` names the ledger it searched and
 exits 2 when `<id>` is not one of its entries; `query <term>…` reads each argument
-as a term, lists every ruling any term matches, once each, in the ledger's order,
-refuses a blank term, and prints that nothing matches and exits 0 when none does;
+as a term, lists every ruling any term matches — its id, or a substring of its
+heading or body, case folded, canonically equivalent text read as one text — once
+each, in the ledger's order, refuses a blank term, and prints that nothing matches and exits 0 when none does;
 every subcommand refuses, exit 2, an argument it does not take, as it refuses an
 option it does not read; `diff` exits 2 when a revision or file cannot be read,
 and 1 when an existing entry's heading or body differs between the two readings
