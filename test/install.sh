@@ -32,7 +32,7 @@
 #                   checkout's by SHA-256 (a core of another tree measures that tree's install, not this one's), and
 #                   the stop was judged: a line of the project's .docket/verdicts.jsonl records a verdict, PASS, FAIL or
 #                   STALE, for this run's session — the one the host's init record names, since a verdict another
-#                   session recorded is not this stop's — or the stop blocked with one, its reason relaying what the
+#                   session recorded is not this stop's (D55) — or the stop blocked with one, its reason relaying what the
 #                   judge recorded. A block saying the judge recorded no verdict is no
 #                   judgement, and an install that succeeded beside a hook that printed nothing is no pass: the install
 #                   is the means, and the list printed in the project the plugin was installed into is the measure.
@@ -43,7 +43,7 @@
 # A machine whose plugin state already lists the-docket is refused: an install over one cannot be measured as fresh.
 #
 # INSTALL_SOURCE names the marketplace (default AlastairZeved/The-Docket, the published repository; a path to a clone
-# measures an unpublished tree, and the record says which ran, on its first line and in its summary). INSTALL_KEEP=1 keeps the scratch directory and names it.
+# measures an unpublished tree, and the record says which ran, on its first line and in its summary; D55). INSTALL_KEEP=1 keeps the scratch directory and names it.
 # The core's own switches (DOCKET_*) are not passed to the runs: a run measures the plugin as a person gets it.
 
 set -u
