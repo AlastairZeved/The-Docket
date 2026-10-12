@@ -1484,7 +1484,7 @@ function fixed2(h) { return Math.floor(h / 100) + '.' + String(h % 100).padStart
 function contrast(hexA, hexB) { const a = luminance(hexA), b = luminance(hexB); const [hi, lo] = a >= b ? [a, b] : [b, a]; return (hi + 0.05) / (lo + 0.05); }
 // The CSS a file holds: a style sheet whole; a page, the inside of its <style> elements and nothing else — markup, script
 // and the tags themselves blanked, so line numbers hold, and a <style> never closed runs to the end of the file, as an HTML
-// parser reads it; a style="…" attribute is not read (FORMAT.md 13)
+// parser reads it; a style="…" attribute is not read (D56; FORMAT.md 13)
 function styleText(e) {
   const t = fileText(e);
   if (/\.css$/i.test(e.path)) return t;
@@ -1504,7 +1504,7 @@ function runSpecCheck(root, ctx, onlyLedger) {
       continue;
     }
     const specLines = splitLines(readText(docs.uiux));
-    const cssFiles = ctx.files.filter(e => e.ledger === lp && /\.(?:css|html?)$/i.test(e.path));   // a page's own <style> blocks are its CSS (FORMAT.md 13)
+    const cssFiles = ctx.files.filter(e => e.ledger === lp && /\.(?:css|html?)$/i.test(e.path));   // a page's own <style> blocks are its CSS (D56; FORMAT.md 13)
     const decls = new Map(); // token -> [{value, file, line}]
     for (const e of cssFiles) splitLines(styleText(e).replace(/\/\*[\s\S]*?(?:\*\/|$)/g, m => m.replace(/[^\n]/g, ' '))).forEach((l, i) => {   // a comment is not a declaration, and one never closed runs to the end of the file, as CSS reads it; blanked, so line numbers hold
       const re = new RegExp('(--[A-Za-z0-9_-]+)\\s*:\\s*(' + HEX + ')', 'g'); let m;

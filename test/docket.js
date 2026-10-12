@@ -746,7 +746,7 @@ const SEC = String.fromCharCode(0xa7);
   const h5both = tempRepo(d => { edit(d, 'test/fixture/UIUX.md', '`#7a8fa6`', '`#7a8fa`'); edit(d, 'test/fixture/styles.css', '#7a8fa7', '#7a8fa'); });
   r = docket(['spec-check'], { cwd: path.join(h5both, 'test', 'fixture') });
   ok('spec-check (a): the same five-digit typo on both sides is still a failure — a malformed value is never a match', r.code === 1 && /spec-check a: --line is #7a8fa in the spec, which is not a CSS hex colour/.test(r.out), r.out);
-  // a page's own <style> elements are its CSS; its markup, script and style="…" attributes are not (FORMAT.md 13)
+  // a page's own <style> elements are its CSS; its markup, script and style="…" attributes are not (D56; FORMAT.md 13)
   const gapRow = d => edit(d, 'test/fixture/UIUX.md', '| `--line` | `#7a8fa6` | frames and rules |', '| `--line` | `#7a8fa6` | frames and rules |\n| `--gap` | `#0000ff` | nowhere |');
   const page = (d, html) => fs.writeFileSync(path.join(d, 'test', 'fixture', 'page.html'), html);
   const sh1 = tempRepo(d => { gapRow(d); page(d, '<!doctype html>\n<html><head>\n<style>\n  :root { --gap: #00F; }\n</style>\n</head><body></body></html>\n'); });
