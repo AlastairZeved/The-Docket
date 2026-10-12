@@ -746,6 +746,18 @@ const SEC = String.fromCharCode(0xa7);
   const h5both = tempRepo(d => { edit(d, 'test/fixture/UIUX.md', '`#7a8fa6`', '`#7a8fa`'); edit(d, 'test/fixture/styles.css', '#7a8fa7', '#7a8fa'); });
   r = docket(['spec-check'], { cwd: path.join(h5both, 'test', 'fixture') });
   ok('spec-check (a): the same five-digit typo on both sides is still a failure — a malformed value is never a match', r.code === 1 && /spec-check a: --line is #7a8fa in the spec, which is not a CSS hex colour/.test(r.out), r.out);
+  // a page's own <style> elements are its CSS; its markup, script and style="…" attributes are not (FORMAT.md 13)
+  const gapRow = d => edit(d, 'test/fixture/UIUX.md', '| `--line` | `#7a8fa6` | frames and rules |', '| `--line` | `#7a8fa6` | frames and rules |\n| `--gap` | `#0000ff` | nowhere |');
+  const page = (d, html) => fs.writeFileSync(path.join(d, 'test', 'fixture', 'page.html'), html);
+  const sh1 = tempRepo(d => { gapRow(d); page(d, '<!doctype html>\n<html><head>\n<style>\n  :root { --gap: #00F; }\n</style>\n</head><body></body></html>\n'); });
+  r = docket(['spec-check'], { cwd: path.join(sh1, 'test', 'fixture') });
+  ok('spec-check (a): a token declared inside a page\'s <style> element satisfies its row', r.code === 1 && !/--gap/.test(r.out) && /spec-check a: --line is #7a8fa6/.test(r.out), r.out);
+  const sh2 = tempRepo(d => { gapRow(d); page(d, '<!doctype html>\n<p style="--gap: #0000ff">--gap: #0000ff</p>\n<script>const s = "--gap: #0000ff";</script>\n<style>/* --gap: #0000ff */</style>\n'); });
+  r = docket(['spec-check'], { cwd: path.join(sh2, 'test', 'fixture') });
+  ok('spec-check (a): a page\'s markup, script, style attribute and CSS comment declare nothing', r.code === 1 && /spec-check a: --gap is #0000ff in the spec but is declared in no CSS file/.test(r.out), r.out);
+  const sh3 = tempRepo(d => page(d, '<!doctype html>\n<html><head>\n<title>t</title>\n<style media="screen">\n:root {\n  --line: #7a8fa5;\n}\n'));
+  r = docket(['spec-check'], { cwd: path.join(sh3, 'test', 'fixture') });
+  ok('spec-check (a): a declaration in a page is named at its own line, and a <style> never closed runs to the end of the file', r.code === 1 && /^test\/fixture\/UIUX\.md:9  spec-check a: --line is #7a8fa6 in the spec but .*#7a8fa5 at test\/fixture\/page\.html:6/m.test(r.out) && /#7a8fa7 at test\/fixture\/styles\.css:5/.test(r.out), r.out);
   // discovery under CLAUDE_PROJECT_DIR (FORMAT.md 1): the same ledger, and the header's path
   const pdRepo = tempRepo();
   const pdFile = path.join(pdRepo, 'test', 'fixture', 'app.js');
