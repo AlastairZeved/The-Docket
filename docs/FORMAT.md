@@ -597,7 +597,11 @@ not yet added declares its tokens. It reads two kinds of row in `UIUX.md`: a
 not a spelling: `#fff`, `#FFFFFF` and `#ffffffff` are one value; a second
 declaration of another value beside it is a theme's and is reported, not failed;
 a value inside a CSS comment is not a declaration, and a comment never closed
-runs to the end of the file, as CSS reads it; and a
+runs to the end of the file, as CSS reads it; the CSS read is every style sheet
+(`.css`) and, in a page (`.html`, `.htm`), the inside of each `<style>` element —
+the page's markup, its scripts and its `style="…"` attributes declare nothing,
+and a `<style>` never closed runs to the end of the file, as an HTML parser
+reads it (D56); and a
 **contrast row**, a table row holding token names and an `N:1` value — the `1`
 ends it, so `4.5:10` is not one, and a row that names two tokens with a ratio in
 another shape (`4.5:10`, `4.5 : 1`, `4.5 to 1`) fails, named, and is not read as
